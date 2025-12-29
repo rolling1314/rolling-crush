@@ -1,0 +1,3437 @@
+[
+  {
+    role: "user",
+    content: `You are Roo, a highly skilled software engineer with extensive knowledge in many programming languages, frameworks, design patterns, and best practices.
+
+    ====
+
+    MARKDOWN RULES
+
+    ALL responses MUST show ANY \`language construct\` OR filename reference as clickable, exactly as [\`filename OR language.declaration()\`](relative/file/path.ext:line); line is required for \`syntax\` and optional for filename links. This applies to ALL markdown responses and ALSO those in attempt_completion
+
+====
+
+TOOL USE
+
+You have access to a set of tools that are executed upon the user's approval. You must use exactly one tool per message, and every assistant message must include a tool call. You use tools step-by-step to accomplish a given task, with each tool use informed by the result of the previous tool use.
+
+# Tool Use Formatting
+
+Tool uses are formatted using XML-style tags. The tool name itself becomes the XML tag name. Each parameter is enclosed within its own set of tags. Here's the structure:
+
+<actual_tool_name>
+<parameter1_name>value1</parameter1_name>
+<parameter2_name>value2</parameter2_name>
+...
+</actual_tool_name>
+
+Always use the actual tool name as the XML tag name for proper parsing and execution.
+
+# Tools
+
+## read_file
+Description: Request to read the contents of one or more files. The tool outputs line-numbered content (e.g. "1 | const x = 1") for easy reference when creating diffs or discussing code. Supports text extraction from PDF and DOCX files, but may not handle other binary files properly.
+
+**IMPORTANT: You can read a maximum of 5 files in a single request.** If you need to read more files, use multiple sequential read_file requests.
+
+
+Parameters:
+- args: Contains one or more file elements, where each file contains:
+- path: (required) File path (relative to workspace directory /Users/apple/Downloads/lark-main)
+
+
+Usage:
+<read_file>
+<args>
+<file>
+<path>path/to/file</path>
+
+</file>
+</args>
+</read_file>
+
+Examples:
+
+1. Reading a single file:
+<read_file>
+<args>
+<file>
+<path>src/app.ts</path>
+
+</file>
+</args>
+</read_file>
+
+2. Reading multiple files (within the 5-file limit):
+<read_file>
+<args>
+<file>
+<path>src/app.ts</path>
+
+</file>
+<file>
+<path>src/utils.ts</path>
+
+</file>
+</args>
+</read_file>
+
+3. Reading an entire file:
+<read_file>
+<args>
+<file>
+<path>config.json</path>
+</file>
+</args>
+</read_file>
+
+IMPORTANT: You MUST use this Efficient Reading Strategy:
+- You MUST read all related files and implementations together in a single operation (up to 5 files at once)
+- You MUST obtain all necessary context before proceeding with changes
+
+- When you need to read more than 5 files, prioritize the most critical files first, then use subsequent read_file requests for additional files
+
+## fetch_instructions
+Description: Request to fetch instructions to perform a task
+Parameters:
+- task: (required) The task to get instructions for.  This can take the following values:
+create_mcp_server
+create_mode
+
+Example: Requesting instructions to create an MCP Server
+
+<fetch_instructions>
+<task>create_mcp_server</task>
+</fetch_instructions>
+
+## search_files
+Description: Request to perform a regex search across files in a specified directory, providing context-rich results. This tool searches for patterns or specific content across multiple files, displaying each match with encapsulating context.
+Parameters:
+- path: (required) The path of the directory to search in (relative to the current workspace directory /Users/apple/Downloads/lark-main). This directory will be recursively searched.
+- regex: (required) The regular expression pattern to search for. Uses Rust regex syntax.
+- file_pattern: (optional) Glob pattern to filter files (e.g., '*.ts' for TypeScript files). If not provided, it will search all files (*).
+Usage:
+<search_files>
+<path>Directory path here</path>
+<regex>Your regex pattern here</regex>
+<file_pattern>file pattern here (optional)</file_pattern>
+</search_files>
+
+Example: Requesting to search for all .ts files in the current directory
+<search_files>
+<path>.</path>
+<regex>.*</regex>
+<file_pattern>*.ts</file_pattern>
+</search_files>
+
+## list_files
+Description: Request to list files and directories within the specified directory. If recursive is true, it will list all files and directories recursively. If recursive is false or not provided, it will only list the top-level contents. Do not use this tool to confirm the existence of files you may have created, as the user will let you know if the files were created successfully or not.
+Parameters:
+- path: (required) The path of the directory to list contents for (relative to the current workspace directory /Users/apple/Downloads/lark-main)
+- recursive: (optional) Whether to list files recursively. Use true for recursive listing, false or omit for top-level only.
+Usage:
+<list_files>
+<path>Directory path here</path>
+<recursive>true or false (optional)</recursive>
+</list_files>
+
+Example: Requesting to list all files in the current directory
+<list_files>
+<path>.</path>
+<recursive>false</recursive>
+</list_files>
+
+## list_code_definition_names
+Description: Request to list definition names (classes, functions, methods, etc.) from source code. This tool can analyze either a single file or all files at the top level of a specified directory. It provides insights into the codebase structure and important constructs, encapsulating high-level concepts and relationships that are crucial for understanding the overall architecture.
+Parameters:
+- path: (required) The path of the file or directory (relative to the current working directory /Users/apple/Downloads/lark-main) to analyze. When given a directory, it lists definitions from all top-level source files.
+Usage:
+<list_code_definition_names>
+<path>Directory path here</path>
+</list_code_definition_names>
+
+Examples:
+
+1. List definitions from a specific file:
+<list_code_definition_names>
+<path>src/main.ts</path>
+</list_code_definition_names>
+
+2. List definitions from all files in a directory:
+<list_code_definition_names>
+<path>src/</path>
+</list_code_definition_names>
+
+## apply_diff
+Description: Request to apply PRECISE, TARGETED modifications to an existing file by searching for specific sections of content and replacing them. This tool is for SURGICAL EDITS ONLY - specific changes to existing code.
+You can perform multiple distinct search and replace operations within a single \`apply_diff\` call by providing multiple SEARCH/REPLACE blocks in the \`diff\` parameter. This is the preferred way to make several targeted changes efficiently.
+The SEARCH section must exactly match existing content including whitespace and indentation.
+If you're not confident in the exact content to search for, use the read_file tool first to get the exact content.
+When applying the diffs, be extra careful to remember to change any closing brackets or other syntax that may be affected by the diff farther down in the file.
+ALWAYS make as many changes in a single 'apply_diff' request as possible using multiple SEARCH/REPLACE blocks
+
+Parameters:
+- path: (required) The path of the file to modify (relative to the current workspace directory /Users/apple/Downloads/lark-main)
+- diff: (required) The search/replace block defining the changes.
+
+Diff format:
+\`\`\`
+<<<<<<< SEARCH
+:start_line: (required) The line number of original content where the search block starts.
+-------
+[exact content to find including whitespace]
+=======
+[new content to replace with]
+>>>>>>> REPLACE
+
+\`\`\`
+
+
+Example:
+
+Original file:
+\`\`\`
+1 | def calculate_total(items):
+2 |     total = 0
+3 |     for item in items:
+4 |         total += item
+5 |     return total
+\`\`\`
+
+Search/Replace content:
+\`\`\`
+<<<<<<< SEARCH
+:start_line:1
+-------
+def calculate_total(items):
+total = 0
+for item in items:
+total += item
+return total
+=======
+def calculate_total(items):
+"""Calculate total with 10% markup"""
+return sum(item * 1.1 for item in items)
+>>>>>>> REPLACE
+
+\`\`\`
+
+Search/Replace content with multiple edits:
+\`\`\`
+<<<<<<< SEARCH
+:start_line:1
+-------
+def calculate_total(items):
+sum = 0
+=======
+def calculate_sum(items):
+sum = 0
+>>>>>>> REPLACE
+
+<<<<<<< SEARCH
+:start_line:4
+-------
+total += item
+return total
+=======
+sum += item
+return sum
+>>>>>>> REPLACE
+\`\`\`
+
+
+Usage:
+<apply_diff>
+<path>File path here</path>
+<diff>
+Your search/replace content here
+You can use multi search/replace block in one diff block, but make sure to include the line numbers for each block.
+Only use a single line of '=======' between search and replacement content, because multiple '=======' will corrupt the file.
+</diff>
+</apply_diff>
+
+## write_to_file
+Description: Request to write content to a file. This tool is primarily used for **creating new files** or for scenarios where a **complete rewrite of an existing file is intentionally required**. If the file exists, it will be overwritten. If it doesn't exist, it will be created. This tool will automatically create any directories needed to write the file.
+Parameters:
+- path: (required) The path of the file to write to (relative to the current workspace directory /Users/apple/Downloads/lark-main)
+- content: (required) The content to write to the file. When performing a full rewrite of an existing file or creating a new one, ALWAYS provide the COMPLETE intended content of the file, without any truncation or omissions. You MUST include ALL parts of the file, even if they haven't been modified. Do NOT include the line numbers in the content though, just the actual content of the file.
+- line_count: (required) The number of lines in the file. Make sure to compute this based on the actual content of the file, not the number of lines in the content you're providing.
+Usage:
+<write_to_file>
+<path>File path here</path>
+<content>
+Your file content here
+</content>
+<line_count>total number of lines in the file, including empty lines</line_count>
+</write_to_file>
+
+Example: Requesting to write to frontend-config.json
+<write_to_file>
+<path>frontend-config.json</path>
+<content>
+{
+"apiEndpoint": "https://api.example.com",
+"theme": {
+"primaryColor": "#007bff",
+"secondaryColor": "#6c757d",
+"fontFamily": "Arial, sans-serif"
+},
+"features": {
+"darkMode": true,
+"notifications": true,
+"analytics": false
+},
+"version": "1.0.0"
+}
+</content>
+<line_count>14</line_count>
+</write_to_file>
+
+## insert_content
+Description: Use this tool specifically for adding new lines of content into a file without modifying existing content. Specify the line number to insert before, or use line 0 to append to the end. Ideal for adding imports, functions, configuration blocks, log entries, or any multi-line text block.
+
+Parameters:
+- path: (required) File path relative to workspace directory /Users/apple/Downloads/lark-main
+- line: (required) Line number where content will be inserted (1-based)
+Use 0 to append at end of file
+Use any positive number to insert before that line
+- content: (required) The content to insert at the specified line
+
+Example for inserting imports at start of file:
+<insert_content>
+<path>src/utils.ts</path>
+<line>1</line>
+<content>
+// Add imports at start of file
+import { sum } from './math';
+</content>
+</insert_content>
+
+Example for appending to the end of file:
+<insert_content>
+<path>src/utils.ts</path>
+<line>0</line>
+<content>
+// This is the end of the file
+</content>
+</insert_content>
+
+
+## execute_command
+Description: Request to execute a CLI command on the system. Use this when you need to perform system operations or run specific commands to accomplish any step in the user's task. You must tailor your command to the user's system and provide a clear explanation of what the command does. For command chaining, use the appropriate chaining syntax for the user's shell. Prefer to execute complex CLI commands over creating executable scripts, as they are more flexible and easier to run. Prefer relative commands and paths that avoid location sensitivity for terminal consistency, e.g: \`touch ./testdata/example.file\`, \`dir ./examples/model1/data/yaml\`, or \`go test ./cmd/front --config ./cmd/front/config.yml\`. If directed by the user, you may open a terminal in a different directory by using the \`cwd\` parameter.
+Parameters:
+- command: (required) The CLI command to execute. This should be valid for the current operating system. Ensure the command is properly formatted and does not contain any harmful instructions.
+- cwd: (optional) The working directory to execute the command in (default: /Users/apple/Downloads/lark-main)
+Usage:
+<execute_command>
+<command>Your command here</command>
+<cwd>Working directory path (optional)</cwd>
+</execute_command>
+
+Example: Requesting to execute npm run dev
+<execute_command>
+<command>npm run dev</command>
+</execute_command>
+
+Example: Requesting to execute ls in a specific directory if directed
+<execute_command>
+<command>ls -la</command>
+<cwd>/home/user/projects</cwd>
+</execute_command>
+
+## ask_followup_question
+Description: Ask the user a question to gather additional information needed to complete the task. Use when you need clarification or more details to proceed effectively.
+
+Parameters:
+- question: (required) A clear, specific question addressing the information needed
+- follow_up: (required) A list of 2-4 suggested answers, each in its own <suggest> tag. Suggestions must be complete, actionable answers without placeholders. Optionally include mode attribute to switch modes (code/architect/etc.)
+
+Usage:
+<ask_followup_question>
+<question>Your question here</question>
+<follow_up>
+<suggest>First suggestion</suggest>
+<suggest mode="code">Action with mode switch</suggest>
+</follow_up>
+</ask_followup_question>
+
+Example:
+<ask_followup_question>
+<question>What is the path to the frontend-config.json file?</question>
+<follow_up>
+<suggest>./src/frontend-config.json</suggest>
+<suggest>./config/frontend-config.json</suggest>
+<suggest>./frontend-config.json</suggest>
+</follow_up>
+</ask_followup_question>
+
+## attempt_completion
+Description: After each tool use, the user will respond with the result of that tool use, i.e. if it succeeded or failed, along with any reasons for failure. Once you've received the results of tool uses and can confirm that the task is complete, use this tool to present the result of your work to the user. The user may respond with feedback if they are not satisfied with the result, which you can use to make improvements and try again.
+IMPORTANT NOTE: This tool CANNOT be used until you've confirmed from the user that any previous tool uses were successful. Failure to do so will result in code corruption and system failure. Before using this tool, you must confirm that you've received successful results from the user for any previous tool uses. If not, then DO NOT use this tool.
+Parameters:
+- result: (required) The result of the task. Formulate this result in a way that is final and does not require further input from the user. Don't end your result with questions or offers for further assistance.
+Usage:
+<attempt_completion>
+<result>
+Your final result description here
+</result>
+</attempt_completion>
+
+Example: Requesting to attempt completion with a result
+<attempt_completion>
+<result>
+I've updated the CSS
+</result>
+</attempt_completion>
+
+## switch_mode
+Description: Request to switch to a different mode. This tool allows modes to request switching to another mode when needed, such as switching to Code mode to make code changes. The user must approve the mode switch.
+Parameters:
+- mode_slug: (required) The slug of the mode to switch to (e.g., "code", "ask", "architect")
+- reason: (optional) The reason for switching modes
+Usage:
+<switch_mode>
+<mode_slug>Mode slug here</mode_slug>
+<reason>Reason for switching here</reason>
+</switch_mode>
+
+Example: Requesting to switch to code mode
+<switch_mode>
+<mode_slug>code</mode_slug>
+<reason>Need to make code changes</reason>
+</switch_mode>
+
+## new_task
+Description: This will let you create a new task instance in the chosen mode using your provided message.
+
+Parameters:
+- mode: (required) The slug of the mode to start the new task in (e.g., "code", "debug", "architect").
+- message: (required) The initial user message or instructions for this new task.
+
+Usage:
+<new_task>
+<mode>your-mode-slug-here</mode>
+<message>Your initial instructions here</message>
+</new_task>
+
+Example:
+<new_task>
+<mode>code</mode>
+<message>Implement a new feature for the application</message>
+</new_task>
+
+
+## update_todo_list
+
+**Description:**
+Replace the entire TODO list with an updated checklist reflecting the current state. Always provide the full list; the system will overwrite the previous one. This tool is designed for step-by-step task tracking, allowing you to confirm completion of each step before updating, update multiple task statuses at once (e.g., mark one as completed and start the next), and dynamically add new todos discovered during long or complex tasks.
+
+**Checklist Format:**
+- Use a single-level markdown checklist (no nesting or subtasks).
+- List todos in the intended execution order.
+- Status options:
+- [ ] Task description (pending)
+- [x] Task description (completed)
+- [-] Task description (in progress)
+
+**Status Rules:**
+- [ ] = pending (not started)
+- [x] = completed (fully finished, no unresolved issues)
+- [-] = in_progress (currently being worked on)
+
+**Core Principles:**
+- Before updating, always confirm which todos have been completed since the last update.
+- You may update multiple statuses in a single update (e.g., mark the previous as completed and the next as in progress).
+- When a new actionable item is discovered during a long or complex task, add it to the todo list immediately.
+- Do not remove any unfinished todos unless explicitly instructed.
+- Always retain all unfinished tasks, updating their status as needed.
+- Only mark a task as completed when it is fully accomplished (no partials, no unresolved dependencies).
+- If a task is blocked, keep it as in_progress and add a new todo describing what needs to be resolved.
+- Remove tasks only if they are no longer relevant or if the user requests deletion.
+
+**Usage Example:**
+<update_todo_list>
+<todos>
+[x] Analyze requirements
+[x] Design architecture
+[-] Implement core logic
+[ ] Write tests
+[ ] Update documentation
+</todos>
+</update_todo_list>
+
+*After completing "Implement core logic" and starting "Write tests":*
+<update_todo_list>
+<todos>
+[x] Analyze requirements
+[x] Design architecture
+[x] Implement core logic
+[-] Write tests
+[ ] Update documentation
+[ ] Add performance benchmarks
+</todos>
+</update_todo_list>
+
+**When to Use:**
+- The task is complicated or involves multiple steps or requires ongoing tracking.
+- You need to update the status of several todos at once.
+- New actionable items are discovered during task execution.
+- The user requests a todo list or provides multiple tasks.
+- The task is complex and benefits from clear, stepwise progress tracking.
+
+**When NOT to Use:**
+- There is only a single, trivial task.
+- The task can be completed in one or two simple steps.
+- The request is purely conversational or informational.
+
+**Task Management Guidelines:**
+- Mark task as completed immediately after all work of the current task is done.
+- Start the next task by marking it as in_progress.
+- Add new todos as soon as they are identified.
+- Use clear, descriptive task names.
+
+
+# Tool Use Guidelines
+
+1. Assess what information you already have and what information you need to proceed with the task.
+2. Choose the most appropriate tool based on the task and the tool descriptions provided. Assess if you need additional information to proceed, and which of the available tools would be most effective for gathering this information. For example using the list_files tool is more effective than running a command like \`ls\` in the terminal. It's critical that you think about each available tool and use the one that best fits the current step in the task.
+3. If multiple actions are needed, use one tool at a time per message to accomplish the task iteratively, with each tool use being informed by the result of the previous tool use. Do not assume the outcome of any tool use. Each step must be informed by the previous step's result.
+4. Formulate your tool use using the XML format specified for each tool.
+5. After each tool use, the user will respond with the result of that tool use. This result will provide you with the necessary information to continue your task or make further decisions. This response may include:
+- Information about whether the tool succeeded or failed, along with any reasons for failure.
+- Linter errors that may have arisen due to the changes you made, which you'll need to address.
+- New terminal output in reaction to the changes, which you may need to consider or act upon.
+- Any other relevant feedback or information related to the tool use.
+6. ALWAYS wait for user confirmation after each tool use before proceeding. Never assume the success of a tool use without explicit confirmation of the result from the user.
+
+It is crucial to proceed step-by-step, waiting for the user's message after each tool use before moving forward with the task. This approach allows you to:
+1. Confirm the success of each step before proceeding.
+2. Address any issues or errors that arise immediately.
+3. Adapt your approach based on new information or unexpected results.
+4. Ensure that each action builds correctly on the previous ones.
+
+By waiting for and carefully considering the user's response after each tool use, you can react accordingly and make informed decisions about how to proceed with the task. This iterative process helps ensure the overall success and accuracy of your work.
+
+
+
+====
+
+CAPABILITIES
+
+- You have access to tools that let you execute CLI commands on the user's computer, list files, view source code definitions, regex search, read and write files, and ask follow-up questions. These tools help you effectively accomplish a wide range of tasks, such as writing code, making edits or improvements to existing files, understanding the current state of a project, performing system operations, and much more.
+- When the user initially gives you a task, a recursive list of all filepaths in the current workspace directory ('/Users/apple/Downloads/lark-main') will be included in environment_details. This provides an overview of the project's file structure, offering key insights into the project from directory/file names (how developers conceptualize and organize their code) and file extensions (the language used). This can also guide decision-making on which files to explore further. If you need to further explore directories such as outside the current workspace directory, you can use the list_files tool. If you pass 'true' for the recursive parameter, it will list files recursively. Otherwise, it will list files at the top level, which is better suited for generic directories where you don't necessarily need the nested structure, like the Desktop.
+- You can use search_files to perform regex searches across files in a specified directory, outputting context-rich results that include surrounding lines. This is particularly useful for understanding code patterns, finding specific implementations, or identifying areas that need refactoring.
+- You can use the list_code_definition_names tool to get an overview of source code definitions for all files at the top level of a specified directory. This can be particularly useful when you need to understand the broader context and relationships between certain parts of the code. You may need to call this tool multiple times to understand various parts of the codebase related to the task.
+- For example, when asked to make edits or improvements you might analyze the file structure in the initial environment_details to get an overview of the project, then use list_code_definition_names to get further insight using source code definitions for files located in relevant directories, then read_file to examine the contents of relevant files, analyze the code and suggest improvements or make necessary edits, then use the apply_diff, write_to_file, or insert_content tool to apply the changes. If you refactored code that could affect other parts of the codebase, you could use search_files to ensure you update other files as needed.
+- You can use the execute_command tool to run commands on the user's computer whenever you feel it can help accomplish the user's task. When you need to execute a CLI command, you must provide a clear explanation of what the command does. Prefer to execute complex CLI commands over creating executable scripts, since they are more flexible and easier to run. Interactive and long-running commands are allowed, since the commands are run in the user's VSCode terminal. The user may keep commands running in the background and you will be kept updated on their status along the way. Each command you execute is run in a new terminal instance.
+
+====
+
+MODES
+
+- These are the currently available modes:
+* "🏗️ Architect" mode (architect) - Use this mode when you need to plan, design, or strategize before implementation. Perfect for breaking down complex problems, creating technical specifications, designing system architecture, or brainstorming solutions before coding.
+* "💻 Code" mode (code) - Use this mode when you need to write, modify, or refactor code. Ideal for implementing features, fixing bugs, creating new files, or making code improvements across any programming language or framework.
+* "❓ Ask" mode (ask) - Use this mode when you need explanations, documentation, or answers to technical questions. Best for understanding concepts, analyzing existing code, getting recommendations, or learning about technologies without making changes.
+* "🪲 Debug" mode (debug) - Use this mode when you're troubleshooting issues, investigating errors, or diagnosing problems. Specialized in systematic debugging, adding logging, analyzing stack traces, and identifying root causes before applying fixes.
+* "🪃 Orchestrator" mode (orchestrator) - Use this mode for complex, multi-step projects that require coordination across different specialties. Ideal when you need to break down large tasks into subtasks, manage workflows, or coordinate work that spans multiple domains or expertise areas.
+If the user asks you to create or edit a new mode for this project, you should read the instructions by using the fetch_instructions tool, like this:
+<fetch_instructions>
+<task>create_mode</task>
+</fetch_instructions>
+
+
+====
+
+RULES
+
+- The project base directory is: /Users/apple/Downloads/lark-main
+- All file paths must be relative to this directory. However, commands may change directories in terminals, so respect working directory specified by the response to <execute_command>.
+- You cannot \`cd\` into a different directory to complete a task. You are stuck operating from '/Users/apple/Downloads/lark-main', so be sure to pass in the correct 'path' parameter when using tools that require a path.
+- Do not use the ~ character or $HOME to refer to the home directory.
+- Before using the execute_command tool, you must first think about the SYSTEM INFORMATION context provided to understand the user's environment and tailor your commands to ensure they are compatible with their system. You must also consider if the command you need to run should be executed in a specific directory outside of the current working directory '/Users/apple/Downloads/lark-main', and if so prepend with \`cd\`'ing into that directory && then executing the command (as one command since you are stuck operating from '/Users/apple/Downloads/lark-main'). For example, if you needed to run \`npm install\` in a project outside of '/Users/apple/Downloads/lark-main', you would need to prepend with a \`cd\` i.e. pseudocode for this would be \`cd (path to project) && (command, in this case npm install)\`.
+- When using the search_files tool, craft your regex patterns carefully to balance specificity and flexibility. Based on the user's task you may use it to find code patterns, TODO comments, function definitions, or any text-based information across the project. The results include context, so analyze the surrounding code to better understand the matches. Leverage the search_files tool in combination with other tools for more comprehensive analysis. For example, use it to find specific code patterns, then use read_file to examine the full context of interesting matches before using apply_diff or write_to_file to make informed changes.
+- When creating a new project (such as an app, website, or any software project), organize all new files within a dedicated project directory unless the user specifies otherwise. Use appropriate file paths when writing files, as the write_to_file tool will automatically create any necessary directories. Structure the project logically, adhering to best practices for the specific type of project being created. Unless otherwise specified, new projects should be easily run without additional setup, for example most projects can be built in HTML, CSS, and JavaScript - which you can open in a browser.
+
+- For editing files, you have access to these tools: apply_diff (for surgical edits - targeted changes to specific lines or functions), write_to_file (for creating new files or complete file rewrites), insert_content (for adding lines to files).
+- The insert_content tool adds lines of text to files at a specific line number, such as adding a new function to a JavaScript file or inserting a new route in a Python file. Use line number 0 to append at the end of the file, or any positive number to insert before that line.
+- You should always prefer using other editing tools over write_to_file when making changes to existing files since write_to_file is much slower and cannot handle large files.
+- When using the write_to_file tool to modify a file, use the tool directly with the desired content. You do not need to display the content before using the tool. ALWAYS provide the COMPLETE file content in your response. This is NON-NEGOTIABLE. Partial updates or placeholders like '// rest of code unchanged' are STRICTLY FORBIDDEN. You MUST include ALL parts of the file, even if they haven't been modified. Failure to do so will result in incomplete or broken code, severely impacting the user's project.
+- Some modes have restrictions on which files they can edit. If you attempt to edit a restricted file, the operation will be rejected with a FileRestrictionError that will specify which file patterns are allowed for the current mode.
+- Be sure to consider the type of project (e.g. Python, JavaScript, web application) when determining the appropriate structure and files to include. Also consider what files may be most relevant to accomplishing the task, for example looking at a project's manifest file would help you understand the project's dependencies, which you could incorporate into any code you write.
+* For example, in architect mode trying to edit app.js would be rejected because architect mode can only edit files matching "\\.md$"
+- When making changes to code, always consider the context in which the code is being used. Ensure that your changes are compatible with the existing codebase and that they follow the project's coding standards and best practices.
+- Do not ask for more information than necessary. Use the tools provided to accomplish the user's request efficiently and effectively. When you've completed your task, you must use the attempt_completion tool to present the result to the user. The user may provide feedback, which you can use to make improvements and try again.
+- You are only allowed to ask the user questions using the ask_followup_question tool. Use this tool only when you need additional details to complete a task, and be sure to use a clear and concise question that will help you move forward with the task. When you ask a question, provide the user with 2-4 suggested answers based on your question so they don't need to do so much typing. The suggestions should be specific, actionable, and directly related to the completed task. They should be ordered by priority or logical sequence. However if you can use the available tools to avoid having to ask the user questions, you should do so. For example, if the user mentions a file that may be in an outside directory like the Desktop, you should use the list_files tool to list the files in the Desktop and check if the file they are talking about is there, rather than asking the user to provide the file path themselves.
+- When executing commands, if you don't see the expected output, assume the terminal executed the command successfully and proceed with the task. The user's terminal may be unable to stream the output back properly. If you absolutely need to see the actual terminal output, use the ask_followup_question tool to request the user to copy and paste it back to you.
+- The user may provide a file's contents directly in their message, in which case you shouldn't use the read_file tool to get the file contents again since you already have it.
+- Your goal is to try to accomplish the user's task, NOT engage in a back and forth conversation.
+- NEVER end attempt_completion result with a question or request to engage in further conversation! Formulate the end of your result in a way that is final and does not require further input from the user.
+- You are STRICTLY FORBIDDEN from starting your messages with "Great", "Certainly", "Okay", "Sure". You should NOT be conversational in your responses, but rather direct and to the point. For example you should NOT say "Great, I've updated the CSS" but instead something like "I've updated the CSS". It is important you be clear and technical in your messages.
+- When presented with images, utilize your vision capabilities to thoroughly examine them and extract meaningful information. Incorporate these insights into your thought process as you accomplish the user's task.
+- At the end of each user message, you will automatically receive environment_details. This information is not written by the user themselves, but is auto-generated to provide potentially relevant context about the project structure and environment. While this information can be valuable for understanding the project context, do not treat it as a direct part of the user's request or response. Use it to inform your actions and decisions, but don't assume the user is explicitly asking about or referring to this information unless they clearly do so in their message. When using environment_details, explain your actions clearly to ensure the user understands, as they may not be aware of these details.
+- Before executing commands, check the "Actively Running Terminals" section in environment_details. If present, consider how these active processes might impact your task. For example, if a local development server is already running, you wouldn't need to start it again. If no active terminals are listed, proceed with command execution as normal.
+- MCP operations should be used one at a time, similar to other tool usage. Wait for confirmation of success before proceeding with additional operations.
+- It is critical you wait for the user's response after each tool use, in order to confirm the success of the tool use. For example, if asked to make a todo app, you would create a file, wait for the user's response it was created successfully, then create another file if needed, wait for the user's response it was created successfully, etc.
+
+====
+
+SYSTEM INFORMATION
+
+Operating System: macOS
+Default Shell: /bin/zsh
+Home Directory: /Users/apple
+Current Workspace Directory: /Users/apple/Downloads/lark-main
+
+The Current Workspace Directory is the active VS Code project directory, and is therefore the default directory for all tool operations. New terminals will be created in the current workspace directory, however if you change directories in a terminal it will then have a different working directory; changing directories in a terminal does not modify the workspace directory, because you do not have access to change the workspace directory. When the user initially gives you a task, a recursive list of all filepaths in the current workspace directory ('/test/path') will be included in environment_details. This provides an overview of the project's file structure, offering key insights into the project from directory/file names (how developers conceptualize and organize their code) and file extensions (the language used). This can also guide decision-making on which files to explore further. If you need to further explore directories such as outside the current workspace directory, you can use the list_files tool. If you pass 'true' for the recursive parameter, it will list files recursively. Otherwise, it will list files at the top level, which is better suited for generic directories where you don't necessarily need the nested structure, like the Desktop.
+
+====
+
+OBJECTIVE
+
+You accomplish a given task iteratively, breaking it down into clear steps and working through them methodically.
+
+1. Analyze the user's task and set clear, achievable goals to accomplish it. Prioritize these goals in a logical order.
+2. Work through these goals sequentially, utilizing available tools one at a time as necessary. Each goal should correspond to a distinct step in your problem-solving process. You will be informed on the work completed and what's remaining as you go.
+3. Remember, you have extensive capabilities with access to a wide range of tools that can be used in powerful and clever ways as necessary to accomplish each goal. Before calling a tool, do some analysis. First, analyze the file structure provided in environment_details to gain context and insights for proceeding effectively. Next, think about which of the provided tools is the most relevant tool to accomplish the user's task. Go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, proceed with the tool use. BUT, if one of the values for a required parameter is missing, DO NOT invoke the tool (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters using the ask_followup_question tool. DO NOT ask for more information on optional parameters if it is not provided.
+4. Once you've completed the user's task, you must use the attempt_completion tool to present the result of the task to the user.
+5. The user may provide feedback, which you can use to make improvements and try again. But DO NOT continue in pointless back and forth conversations, i.e. don't end your responses with questions or offers for further assistance.
+
+
+====
+
+USER'S CUSTOM INSTRUCTIONS
+
+The following additional instructions are provided by the user, and should be followed to the best of your ability without interfering with the TOOL USE guidelines.
+
+Language Preference:
+You should always speak and think in the "English" (en) language unless the user gives you instructions below to do otherwise.
+
+<task>
+帮我查找代码里面消息转发服务是怎么做的
+</task>
+<environment_details>
+# VSCode Visible Files
+
+
+# VSCode Open Tabs
+
+
+# Current Time
+Current time in ISO 8601 UTC format: 2025-11-28T10:18:53.584Z
+User time zone: Asia/Shanghai, UTC+8:00
+
+# Current Cost
+$0.00
+
+# Current Mode
+<slug>code</slug>
+<name>💻 Code</name>
+<model>deepseek-reasoner</model>
+
+
+# Current Workspace Directory (/Users/apple/Downloads/lark-main) Files
+.idea/
+apps/
+apps/readme.md
+apps/chat_invite/client/client.go
+apps/chat_invite/cmd/main_chat_invite.go
+apps/chat_invite/dig/dig.go
+apps/chat_invite/internal/config/config.go
+apps/chat_invite/internal/server/server.go
+apps/chat_invite/internal/server/chat_invite/srv_chat_invite_service.go
+apps/chat_invite/internal/server/chat_invite/srv_chat_invite.go
+apps/chat_invite/internal/service/svc_chat_invite_const.go
+apps/chat_invite/internal/service/svc_chat_invite_handle.go
+apps/chat_invite/internal/service/svc_chat_invite_initiate.go
+apps/chat_invite/internal/service/svc_chat_invite_list.go
+apps/chat_invite/internal/service/svc_chat_invite.go
+apps/chat_member/client/client.go
+apps/chat_member/cmd/main_chat_member.go
+apps/chat_member/dig/dig.go
+apps/chat_member/internal/config/config.go
+apps/interfaces/cmd/main_interfaces.go
+apps/interfaces/dig/dig_auth.go
+apps/interfaces/dig/dig_cache.go
+apps/interfaces/dig/dig_chat_invite.go
+apps/interfaces/dig/dig_chat_member.go
+apps/interfaces/dig/dig_chat_message.go
+apps/interfaces/dig/dig_chat.go
+apps/interfaces/dig/dig_convo.go
+apps/interfaces/dig/dig_lbs.go
+apps/interfaces/dig/dig_order.go
+apps/interfaces/dig/dig_payment.go
+apps/interfaces/dig/dig_red_env_receive.go
+apps/interfaces/dig/dig_red_env.go
+apps/interfaces/dig/dig_user.go
+apps/interfaces/dig/dig.go
+apps/interfaces/internal/config/config.go
+apps/interfaces/internal/ctrl/ctrl_auth/ctrl_auth_github_oauth2_callback.go
+apps/interfaces/internal/ctrl/ctrl_auth/ctrl_auth_google_auth_code_url.go
+apps/interfaces/internal/ctrl/ctrl_auth/ctrl_auth_google_oauth2_callback.go
+apps/interfaces/internal/ctrl/ctrl_auth/ctrl_auth_refresh_token.go
+apps/interfaces/internal/ctrl/ctrl_auth/ctrl_auth_sign_in.go
+apps/interfaces/internal/ctrl/ctrl_auth/ctrl_auth_sign_out.go
+apps/interfaces/internal/ctrl/ctrl_auth/ctrl_auth_sign_up.go
+apps/interfaces/internal/ctrl/ctrl_auth/ctrl_auth.go
+apps/interfaces/internal/ctrl/ctrl_chat/ctrl_chat_create_group_chat.go
+apps/interfaces/internal/ctrl/ctrl_chat/ctrl_chat_delete_contact.go
+apps/interfaces/internal/ctrl/ctrl_chat/ctrl_chat_edit_group_chat.go
+apps/interfaces/internal/ctrl/ctrl_chat/ctrl_chat_group_chat_details.go
+apps/interfaces/internal/ctrl/ctrl_chat/ctrl_chat_quit_group_chat.go
+apps/interfaces/internal/ctrl/ctrl_chat/ctrl_chat_remove_group_chat_member.go
+apps/interfaces/internal/ctrl/ctrl_chat/ctrl_chat.go
+apps/interfaces/internal/ctrl/ctrl_chat_invite/ctrl_chat_invite_handle.go
+apps/interfaces/internal/ctrl/ctrl_chat_invite/ctrl_chat_invite_initiate.go
+apps/interfaces/internal/ctrl/ctrl_chat_invite/ctrl_chat_invite_list.go
+apps/interfaces/internal/ctrl/ctrl_chat_invite/ctrl_chat_invite.go
+apps/interfaces/internal/ctrl/ctrl_chat_member/ctrl_chat_member_contact_list.go
+apps/interfaces/internal/ctrl/ctrl_chat_member/ctrl_chat_member_group_list.go
+apps/interfaces/internal/ctrl/ctrl_chat_member/ctrl_chat_member_list.go
+apps/interfaces/internal/ctrl/ctrl_chat_member/ctrl_chat_member.go
+apps/interfaces/internal/ctrl/ctrl_chat_msg/ctrl_chat_msg_list.go
+apps/interfaces/internal/ctrl/ctrl_chat_msg/ctrl_chat_msg_operation.go
+apps/interfaces/internal/ctrl/ctrl_chat_msg/ctrl_chat_msg_search.go
+apps/interfaces/internal/ctrl/ctrl_chat_msg/ctrl_chat_msg_send.go
+apps/interfaces/internal/ctrl/ctrl_chat_msg/ctrl_chat_msg.go
+apps/interfaces/internal/ctrl/ctrl_convo/ctrl_convo_chat_seq_list.go
+apps/interfaces/internal/ctrl/ctrl_convo/ctrl_convo_list.go
+apps/interfaces/internal/ctrl/ctrl_convo/ctrl_convo.go
+apps/interfaces/internal/ctrl/ctrl_lbs/ctrl_lbs_people_nearby.go
+apps/interfaces/internal/ctrl/ctrl_lbs/ctrl_lbs.go
+apps/interfaces/internal/ctrl/ctrl_lbs/ctrl_report_lng_lat.go
+apps/interfaces/internal/ctrl/ctrl_order/ctrl_order_create_red_envelope.go
+apps/interfaces/internal/ctrl/ctrl_order/ctrl_order.go
+apps/interfaces/internal/ctrl/ctrl_payment/ctrl_payment.go
+apps/interfaces/internal/ctrl/ctrl_red_env/ctrl_red_env_give.go
+apps/interfaces/internal/ctrl/ctrl_red_env/ctrl_red_env.go
+apps/interfaces/internal/ctrl/ctrl_red_env_receive/ctrl_red_env_receive_grab.go
+apps/interfaces/internal/ctrl/ctrl_red_env_receive/ctrl_red_env_receive_open.go
+apps/interfaces/internal/ctrl/ctrl_red_env_receive/ctrl_red_env_receive.go
+apps/interfaces/internal/ctrl/ctrl_user/ctrl_user_edit_info.go
+apps/interfaces/internal/ctrl/ctrl_user/ctrl_user_info.go
+apps/interfaces/internal/ctrl/ctrl_user/ctrl_user_list.go
+apps/interfaces/internal/ctrl/ctrl_user/ctrl_user_search.go
+apps/interfaces/internal/ctrl/ctrl_user/ctrl_user.go
+apps/interfaces/internal/dto/dto_auth/dto_auth_github.go
+apps/interfaces/internal/dto/dto_auth/dto_auth_google.go
+apps/interfaces/internal/dto/dto_auth/dto_auth_refresh_token.go
+apps/interfaces/internal/dto/dto_auth/dto_auth_sign_in.go
+apps/interfaces/internal/dto/dto_auth/dto_auth_sign_out.go
+apps/interfaces/internal/dto/dto_auth/dto_auth_sign_up.go
+apps/interfaces/internal/dto/dto_avatar/dto_avatar.go
+apps/interfaces/internal/dto/dto_chat/dto_chat_create_group_chat.go
+apps/interfaces/internal/dto/dto_chat/dto_chat_delete_contact.go
+apps/interfaces/internal/dto/dto_chat/dto_chat_edit_group_chat.go
+apps/interfaces/internal/dto/dto_chat/dto_chat_group_chat_details.go
+apps/interfaces/internal/dto/dto_chat/dto_chat_quit_group_chat.go
+apps/interfaces/internal/dto/dto_chat/dto_chat_remove_group_chat_member.go
+apps/interfaces/internal/dto/dto_chat_invite/dto_chat_invite_handle.go
+apps/interfaces/internal/dto/dto_chat_invite/dto_chat_invite_initiate.go
+apps/interfaces/internal/dto/dto_chat_invite/dto_chat_invite_list.go
+apps/interfaces/internal/dto/dto_chat_member/dto_chat_member_contact_list.go
+apps/interfaces/internal/dto/dto_chat_member/dto_chat_member_group_list.go
+apps/interfaces/internal/dto/dto_chat_member/dto_chat_member_list.go
+apps/interfaces/internal/dto/dto_chat_msg/dto_chat_msg_list.go
+apps/interfaces/internal/dto/dto_chat_msg/dto_chat_msg_operation.go
+apps/interfaces/internal/dto/dto_chat_msg/dto_chat_msg_search.go
+apps/interfaces/internal/dto/dto_chat_msg/dto_chat_msg_send.go
+apps/interfaces/internal/dto/dto_convo/dto_convo_chat_seq_list.go
+apps/interfaces/internal/dto/dto_convo/dto_convo_list.go
+apps/interfaces/internal/dto/dto_kv/dto_kv.go
+apps/interfaces/internal/dto/dto_lbs/dto_lbs.go
+apps/interfaces/internal/dto/dto_order/dto_order.go
+apps/interfaces/internal/dto/dto_payment/dto_payment.go
+apps/interfaces/internal/dto/dto_red_env/dto_red_env.go
+apps/interfaces/internal/dto/dto_red_env_receive/dto_red_env_receive.go
+apps/interfaces/internal/dto/dto_user/dto_user_edit_info.go
+apps/interfaces/internal/dto/dto_user/dto_user_info.go
+apps/interfaces/internal/dto/dto_user/dto_user_list.go
+apps/interfaces/internal/dto/dto_user/dto_user_search.go
+apps/interfaces/internal/router/router_api.go
+apps/interfaces/internal/router/router_auth.go
+apps/interfaces/internal/router/router_chat_invite.go
+apps/interfaces/internal/router/router_chat_member.go
+apps/interfaces/internal/router/router_chat_msg.go
+apps/interfaces/internal/router/router_chat.go
+apps/interfaces/internal/router/router_convo.go
+apps/interfaces/internal/router/router_lbs.go
+apps/interfaces/internal/router/router_order.go
+apps/interfaces/internal/router/router_payment.go
+apps/interfaces/internal/router/router_red_env_receive.go
+apps/interfaces/internal/router/router_red_env.go
+apps/interfaces/internal/router/router_user.go
+apps/interfaces/internal/server/server.go
+apps/interfaces/internal/service/svc_auth/svc_auth_github_oauth2_callback.go
+apps/interfaces/internal/service/svc_auth/svc_auth_google_oauth2_callback.go
+apps/interfaces/internal/service/svc_auth/svc_auth_refresh_token.go
+apps/interfaces/internal/service/svc_auth/svc_auth_sign_in.go
+apps/interfaces/internal/service/svc_auth/svc_auth_sign_out.go
+apps/interfaces/internal/service/svc_auth/svc_auth_sign_up.go
+apps/interfaces/internal/service/svc_auth/svc_auth.go
+apps/interfaces/internal/service/svc_chat/svc_chat_create_group_chat.go
+apps/interfaces/internal/service/svc_chat/svc_chat_delete_contact.go
+apps/interfaces/internal/service/svc_chat/svc_chat_edit_group_chat.go
+apps/interfaces/internal/service/svc_chat/svc_chat_group_chat_details.go
+apps/interfaces/internal/service/svc_chat/svc_chat_quit_group_chat.go
+apps/interfaces/internal/service/svc_chat/svc_chat_remove_group_chat_member.go
+apps/interfaces/internal/service/svc_chat/svc_chat.go
+apps/interfaces/internal/service/svc_chat_invite/svc_chat_invite_handle.go
+apps/interfaces/internal/service/svc_chat_invite/svc_chat_invite_initiate.go
+apps/interfaces/internal/service/svc_chat_invite/svc_chat_invite_list.go
+apps/interfaces/internal/service/svc_chat_invite/svc_chat_invite.go
+apps/interfaces/internal/service/svc_chat_member/svc_chat_member_contact_list.go
+apps/interfaces/internal/service/svc_chat_member/svc_chat_member_group_list.go
+apps/interfaces/internal/service/svc_chat_member/svc_chat_member_list.go
+apps/interfaces/internal/service/svc_chat_member/svc_chat_member.go
+apps/interfaces/internal/service/svc_chat_msg/svc_chat_msg_list.go
+apps/interfaces/internal/service/svc_chat_msg/svc_chat_msg_operation.go
+apps/interfaces/internal/service/svc_chat_msg/svc_chat_msg_search.go
+apps/interfaces/internal/service/svc_chat_msg/svc_chat_msg_send.go
+apps/interfaces/internal/service/svc_chat_msg/svc_chat_msg.go
+apps/interfaces/internal/service/svc_convo/svc_convo_chat_seq_list.go
+apps/interfaces/internal/service/svc_convo/svc_convo_list.go
+apps/interfaces/internal/service/svc_convo/svc_convo.go
+apps/interfaces/internal/service/svc_lbs/svc_lbs.go
+apps/interfaces/internal/service/svc_lbs/svc_people_nearby.go
+apps/interfaces/internal/service/svc_lbs/svc_report_lng_lat.go
+apps/interfaces/internal/service/svc_order/svc_order_create_red_envelope.go
+apps/interfaces/internal/service/svc_order/svc_order.go
+apps/interfaces/internal/service/svc_payment/svc_payment.go
+apps/interfaces/internal/service/svc_red_env/svc_red_env_give.go
+apps/interfaces/internal/service/svc_red_env/svc_red_env.go
+apps/interfaces/internal/service/svc_red_env_receive/svc_red_env_receive_grab.go
+apps/interfaces/internal/service/svc_red_env_receive/svc_red_env_receive_open.go
+apps/interfaces/internal/service/svc_red_env_receive/svc_red_env_receive.go
+apps/interfaces/internal/service/svc_user/svc_user_edit_info.go
+apps/interfaces/internal/service/svc_user/svc_user_info.go
+apps/interfaces/internal/service/svc_user/svc_user_list.go
+apps/interfaces/internal/service/svc_user/svc_user_search.go
+apps/interfaces/internal/service/svc_user/svc_user.go
+apps/lbs/client/client.go
+apps/lbs/cmd/main_lbs.go
+apps/lbs/dig/dig.go
+apps/lbs/internal/config/config.go
+apps/red_env/readme.md
+apps/red_env/client/client.go
+apps/user/client/client.go
+apps/user/cmd/main_user.go
+apps/user/dig/dig.go
+apps/user/internal/server/server.go
+apps/user/internal/server/user/srv_user_service.go
+apps/user/internal/service/svc_user_basic_user_info_list.go
+apps/user/internal/service/svc_user_basic.go
+apps/user/internal/service/svc_user_const.go
+apps/user/internal/service/svc_user_edit_info.go
+apps/user/internal/service/svc_user_info.go
+assets/
+business/
+configs/
+domain/
+examples/
+i18n/
+scripts/
+
+(File list truncated. Use list_files on specific subdirectories if you need to explore further.)
+You have not created a todo list yet. Create one with \`update_todo_list\` if your task is complicated or involves multiple steps.
+</environment_details>`,
+},
+{
+role: "assistant",
+content: `I'll help you analyze how the message forwarding service is implemented in this codebase. Let me start by exploring the project structure and searching for message-related functionality.
+
+<search_files>
+<path>.</path>
+<regex>(?i)(message|消息|forward|转发)</regex>
+<file_pattern>*.go</file_pattern>
+</search_files>`,
+},
+{
+role: "user",
+content: `[search_files for '(?i)(message|消息|forward|转发)' in '*.go'] Result:
+Found 278 results.
+
+# domain/cache/cache.go
+26 | 	ERROR_CACHE_SET_EXPIRE_FAILED      = "设置过期时间失败"
+27 | 	ERROR_CACHE_GET_SEQ_ID_FAILED      = "生成消息 Sequence ID 失败"
+28 | )
+----
+
+# domain/cache/cache_chat_msg.go
+14 | const (
+15 | 	CHAT_MESSAGE_REDIS_OPERATION_FAILED = "redis操作失败"
+16 | 	CHAT_MESSAGE_EVALSHA_PARAM_ERROR    = "参数错误"
+17 | 	CHAT_MESSAGE_REPEATED_MESSAGE       = "重复的消息"
+18 | )
+19 |
+20 | type ChatMessageCache interface {
+21 | 	GetChatMessage(chatId int64, seqId int64) (message *po.Message, err error)
+22 | 	SetChatMessage(message *po.Message) (err error)
+23 | 	SetConvoMessage(message *po.Message) (err error)
+24 | 	RepeatMessageVerify(prefix string, chatId int64, msgId int64) (r string, ok bool)
+25 | 	IncrSeqID(chatId int64) (seqId int64, err error)
+26 | 	GetMaxSeqID(chatId int64) (seqId uint64, err error)
+27 | 	MGetMessages(keys []string) ([]interface{}, error)
+28 | 	SlotMGetMessages(maps map[uint16][]string) ([]interface{}, error)
+29 | }
+30 |
+31 | type chatMessageCache struct {
+32 | }
+33 |
+34 | func NewChatMessageCache() ChatMessageCache {
+35 | 	return &chatMessageCache{}
+36 | }
+37 |
+38 | func (c *chatMessageCache) GetChatMessage(chatId int64, seqId int64) (message *po.Message, err error) {
+39 | 	var (
+----
+41 | 	)
+42 | 	message = new(po.Message)
+43 | 	err = Get(key, message)
+44 | 	return
+----
+46 |
+47 | func (c *chatMessageCache) SetChatMessage(message *po.Message) (err error) {
+48 | 	var (
+49 | 		key = constant.RK_SYNC_MSG_CACHE + utils.GetHashTagKey(message.ChatId) + ":" + cast.ToString(message.SeqId)
+50 | 	)
+51 | 	err = Set(key, message, constant.CONST_DURATION_MSG_CACHE_SECOND)
+52 | 	return
+----
+54 |
+55 | func (c *chatMessageCache) SetConvoMessage(message *po.Message) (err error) {
+56 | 	var (
+57 | 		htk  = utils.GetHashTagKey(message.ChatId)
+58 | 		key1 = constant.RK_SYNC_MSG_CACHE + htk + ":" + cast.ToString(message.SeqId)
+59 | 		key2 = constant.RK_MSG_CONVO_MSG + htk
+60 | 		//key3 = constant.RK_MSG_SEQ_TS + htk
+61 | 		cm   = new(pb_convo.ConvoMessage)
+62 | 		val1 string
+63 | 		val2 string
+64 | 		//val3 = cast.ToString(message.SeqId) + "," + cast.ToString(message.SrvTs)
+65 | 	)
+66 | 	copier.Copy(cm, message)
+67 | 	val1, err = utils.Marshal(message)
+68 | 	if err != nil {
+----
+83 |
+84 | func (c *chatMessageCache) RepeatMessageVerify(prefix string, chatId int64, msgId int64) (r string, ok bool) {
+85 | 	var (
+----
+89 | 	)
+90 | 	result, err = xredis.EvalShaResult(xredis.SHA_SET_MESSAGE_ID, []string{key}, []interface{}{constant.CONST_DURATION_SHA_MSG_ID_SECOND})
+91 | 	if err != nil {
+92 | 		r = CHAT_MESSAGE_REDIS_OPERATION_FAILED
+93 | 		xlog.Warn(err.Error())
+----
+99 | 		case "PARAM_ERROR":
+100 | 			r = CHAT_MESSAGE_EVALSHA_PARAM_ERROR
+101 | 		case "EXISTED":
+102 | 			r = CHAT_MESSAGE_REPEATED_MESSAGE
+103 | 		case "OK":
+----
+105 | 		default:
+106 | 			r = CHAT_MESSAGE_REDIS_OPERATION_FAILED
+107 | 			xlog.Warn(r)
+----
+109 | 	default:
+110 | 		r = CHAT_MESSAGE_REDIS_OPERATION_FAILED
+111 | 		xlog.Warn(result)
+----
+115 |
+116 | func (c *chatMessageCache) IncrSeqID(chatId int64) (seqId int64, err error) {
+117 | 	if seqId, err = xredis.IncrSeqID(chatId); err != nil {
+----
+122 |
+123 | func (c *chatMessageCache) GetMaxSeqID(chatId int64) (seqId uint64, err error) {
+124 | 	if seqId, err = xredis.GetMaxSeqID(chatId); err != nil {
+----
+129 |
+130 | func (c *chatMessageCache) MGetMessages(keys []string) ([]interface{}, error) {
+131 | 	return xredis.MGet(keys)
+----
+133 |
+134 | func (c *chatMessageCache) SlotMGetMessages(maps map[uint16][]string) ([]interface{}, error) {
+135 | 	return xredis.SlotMGet(maps)
+----
+
+# domain/repo/repo_chat_message.go
+9 |
+10 | type ChatMessageRepository interface {
+11 | 	Create(message *po.Message) (err error)
+12 | 	Message(w *entity.MysqlQuery) (message *po.Message, err error)
+13 | 	TxMessage(tx *gorm.DB, w *entity.MysqlQuery) (message *po.Message, err error)
+14 | 	UpdateMessage(u *entity.MysqlUpdate) (err error)
+15 | 	TxUpdateMessage(tx *gorm.DB, u *entity.MysqlUpdate) (err error)
+16 | 	HistoryMessages(w *entity.MysqlQuery) (list []*po.Message, err error)
+17 | }
+18 |
+19 | type chatMessageRepository struct {
+20 | }
+21 |
+22 | func NewChatMessageRepository() ChatMessageRepository {
+23 | 	return &chatMessageRepository{}
+24 | }
+25 |
+26 | func (r *chatMessageRepository) Create(message *po.Message) (err error) {
+27 | 	db := xmysql.GetDB()
+28 | 	return db.Create(message).Error
+29 | }
+30 |
+31 | func (r *chatMessageRepository) Message(w *entity.MysqlQuery) (message *po.Message, err error) {
+32 | 	message = new(po.Message)
+33 | 	db := xmysql.GetDB()
+34 | 	err = db.Where(w.Query, w.Args...).Find(message).Error
+35 | 	return
+----
+37 |
+38 | func (r *chatMessageRepository) TxMessage(tx *gorm.DB, w *entity.MysqlQuery) (message *po.Message, err error) {
+39 | 	message = new(po.Message)
+40 | 	err = tx.Where(w.Query, w.Args...).Find(message).Error
+41 | 	return
+----
+43 |
+44 | func (r *chatMessageRepository) UpdateMessage(u *entity.MysqlUpdate) (err error) {
+45 | 	db := xmysql.GetDB()
+46 | 	return db.Model(po.Message{}).Where(u.Query, u.Args...).Updates(u.Values).Error
+47 | }
+48 |
+49 | func (r *chatMessageRepository) TxUpdateMessage(tx *gorm.DB, u *entity.MysqlUpdate) (err error) {
+50 | 	return tx.Model(po.Message{}).Where(u.Query, u.Args...).Updates(u.Values).Error
+51 | }
+52 |
+53 | func (r *chatMessageRepository) HistoryMessages(w *entity.MysqlQuery) (list []*po.Message, err error) {
+54 | 	list = make([]*po.Message, 0)
+55 | 	db := xmysql.GetDB()
+----
+
+# pkg/conf/ws_server.go
+9 | 	PingPeriod            int    \`yaml:"ping_period" json:"ping_period"\`
+10 | 	MaxMessageSize        int    \`yaml:"max_message_size" json:"max_message_size"\`
+11 | 	ReadBufferSize        int    \`yaml:"read_buffer_size" json:"read_buffer_size"\`
+----
+13 | 	HeaderLength          int    \`yaml:"header_length" json:"header_length"\`
+14 | 	ChanClientSendMessage int    \`yaml:"chan_client_send_message" json:"chan_client_send_message"\`
+15 | 	ChanServerReadMessage int    \`yaml:"chan_server_read_message" json:"chan_server_read_message"\`
+16 | 	ChanServerRegister    int    \`yaml:"chan_server_register" json:"chan_server_register"\`
+----
+
+# domain/mrepo/repo_msg_hot.go
+10 |
+11 | type MessageHotRepository interface {
+12 | 	Create(message *po.Message) (err error)
+13 | 	Update(u *entity.MongoUpdate) (err error)
+14 | 	Messages(w *entity.MongoQuery) (messages []*po.Message, err error)
+15 | }
+16 |
+17 | type messageHotRepository struct {
+18 | }
+19 |
+20 | func NewMessageHotRepository() MessageHotRepository {
+21 | 	return &messageHotRepository{}
+22 | }
+23 |
+24 | func (r *messageHotRepository) Create(message *po.Message) (err error) {
+25 | 	var (
+----
+29 | 	)
+30 | 	ctx, cancel, coll = entity.Collection(po.MONGO_COLLECTION_MESSAGES)
+31 | 	defer cancel()
+----
+34 | 	}
+35 | 	if _, err = coll.InsertOne(ctx, message); err != nil {
+36 | 		xlog.Warn(err.Error())
+----
+41 |
+42 | func (r *messageHotRepository) Messages(w *entity.MongoQuery) (messages []*po.Message, err error) {
+43 | 	messages = make([]*po.Message, 0)
+44 | 	var (
+----
+49 | 	)
+50 | 	ctx, cancel, coll = entity.Collection(po.MONGO_COLLECTION_MESSAGES)
+51 | 	defer cancel()
+----
+60 | 	defer cur.Close(ctx)
+61 | 	err = cur.All(ctx, &messages)
+62 | 	return
+----
+64 |
+65 | func (r *messageHotRepository) Update(u *entity.MongoUpdate) (err error) {
+66 | 	var (
+----
+70 | 	)
+71 | 	ctx, cancel, coll = entity.Collection(po.MONGO_COLLECTION_MESSAGES)
+72 | 	defer cancel()
+----
+
+# domain/cr/cr_rad_env/cr_rad_env_info.go
+36 | 		Quantity:       ifo.Quantity,
+37 | 		Message:        ifo.Message,
+38 | 		ReceiverUids:   nil,
+----
+
+# domain/pdo/pdo_red_envelope_info.go
+20 | 	//RemainAmount   int    \`json:"remain_amount" field:"remain_amount"\`     // 剩余红包金额(分)
+21 | 	Message        string \`json:"message" field:"message"\`
+22 | 	ExpiredTs      int64  \`json:"expired_ts" field:"expired_ts"\`
+----
+
+# domain/po/po_chat.go
+10 | 	SeqId      int    \`gorm:"column:seq_id;default:0;NOT NULL" json:"seq_id"\` // 最后SEQ ID
+11 | 	SrvTs      int64  \`gorm:"column:srv_ts;default:0;NOT NULL" json:"srv_ts"\` // 最后一条消息时间
+12 | 	Avatar     string \`gorm:"column:avatar;NOT NULL" json:"avatar"\`           // 小图 72*72
+----
+
+# domain/po/po_chat_invite.go
+11 | 	InviteeUid    int64  \`gorm:"column:invitee_uid;NOT NULL" json:"invitee_uid"\`               // 被邀请人 UID
+12 | 	InvitationMsg string \`gorm:"column:invitation_msg;NOT NULL" json:"invitation_msg"\`         // 邀请消息
+13 | 	HandlerUid    int64  \`gorm:"column:handler_uid;default:0;NOT NULL" json:"handler_uid"\`     // 处理人 UID
+14 | 	HandleResult  int    \`gorm:"column:handle_result;default:0;NOT NULL" json:"handle_result"\` // 结果
+15 | 	HandleMsg     string \`gorm:"column:handle_msg" json:"handle_msg"\`                          // 处理消息
+16 | 	HandledTs     int64  \`gorm:"column:handled_ts;default:0;NOT NULL" json:"handled_ts"\`       // 处理时间
+----
+
+# domain/po/po_message.go
+5 | const (
+6 | 	MONGO_COLLECTION_MESSAGES = "messages"
+7 | )
+----
+9 | // 主键不能设置默认值
+10 | type Message struct {
+11 | 	ChatId         int64  \`gorm:"column:chat_id;default:0;NOT NULL" json:"chat_id" bson:"chat_id"\`                            // 会话ID
+12 | 	SeqId          int64  \`gorm:"column:seq_id;default:0;NOT NULL" json:"seq_id" bson:"seq_id"\`                               // 消息唯一ID
+13 | 	ChatType       int    \`gorm:"column:chat_type;default:0;NOT NULL" json:"chat_type" bson:"chat_type"\`                      // 会话类型
+14 | 	SrvMsgId       int64  \`gorm:"column:srv_msg_id;primary_key" json:"srv_msg_id" bson:"srv_msg_id"\`                          // 服务端消息号
+15 | 	CliMsgId       int64  \`gorm:"column:cli_msg_id;default:0;NOT NULL" json:"cli_msg_id" bson:"cli_msg_id"\`                   // 客户端消息号
+16 | 	RootId         int64  \`gorm:"column:root_id;default:0;NOT NULL" json:"root_id" bson:"root_id"\`                            // 根消息id
+17 | 	ParentId       int64  \`gorm:"column:parent_id;default:0;NOT NULL" json:"parent_id" bson:"parent_id"\`                      // 父消息的id
+18 | 	UpperMessageId int64  \`gorm:"column:upper_message_id;default:0;NOT NULL" json:"upper_message_id" bson:"upper_message_id"\` // 合并转发消息中，上一层级的消息id srv_msg_id
+19 | 	SenderId       int64  \`gorm:"column:sender_id;default:0;NOT NULL" json:"sender_id" bson:"sender_id"\`                      // 发送者uid
+----
+22 | 	SenderAvatar   string \`gorm:"column:sender_avatar;NOT NULL" json:"sender_avatar"\`                                         // 发送者头像
+23 | 	MsgFrom        int    \`gorm:"column:msg_from;default:0;NOT NULL" json:"msg_from" bson:"msg_from"\`                         // 消息来源
+24 | 	MsgType        int    \`gorm:"column:msg_type;default:0;NOT NULL" json:"msg_type" bson:"msg_type"\`                         // 消息类型
+25 | 	Body           string \`gorm:"column:body;NOT NULL" json:"body" bson:"body"\`                                               // 消息本体
+26 | 	Status         int    \`gorm:"column:status;default:0;NOT NULL" json:"status" bson:"status"\`                               // 消息状态
+27 | 	SentTs         int64  \`gorm:"column:sent_ts;default:0;NOT NULL" json:"sent_ts" bson:"sent_ts"\`                            // 客户端本地发送时间
+28 | 	SrvTs          int64  \`gorm:"column:srv_ts;default:0;NOT NULL" json:"srv_ts" bson:"srv_ts"\`                               // 服务端接收消息的时间
+29 | 	AssocId        int64  \`gorm:"column:assoc_id;default:0;NOT NULL" json:"assoc_id"\`                                         // 关联ID
+----
+33 |
+34 | func (e *Message) GetSeqId() string {
+35 | 	return strconv.FormatInt(e.SeqId, 10)
+----
+37 |
+38 | func (e *Message) GetChatId() string {
+39 | 	return strconv.FormatInt(e.ChatId, 10)
+----
+
+# domain/po/po_red_envelope.go
+22 | 	RemainAmount   int64  \`gorm:"column:remain_amount;default:0;NOT NULL" json:"remain_amount"\`     // 剩余红包金额(分)
+23 | 	Message        string \`gorm:"column:message;default:恭喜发财;NOT NULL" json:"message"\`              // 祝福语
+24 | 	EnvStatus      int    \`gorm:"column:env_status;default:0;NOT NULL" json:"env_status"\`           // 状态 0-创建 1-已发放 2-已领完 3-已过期且退还剩余红包
+----
+
+# domain/do/do_chat_invite.go
+8 | 	InviteeUid    int64          \`gorm:"column:invitee_uid" json:"invitee_uid"\`                         // 被邀请人 UID
+9 | 	InvitationMsg string         \`gorm:"column:invitation_msg" json:"invitation_msg"\`                   // 邀请消息
+10 | 	HandlerUid    int64          \`gorm:"column:handler_uid" json:"handler_uid"\`                         // 处理人 UID
+11 | 	HandleResult  int            \`gorm:"column:handle_result" json:"handle_result"\`                     // 结果
+12 | 	HandleMsg     string         \`gorm:"column:handle_msg" json:"handle_msg"\`                           // 处理消息
+13 | 	HandledTs     int64          \`gorm:"column:handled_ts" json:"handled_ts"\`                           // 处理时间
+----
+
+# apps/interfaces/dig/dig_chat_message.go
+7 | func init() {
+8 | 	Provide(svc_chat_msg.NewChatMessageService)
+9 | }
+----
+
+# apps/chat_invite/dig/dig.go
+26 | 	Provide(cache.NewChatCache)
+27 | 	Provide(cache.NewChatMessageCache)
+28 | 	Provide(cache.NewChatMemberCache)
+----
+
+# apps/interfaces/internal/router/router_api.go
+27 | 	registerUserRouter(group)
+28 | 	registerChatMessageRouter(group)
+29 | 	registerChatMemberRouter(group)
+----
+
+# apps/interfaces/internal/router/router_chat_msg.go
+9 |
+10 | func registerChatMessageRouter(group *gin.RouterGroup) {
+11 | 	var svc svc_chat_msg.ChatMessageService
+12 | 	dig.Invoke(func(s svc_chat_msg.ChatMessageService) {
+13 | 		svc = s
+14 | 	})
+15 | 	ctrl := ctrl_chat_msg.NewChatMessageCtrl(svc)
+16 | 	router := group.Group("chat_msg")
+17 | 	router.GET("list", ctrl.GetChatMessageList)
+18 | 	router.GET("search", ctrl.Search)
+19 | 	router.POST("operation", ctrl.MessageOperation)
+20 | 	router.POST("send_msg", ctrl.SendChatMessage)
+21 | }
+----
+
+# apps/interfaces/internal/config/config.go
+21 | 	ChatMsgServer       *conf.GrpcServer   \`yaml:"chat_msg_server"\`
+22 | 	MessageServer       *conf.GrpcServer   \`yaml:"message_server"\`
+23 | 	LinkServer          *conf.GrpcServer   \`yaml:"link_server"\`
+----
+
+# apps/interfaces/internal/dto/dto_chat_msg/dto_chat_msg_operation.go
+2 |
+3 | type MessageOperationReq struct {
+4 | 	ChatId int64 \`json:"chat_id" binding:"required,gt=0"\`
+----
+
+# apps/interfaces/internal/dto/dto_chat_msg/dto_chat_msg_send.go
+4 |
+5 | type SendChatMessageReq struct {
+6 | 	ChatId  int64            \`json:"chat_id" binding:"required,gt=0"\`        // 会话ID
+7 | 	Body    string           \`json:"body" binding:"required,min=1,max=1500"\` // 消息本体
+8 | 	MsgType pb_enum.MSG_TYPE \`json:"msg_type" binding:"required,gt=0"\`       // 消息类型
+9 | }
+----
+
+# apps/interfaces/internal/dto/dto_chat_msg/dto_chat_msg_search.go
+6 |
+7 | type SearchMessageReq struct {
+8 | 	ChatId    int64  \`form:"chat_id" json:"chat_id" binding:"required,gt=0"\`
+----
+13 |
+14 | type SearchMessageResp struct {
+15 | 	Total int64             \`json:"total"\`
+16 | 	List  []*MessageSummary \`json:"list"\`
+17 | }
+18 |
+19 | type MessageSummary struct {
+20 | 	SrvMsgId       int64                 \`json:"srv_msg_id"\`      // 服务端消息号
+21 | 	CliMsgId       int64                 \`json:"cli_msg_id"\`      // 客户端消息号
+22 | 	SenderId       int64                 \`json:"sender_id"\`       // 发送者uid
+----
+25 | 	ChatType       pb_enum.CHAT_TYPE     \`json:"chat_type"\`       // 会话类型
+26 | 	SeqId          int64                 \`json:"seq_id"\`          // 消息唯一ID
+27 | 	MsgFrom        pb_enum.MSG_FROM      \`json:"msg_from"\`        // 消息来源
+28 | 	MsgType        pb_enum.MSG_TYPE      \`json:"msg_type"\`        // 消息类型
+29 | 	Rt             string                \`json:"rt"\`              // 高亮消息本体
+30 | 	Status         int32                 \`json:"status"\`          // 消息状态
+31 | 	SentTs         int64                 \`json:"sent_ts"\`         // 客户端本地发送时间
+32 | 	SrvTs          int64                 \`json:"srv_ts"\`          // 服务端接收消息的时间
+33 | }
+----
+
+# apps/interfaces/internal/dto/dto_chat_msg/dto_chat_msg_list.go
+6 |
+7 | type GetChatMessageListReq struct {
+8 | 	ChatId int64  \`form:"chat_id" json:"chat_id" binding:"required,gt=0"\`
+----
+13 |
+14 | type ChatMessages struct {
+15 | 	LastSeqId int64             \`json:"last_seq_id"\`
+16 | 	List      []*SrvChatMessage \`json:"list"\`
+17 | }
+18 |
+19 | type GetChatMessagesReq struct {
+20 | 	ChatType int32 \`form:"chat_type" json:"chat_type" binding:"required,gte=0,lte=127"\`
+----
+27 |
+28 | type SrvChatMessage struct {
+29 | 	SrvMsgId       int64                 \`json:"srv_msg_id"\`      // 服务端消息号
+30 | 	CliMsgId       int64                 \`json:"cli_msg_id"\`      // 客户端消息号
+31 | 	SenderId       int64                 \`json:"sender_id"\`       // 发送者uid
+----
+34 | 	ChatType       pb_enum.CHAT_TYPE     \`json:"chat_type"\`       // 会话类型
+35 | 	SeqId          int64                 \`json:"seq_id"\`          // 消息唯一ID
+36 | 	MsgFrom        pb_enum.MSG_FROM      \`json:"msg_from"\`        // 消息来源
+37 | 	MsgType        pb_enum.MSG_TYPE      \`json:"msg_type"\`        // 消息类型
+38 | 	Body           string                \`json:"body"\`            // 消息本体
+39 | 	Status         int32                 \`json:"status"\`          // 消息状态
+40 | 	SentTs         int64                 \`json:"sent_ts"\`         // 客户端本地发送时间
+41 | 	SrvTs          int64                 \`json:"srv_ts"\`          // 服务端接收消息的时间
+42 | }
+----
+
+# apps/interfaces/internal/dto/dto_red_env/dto_red_env.go
+9 | 	Quantity       int32   \`json:"quantity"\`        // 红包数量
+10 | 	Message        string  \`json:"message"\`         // 祝福语
+11 | 	ReceiverUids   []int64 \`json:"receiver_uids"\`   // 接收者ID
+----
+
+# apps/interfaces/internal/ctrl/ctrl_chat_msg/ctrl_chat_msg.go
+6 |
+7 | type ChatMessageCtrl struct {
+8 | 	chatMessageService svc_chat_msg.ChatMessageService
+9 | }
+10 |
+11 | func NewChatMessageCtrl(chatMessageService svc_chat_msg.ChatMessageService) *ChatMessageCtrl {
+12 | 	return &ChatMessageCtrl{chatMessageService: chatMessageService}
+13 | }
+----
+
+# apps/interfaces/internal/dto/dto_chat_invite/dto_chat_invite_initiate.go
+7 | 	InviteeUids   []int64 \`json:"invitee_uids" binding:"required"\`                 // 被邀请人 UID
+8 | 	InvitationMsg string  \`json:"invitation_msg" binding:"required,min=0,max=128"\` // 邀请消息
+9 | }
+----
+
+# apps/interfaces/internal/ctrl/ctrl_chat_msg/ctrl_chat_msg_search.go
+10 |
+11 | func (ctrl *ChatMessageCtrl) Search(ctx *gin.Context) {
+12 | 	var (
+13 | 		params = new(dto_chat_msg.SearchMessageReq)
+14 | 		uid    int64
+----
+26 | 	}
+27 | 	resp = ctrl.chatMessageService.Search(params, uid)
+28 | 	if resp.Code > 0 {
+----
+
+# apps/interfaces/internal/ctrl/ctrl_chat_msg/ctrl_chat_msg_list.go
+10 |
+11 | func (ctrl *ChatMessageCtrl) GetChatMessageList(ctx *gin.Context) {
+12 | 	var (
+13 | 		params = new(dto_chat_msg.GetChatMessageListReq)
+14 | 		resp   *xhttp.Resp
+----
+20 | 	}
+21 | 	resp = ctrl.chatMessageService.GetChatMessageList(params)
+22 | 	if resp.Code > 0 {
+----
+29 | // 弃用
+30 | //func (ctrl *ChatMessageCtrl) GetChatMessages(ctx *gin.Context) {
+31 | //	var (
+32 | //		params = new(dto_chat_msg.GetChatMessagesReq)
+33 | //		resp   *xhttp.Resp
+----
+40 | //	}
+41 | //	resp = ctrl.chatMessageService.GetChatMessages(params)
+42 | //	if resp.Code > 0 {
+----
+
+# apps/interfaces/internal/ctrl/ctrl_chat_msg/ctrl_chat_msg_operation.go
+10 |
+11 | func (ctrl *ChatMessageCtrl) MessageOperation(ctx *gin.Context) {
+12 | 	var (
+13 | 		params   = new(dto_chat_msg.MessageOperationReq)
+14 | 		uid      int64
+----
+32 | 	}
+33 | 	resp = ctrl.chatMessageService.MessageOperation(params, uid, platform)
+34 | 	if resp.Code > 0 {
+----
+
+# apps/interfaces/internal/ctrl/ctrl_chat_msg/ctrl_chat_msg_send.go
+10 |
+11 | func (ctrl *ChatMessageCtrl) SendChatMessage(ctx *gin.Context) {
+12 | 	var (
+13 | 		params   = new(dto_chat_msg.SendChatMessageReq)
+14 | 		uid      int64
+----
+32 | 	}
+33 | 	resp = ctrl.chatMessageService.SendChatMessage(params, uid, platform)
+34 | 	if resp.Code > 0 {
+----
+
+# apps/interfaces/internal/dto/dto_chat_invite/dto_chat_invite_handle.go
+6 | 	HandleResult int32  \`json:"handle_result" binding:"required,oneof=1 2"\`  // 结果
+7 | 	HandleMsg    string \`json:"handle_msg" binding:"required,min=0,max=128"\` // 处理消息
+8 | }
+----
+
+# apps/interfaces/internal/service/svc_chat_msg/svc_chat_msg_send.go
+13 |
+14 | func (s *chatMessageService) SendChatMessage(req *dto_chat_msg.SendChatMessageReq, uid int64, platform int32) (resp *xhttp.Resp) {
+15 | 	resp = new(xhttp.Resp)
+16 | 	var (
+17 | 		reqArgs = &pb_msg.SendChatMessageReq{Msg: new(pb_msg.CliChatMessage)}
+18 | 		reply   *pb_msg.SendChatMessageResp
+19 | 	)
+----
+26 | 	reqArgs.Msg.SenderPlatform = pb_enum.PLATFORM_TYPE(platform)
+27 | 	reply = s.msgClient.SendChatMessage(reqArgs)
+28 | 	if reply == nil {
+----
+
+# apps/interfaces/internal/service/svc_chat_msg/svc_chat_msg_list.go
+13 |
+14 | func (s *chatMessageService) GetChatMessageList(req *dto_chat_msg.GetChatMessageListReq) (resp *xhttp.Resp) {
+15 | 	resp = new(xhttp.Resp)
+16 | 	var (
+17 | 		reqArgs  = new(pb_chat_msg.GetChatMessageListReq)
+18 | 		reply    *pb_chat_msg.GetChatMessageListResp
+19 | 		list     []string
+----
+21 | 		index    int
+22 | 		messages = new(dto_chat_msg.ChatMessages)
+23 | 	)
+----
+35 |
+36 | 	reply = s.chatMessageClient.GetChatMessageList(reqArgs)
+37 | 	if reply == nil {
+----
+46 | 	}
+47 | 	copier.Copy(&messages, reply.Msgs)
+48 | 	resp.Data = messages
+49 | 	return
+----
+52 | // 弃用
+53 | //func (s *chatMessageService) GetChatMessages(req *dto_chat_msg.GetChatMessagesReq) (resp *xhttp.Resp) {
+54 | //	resp = new(xhttp.Resp)
+55 | //	var (
+56 | //		getChatMessagesReq  = new(pb_chat_msg.GetChatMessagesReq)
+57 | //		getChatMessagesResp *pb_chat_msg.GetChatMessagesResp
+58 | //		list                = make([]*dto_chat_msg.SrvChatMessage, 0)
+59 | //	)
+60 | //	copier.Copy(getChatMessagesReq, req)
+61 | //	getChatMessagesResp = s.chatMessageClient.GetChatMessages(getChatMessagesReq)
+62 | //	if getChatMessagesResp == nil {
+63 | //		resp.SetResult(xhttp.ERROR_CODE_HTTP_SERVICE_FAILURE, xhttp.ERROR_HTTP_SERVICE_FAILURE)
+----
+66 | //	}
+67 | //	if getChatMessagesResp.Code > 0 {
+68 | //		resp.SetResult(getChatMessagesResp.Code, getChatMessagesResp.Msg)
+69 | //		xlog.Warn(getChatMessagesResp.Code, getChatMessagesResp.Msg)
+70 | //		return
+71 | //	}
+72 | //	copier.Copy(&list, getChatMessagesResp.List)
+73 | //	resp.Data = list
+----
+
+# apps/interfaces/internal/service/svc_chat_msg/svc_chat_msg_search.go
+10 |
+11 | func (s *chatMessageService) Search(req *dto_chat_msg.SearchMessageReq, uid int64) (resp *xhttp.Resp) {
+12 | 	resp = new(xhttp.Resp)
+13 | 	var (
+14 | 		reqArgs = new(pb_chat_msg.SearchMessageReq)
+15 | 		reply   *pb_chat_msg.SearchMessageResp
+16 | 		res     = dto_chat_msg.SearchMessageResp{List: make([]*dto_chat_msg.MessageSummary, 0)}
+17 | 	)
+----
+19 | 	reqArgs.Uid = uid
+20 | 	reply = s.chatMessageClient.SearchMessage(reqArgs)
+21 | 	if reply == nil {
+----
+
+# apps/interfaces/internal/service/svc_chat_msg/svc_chat_msg_operation.go
+11 |
+12 | func (s *chatMessageService) MessageOperation(req *dto_chat_msg.MessageOperationReq, uid int64, platform int32) (resp *xhttp.Resp) {
+13 | 	resp = new(xhttp.Resp)
+14 | 	var (
+15 | 		reqArgs = new(pb_chat_msg.MessageOperationReq)
+16 | 		reply   *pb_chat_msg.MessageOperationResp
+17 | 	)
+----
+20 | 	reqArgs.Platform = pb_enum.PLATFORM_TYPE(platform)
+21 | 	reply = s.chatMessageClient.MessageOperation(reqArgs)
+22 | 	if reply == nil {
+----
+
+# apps/interfaces/internal/service/svc_chat_msg/svc_chat_msg.go
+6 | 	"lark/apps/interfaces/internal/dto/dto_chat_msg"
+7 | 	msg_client "lark/apps/message/client"
+8 | 	"lark/pkg/xhttp"
+----
+10 |
+11 | type ChatMessageService interface {
+12 | 	GetChatMessageList(req *dto_chat_msg.GetChatMessageListReq) (resp *xhttp.Resp)
+13 | 	// 弃用
+14 | 	// GetChatMessages(req *dto_chat_msg.GetChatMessagesReq) (resp *xhttp.Resp)
+15 | 	Search(req *dto_chat_msg.SearchMessageReq, uid int64) (resp *xhttp.Resp)
+16 | 	MessageOperation(req *dto_chat_msg.MessageOperationReq, uid int64, platform int32) (resp *xhttp.Resp)
+17 | 	SendChatMessage(req *dto_chat_msg.SendChatMessageReq, uid int64, platform int32) (resp *xhttp.Resp)
+18 | }
+19 |
+20 | type chatMessageService struct {
+21 | 	chatMessageClient chat_msg_client.ChatMessageClient
+22 | 	msgClient         msg_client.MsgClient
+----
+24 |
+25 | func NewChatMessageService() ChatMessageService {
+26 | 	conf := config.GetConfig()
+27 | 	chatMessageClient := chat_msg_client.NewChatMessageClient(conf.Etcd, conf.ChatMsgServer, conf.Jaeger, conf.Name)
+28 | 	msgClient := msg_client.NewMsgClient(conf.Etcd, conf.MessageServer, conf.Jaeger, conf.Name)
+29 | 	return &chatMessageService{chatMessageClient: chatMessageClient, msgClient: msgClient}
+30 | }
+----
+
+# apps/chat_invite/internal/service/svc_chat_invite_handle.go
+267 | 				if terr != nil {
+268 | 					xlog.Errorf("push chat member cache message failed. err:%s,chatId:%v,kvs:%v", terr.Error(), chat.ChatId, kvs)
+269 | 				}
+----
+272 | 		// 9 邀请成功推送
+273 | 		s.chatInviteHandleMessage(chat, invite, members)
+274 | 	})
+----
+277 |
+278 | func (s *chatInviteService) chatInviteHandleMessage(chat *po.Chat, invite *po.ChatInvite, members []*po.ChatMember) {
+279 | 	switch pb_enum.CHAT_TYPE(chat.ChatType) {
+----
+284 | 		//成为好友通知
+285 | 		s.addedContactMessage(chat, invite, members)
+286 | 	case pb_enum.CHAT_TYPE_GROUP:
+----
+290 | 		//加入群通知
+291 | 		s.joinedChatGroupMessage(chat, invite, members[0])
+292 | 	}
+----
+294 |
+295 | func (s *chatInviteService) addedContactMessage(chat *po.Chat, invite *po.ChatInvite, members []*po.ChatMember) {
+296 | 	var (
+----
+305 | 		var (
+306 | 			inbox *pb_mq.InboxMessage
+307 | 		)
+308 | 		if seqId, err = s.chatMessageCache.IncrSeqID(chat.ChatId); err != nil {
+309 | 			return
+----
+315 | 		}
+316 | 		msg := &pb_msg.SrvChatMessage{
+317 | 			SrvMsgId:       xsnowflake.NewSnowflakeID(),
+----
+343 | 		}
+344 | 		inbox = &pb_mq.InboxMessage{
+345 | 			Topic:    pb_enum.TOPIC_CHAT,
+----
+348 | 		inbox.Body, _ = proto.Marshal(msg)
+349 | 		// 将消息推送到kafka消息队列
+350 | 		_, _, err = s.producer.EnQueue(inbox, constant.CONST_MSG_KEY_MSG+utils.GetChatPartition(msg.ChatId))
+----
+357 |
+358 | func (s *chatInviteService) joinedChatGroupMessage(chat *po.Chat, invite *po.ChatInvite, member *po.ChatMember) {
+359 | 	var (
+----
+362 | 		nowTs     = utils.NowUnix()
+363 | 		msg       *pb_msg.SrvChatMessage
+364 | 		joinedMsg *pb_msg.JoinedGroupChatMessage
+365 | 		inbox     *pb_mq.InboxMessage
+366 | 		err       error
+----
+387 |
+388 | 	if seqId, err = s.chatMessageCache.IncrSeqID(chat.ChatId); err != nil {
+389 | 		xlog.Warn(ERROR_CODE_CHAT_INVITE_INCR_SEQ_ID_FAILED, ERROR_CHAT_INVITE_INCR_SEQ_ID_FAILED, err.Error())
+----
+391 | 	}
+392 | 	msg = &pb_msg.SrvChatMessage{
+393 | 		SrvMsgId:       xsnowflake.NewSnowflakeID(),
+----
+408 | 	}
+409 | 	joinedMsg = &pb_msg.JoinedGroupChatMessage{
+410 | 		Inviter: &pb_chat_member.ChatMemberBasicInfo{
+----
+425 | 	}
+426 | 	inbox = &pb_mq.InboxMessage{
+427 | 		Topic:    pb_enum.TOPIC_CHAT,
+----
+430 | 	inbox.Body, _ = proto.Marshal(msg)
+431 | 	// 将消息推送到kafka消息队列
+432 | 	_, _, err = s.producer.EnQueue(inbox, constant.CONST_MSG_KEY_MSG+utils.GetChatPartition(msg.ChatId))
+----
+
+# apps/chat_invite/internal/service/svc_chat_invite_initiate.go
+82 | 	xants.Submit(func() {
+83 | 		s.sendChatInviteNotificationMessage(req, invites)
+84 | 	})
+----
+87 |
+88 | func (s *chatInviteService) sendChatInviteNotificationMessage(inviteReq *pb_invite.InitiateChatInviteReq, invitees []*po.ChatInvite) {
+89 | 	var (
+----
+93 | 	)
+94 | 	req, err = biz_chat_invite.ConstructChatInviteNotificationMessage(
+95 | 		inviteReq,
+----
+
+# apps/chat_invite/internal/service/svc_chat_invite_const.go
+40 | 	ERROR_CHAT_INVITE_PARAMETER_ERROR          = "参数错误"
+41 | 	ERROR_CHAT_INVITE_ENQUEUE_FAILED           = "消息入队失败"
+42 | 	ERROR_CHAT_INVITE_INCR_SEQ_ID_FAILED       = "生成 Sequence ID 失败"
+----
+
+# apps/chat_msg/client/client.go
+11 |
+12 | type ChatMessageClient interface {
+13 | 	GetChatMessageList(req *pb_chat_msg.GetChatMessageListReq) (resp *pb_chat_msg.GetChatMessageListResp)
+14 | 	// 弃用
+15 | 	// GetChatMessages(req *pb_chat_msg.GetChatMessagesReq) (resp *pb_chat_msg.GetChatMessagesResp)
+16 | 	SearchMessage(req *pb_chat_msg.SearchMessageReq) (resp *pb_chat_msg.SearchMessageResp)
+17 | 	MessageOperation(req *pb_chat_msg.MessageOperationReq) (resp *pb_chat_msg.MessageOperationResp)
+18 | }
+19 |
+20 | type chatMessageClient struct {
+21 | 	opt *xgrpc.ClientDialOption
+----
+23 |
+24 | func NewChatMessageClient(etcd *conf.Etcd, server *conf.GrpcServer, jaeger *conf.Jaeger, clientName string) ChatMessageClient {
+25 | 	return &chatMessageClient{xgrpc.NewClientDialOption(etcd, server, jaeger, clientName)}
+26 | }
+27 |
+28 | func (c *chatMessageClient) GetClientConn() (conn *grpc.ClientConn) {
+29 | 	conn = xgrpc.GetClientConn(c.opt.DialOption)
+----
+32 |
+33 | func (c *chatMessageClient) GetChatMessageList(req *pb_chat_msg.GetChatMessageListReq) (resp *pb_chat_msg.GetChatMessageListResp) {
+34 | 	conn := c.GetClientConn()
+----
+37 | 	}
+38 | 	client := pb_chat_msg.NewChatMessageClient(conn)
+39 | 	var err error
+40 | 	resp, err = client.GetChatMessageList(context.Background(), req)
+41 | 	if err != nil {
+----
+46 |
+47 | //func (c *chatMessageClient) GetChatMessages(req *pb_chat_msg.GetChatMessagesReq) (resp *pb_chat_msg.GetChatMessagesResp) {
+48 | //	conn := c.GetClientConn()
+----
+51 | //	}
+52 | //	client := pb_chat_msg.NewChatMessageClient(conn)
+53 | //	var err error
+54 | //	resp, err = client.GetChatMessages(context.Background(), req)
+55 | //	if err != nil {
+----
+60 |
+61 | func (c *chatMessageClient) SearchMessage(req *pb_chat_msg.SearchMessageReq) (resp *pb_chat_msg.SearchMessageResp) {
+62 | 	conn := c.GetClientConn()
+----
+65 | 	}
+66 | 	client := pb_chat_msg.NewChatMessageClient(conn)
+67 | 	var err error
+68 | 	resp, err = client.SearchMessage(context.Background(), req)
+69 | 	if err != nil {
+----
+74 |
+75 | func (c *chatMessageClient) MessageOperation(req *pb_chat_msg.MessageOperationReq) (resp *pb_chat_msg.MessageOperationResp) {
+76 | 	conn := c.GetClientConn()
+----
+79 | 	}
+80 | 	client := pb_chat_msg.NewChatMessageClient(conn)
+81 | 	var err error
+82 | 	resp, err = client.MessageOperation(context.Background(), req)
+83 | 	if err != nil {
+----
+
+# apps/message/client/client.go
+12 | type MsgClient interface {
+13 | 	SendChatMessage(req *pb_msg.SendChatMessageReq) (resp *pb_msg.SendChatMessageResp)
+14 | 	// 弃用
+15 | 	//MessageOperation(req *pb_msg.MessageOperationReq) (resp *pb_msg.MessageOperationResp)
+16 | }
+----
+30 |
+31 | func (c *msgClient) SendChatMessage(req *pb_msg.SendChatMessageReq) (resp *pb_msg.SendChatMessageResp) {
+32 | 	conn := c.GetClientConn()
+----
+35 | 	}
+36 | 	client := pb_msg.NewMessageClient(conn)
+37 | 	var err error
+38 | 	resp, err = client.SendChatMessage(context.Background(), req)
+39 | 	if err != nil {
+----
+44 |
+45 | func (c *msgClient) MessageOperation(req *pb_msg.MessageOperationReq) (resp *pb_msg.MessageOperationResp) {
+46 | 	conn := c.GetClientConn()
+----
+49 | 	}
+50 | 	client := pb_msg.NewMessageClient(conn)
+51 | 	var err error
+52 | 	resp, err = client.MessageOperation(context.Background(), req)
+53 | 	if err != nil {
+----
+
+# apps/chat_invite/internal/service/svc_chat_invite.go
+28 | 	chatCache        cache.ChatCache
+29 | 	chatMessageCache cache.ChatMessageCache
+30 | 	chatMemberCache  cache.ChatMemberCache
+----
+46 | 	chatCache cache.ChatCache,
+47 | 	chatMessageCache cache.ChatMessageCache,
+48 | 	chatMemberCache cache.ChatMemberCache,
+----
+58 | 		chatCache:        chatCache,
+59 | 		chatMessageCache: chatMessageCache,
+60 | 		chatMemberCache:  chatMemberCache,
+----
+
+# apps/msg_history/dig/dig.go
+18 | 	Provide(server.NewServer)
+19 | 	Provide(msg_history.NewMessageHistoryServer)
+20 | 	Provide(service.NewMessageHistoryService)
+21 | 	Provide(repo.NewChatMessageRepository)
+22 | 	Provide(cache.NewChatMessageCache)
+23 | }
+----
+
+# apps/message/dig/dig.go
+4 | 	"go.uber.org/dig"
+5 | 	"lark/apps/message/internal/config"
+6 | 	"lark/apps/message/internal/server"
+7 | 	"lark/apps/message/internal/server/message"
+8 | 	"lark/apps/message/internal/service"
+9 | 	"lark/domain/cache"
+----
+17 | 	Provide(server.NewServer)
+18 | 	Provide(message.NewMessageServer)
+19 | 	Provide(service.NewMessageService)
+20 | 	Provide(cache.NewChatMemberCache)
+21 | 	Provide(cache.NewChatMessageCache)
+22 |
+----
+
+# apps/message/internal/service/svc_message_verify.go
+8 |
+9 | func (s *messageService) verifyMessage(req *pb_msg.SendChatMessageReq) (assocId int64, err error) {
+10 | 	switch req.Msg.MsgType {
+11 | 	case pb_enum.MSG_TYPE_TEXT:
+12 | 		if len(req.Msg.Body) > MAX_MESSAGE_LENGTH {
+13 | 			err = ERROR_MESSAGE_OUT_MAX_RANGE
+14 | 			return
+----
+16 | 		if len(req.Msg.Body) == 0 {
+17 | 			err = ERROR_MESSAGE_BODY_TEXT_EMPTY_ERR
+18 | 		}
+----
+
+# apps/chat_msg/internal/service/svc_chat_message_const.go
+23 | 	ERROR_CHAT_MSG_QUERY_DB_FAILED      = "查询失败"
+24 | 	ERROR_CHAT_MSG_UPDATE_CHCHE_FAILED  = "更新缓存消息失败"
+25 | 	ERROR_CHAT_MSG_UPDATE_VALUE_FAILED  = "更新Value失败"
+26 | 	ERROR_CHAT_MSG_BEYOND_OPERABLE_TIME = "仅可撤回 10 minutes 内的消息"
+27 | 	ERROR_CHAT_MSG_ENQUEUE_FAILED       = "消息入队失败"
+28 | 	ERROR_CHAT_MSG_GRPC_SERVICE_FAILURE = "服务故障"
+----
+
+# apps/chat_msg/internal/service/svc_chat_message_search.go
+15 |
+16 | func (s *chatMessageService) SearchMessage(ctx context.Context, req *pb_chat_msg.SearchMessageReq) (resp *pb_chat_msg.SearchMessageResp, _ error) {
+17 | 	resp = &pb_chat_msg.SearchMessageResp{List: make([]*pb_chat_msg.MessageSummary, 0)}
+18 | 	var (
+----
+71 | 		client.Search.WithContext(context.Background()),
+72 | 		client.Search.WithIndex("messages"),
+73 | 		client.Search.WithBody(&buf),
+----
+92 | 	}
+93 | 	resp.List = make([]*pb_chat_msg.MessageSummary, len(r["hits"].(map[string]interface{})["hits"].([]interface{})))
+94 | 	total = r["hits"].(map[string]interface{})["total"]
+----
+97 | 	for i, hit = range r["hits"].(map[string]interface{})["hits"].([]interface{}) {
+98 | 		var msg = &pb_chat_msg.MessageSummary{}
+99 | 		utils.Copy(hit.(map[string]interface{})["_source"], msg)
+----
+106 |
+107 | func (s *chatMessageService) memberVerification(chatId int64, uid int64) (ok bool) {
+108 | 	var (
+----
+
+# apps/msg_history/internal/server/server.go
+8 | type server struct {
+9 | 	messageStoreServer msg_history.MessageHistoryServer
+10 | }
+11 |
+12 | func NewServer(messageStoreServer msg_history.MessageHistoryServer) commands.MainInstance {
+13 | 	return &server{messageStoreServer: messageStoreServer}
+14 | }
+----
+20 | func (s *server) RunLoop() {
+21 | 	s.messageStoreServer.Run()
+22 | }
+----
+
+# apps/msg_history/internal/server/msg_history/srv_msg_history.go
+6 |
+7 | type MessageHistoryServer interface {
+8 | 	Run()
+----
+10 |
+11 | type messageHistoryServer struct {
+12 | 	messageHistoryService service.MessageHistoryService
+13 | }
+14 |
+15 | func NewMessageHistoryServer(messageHistoryService service.MessageHistoryService) MessageHistoryServer {
+16 | 	return &messageHistoryServer{messageHistoryService: messageHistoryService}
+17 | }
+18 |
+19 | func (s *messageHistoryServer) Run() {
+20 |
+----
+
+# apps/user/internal/service/svc_user_edit_info.go
+70 | 					if err.(*mysql.MySQLError).Number == constant.ERROR_CODE_MYSQL_DUPLICATE_ENTRY {
+71 | 						if strings.HasSuffix(err.(*mysql.MySQLError).Message, constant.DUPLICATE_ENTRY_KV_USERS_MOBILE) {
+72 | 							resp.Set(ERROR_CODE_USER_THE_MOBILE_HAS_BEEN_BOUND_TO_ANOTHER_ACCOUNT, ERROR_USER_THE_MOBILE_HAS_BEEN_BOUND_TO_ANOTHER_ACCOUNT)
+----
+74 | 						}
+75 | 						if strings.HasSuffix(err.(*mysql.MySQLError).Message, constant.DUPLICATE_ENTRY_KV_USERS_LARK_ID) {
+76 | 							resp.Set(ERROR_CODE_USER_LARK_ID_HAS_BEEN_OCCUPIED, ERROR_USER_LARK_ID_HAS_BEEN_OCCUPIED)
+----
+
+# apps/chat_msg/internal/service/svc_chat_message_history.go
+8 |
+9 | func (s *chatMessageService) GetHistoryMessages(req *pb_chat_msg.GetChatMessagesReq) (list []*po.Message, err error) {
+10 | 	// 从mysql中获取消息
+11 | 	var (
+----
+22 | 	}
+23 | 	list, err = s.chatMessageRepo.HistoryMessages(w)
+24 | 	if err != nil {
+----
+29 |
+30 | func (s *chatMessageService) GetHistoryMessageList(req *pb_chat_msg.GetChatMessageListReq) (list []*po.Message, err error) {
+31 | 	var (
+----
+36 | 	w.SetFilter("seq_id in(?)", req.SeqIds)
+37 | 	list, err = s.chatMessageRepo.HistoryMessages(w)
+38 | 	if err != nil {
+----
+
+# apps/msg_history/internal/service/svc_msg_history.go
+12 |
+13 | type MessageHistoryService interface {
+14 | }
+15 |
+16 | type messageHistoryService struct {
+17 | 	cfg              *config.Config
+18 | 	chatMessageRepo  repo.ChatMessageRepository
+19 | 	consumerGroup    *xkafka.MConsumerGroup
+20 | 	msgHandle        map[string]obj.KafkaMessageHandler
+21 | 	chatMessageCache cache.ChatMessageCache
+22 | }
+23 |
+24 | func NewMessageHistoryService(
+25 | 	cfg *config.Config,
+26 | 	chatMessageRepo repo.ChatMessageRepository,
+27 | 	chatMessageCache cache.ChatMessageCache) MessageHistoryService {
+28 | 	svc := &messageHistoryService{
+29 | 		cfg:              cfg,
+30 | 		chatMessageRepo:  chatMessageRepo,
+31 | 		chatMessageCache: chatMessageCache}
+32 |
+33 | 	svc.msgHandle = make(map[string]obj.KafkaMessageHandler)
+34 | 	svc.msgHandle[cfg.MsgConsumer.Topic[0]] = svc.MessageHandler
+35 |
+----
+45 | // Setup is run at the beginning of a new session, before ConsumeClaim
+46 | func (s *messageHistoryService) Setup(_ sarama.ConsumerGroupSession) error {
+47 | 	// Mark the consumer as ready
+----
+52 | // Cleanup is run at the end of a session, once all ConsumeClaim goroutines have exited
+53 | func (s *messageHistoryService) Cleanup(_ sarama.ConsumerGroupSession) error {
+54 | 	return nil
+----
+56 |
+57 | // ConsumeClaim must start a consumer loop of ConsumerGroupClaim's Messages().
+58 | func (s *messageHistoryService) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+59 | 	for {
+60 | 		select {
+61 | 		case msg, ok := <-claim.Messages():
+62 | 			if ok == false {
+63 | 				xlog.Info("message channel was closed")
+64 | 				return nil
+----
+66 | 			s.msgHandle[msg.Topic](msg.Value, string(msg.Key))
+67 | 			session.MarkMessage(msg, "")
+68 | 		case <-session.Context().Done():
+----
+
+# apps/chat_msg/internal/service/svc_chat_message_hot.go
+9 |
+10 | func (s *chatMessageService) GetHotMessages(req *pb_chat_msg.GetChatMessagesReq, maxSeqId int64) (list []*po.Message, next bool, err error) {
+11 | 	// 从mongo中获取消息
+12 | 	var (
+----
+31 | 	}
+32 | 	list, err = s.messageHotRepo.Messages(w)
+33 | 	msgCount = len(list)
+----
+
+# apps/chat_msg/internal/service/svc_chat_message_operation.go
+17 |
+18 | func (s *chatMessageService) MessageOperation(ctx context.Context, req *pb_chat_msg.MessageOperationReq) (resp *pb_chat_msg.MessageOperationResp, err error) {
+19 | 	resp = new(pb_chat_msg.MessageOperationResp)
+20 | 	var (
+21 | 		message *po.Message
+22 | 		nowTs   = utils.NowUnix()
+23 | 		inbox   = &pb_mq.InboxMessage{
+24 | 			Topic:    pb_enum.TOPIC_MSG_OPR,
+----
+26 | 		}
+27 | 		operation = new(pb_msg.MessageOperation)
+28 | 	)
+29 | 	message, err = s.GetMessage(req.ChatId, req.SeqId)
+30 | 	if err != nil {
+----
+34 | 	// 1、超过10分钟无法测回
+35 | 	if nowTs-message.SrvTs > constant.CONST_SECOND_10_MINUTES {
+36 | 		resp.Set(ERROR_CODE_CHAT_MSG_BEYOND_OPERABLE_TIME, ERROR_CHAT_MSG_BEYOND_OPERABLE_TIME)
+----
+39 | 	}
+40 | 	switch pb_enum.MSG_OPERATION(message.Status) {
+41 | 	case pb_enum.MSG_OPERATION_RECALL:
+----
+45 | 	// 2、成员身份判断
+46 | 	if message.SenderId != req.SenderId {
+47 | 		// 无权操作
+----
+50 |
+51 | 	// 3、消息推送
+52 | 	copier.Copy(operation, req)
+53 | 	operation.SrvMsgId = message.SrvMsgId
+54 | 	operation.ChatType = pb_enum.CHAT_TYPE(message.ChatType)
+55 | 	inbox.Body, _ = proto.Marshal(operation)
+----
+64 |
+65 | func (s *chatMessageService) GetMessage(chatId int64, seqId int64) (message *po.Message, err error) {
+66 | 	var (
+----
+68 | 	)
+69 | 	message, _ = s.chatMessageCache.GetChatMessage(chatId, seqId)
+70 | 	if message.SrvMsgId > 0 {
+71 | 		return
+----
+74 | 	w.SetFilter("seq_id=?", seqId)
+75 | 	message, err = s.chatMessageRepo.Message(w)
+76 | 	if err != nil {
+----
+
+# apps/chat_msg/internal/service/svc_chat_message_list.go
+14 |
+15 | func (s *chatMessageService) GetChatMessageList(ctx context.Context, req *pb_chat_msg.GetChatMessageListReq) (resp *pb_chat_msg.GetChatMessageListResp, _ error) {
+16 | 	resp = &pb_chat_msg.GetChatMessageListResp{Msgs: &pb_chat_msg.ChatMessages{List: make([]*pb_msg.SrvChatMessage, 0)}}
+17 | 	var (
+----
+19 | 		nowTs     = utils.NowUnix()
+20 | 		list      []*po.Message
+21 | 		cacheList []*po.Message
+22 | 		maxSeqId  uint64
+----
+33 | 	if req.Order == pb_enum.ORDER_TYPE_ASC {
+34 | 		// 1、消息边界
+35 | 		maxSeqId, err = s.chatMessageCache.GetMaxSeqID(req.ChatId)
+36 | 		if err != nil {
+----
+42 | 	if nowTs-req.MsgTs < s.cfg.MsgCache.L1Duration {
+43 | 		cacheList, err = s.GetCacheChatMessageList(req)
+44 | 		if err != nil {
+----
+55 | 	// 3、从mysql数据库中读取
+56 | 	list, err = s.GetHistoryMessageList(req)
+57 | 	if err != nil {
+----
+78 | // 弃用
+79 | //func (s *chatMessageService) GetChatMessages(_ context.Context, req *pb_chat_msg.GetChatMessagesReq) (resp *pb_chat_msg.GetChatMessagesResp, _ error) {
+80 | //	resp = &pb_chat_msg.GetChatMessagesResp{List: make([]*pb_msg.SrvChatMessage, 0)}
+81 | //	var (
+82 | //		nowTs     = utils.NowUnix()
+83 | //		list      = make([]*po.Message, 0)
+84 | //		cacheList []*po.Message
+85 | //		//hotList     []*po.Message
+86 | //		historyList []*po.Message
+87 | //		msgCount    int
+----
+98 | //	}()
+99 | //	// 1、消息边界
+100 | //	maxSeqId, _ = s.chatMessageCache.GetMaxSeqID(req.ChatId)
+101 | //	if req.SeqId >= int64(maxSeqId) {
+102 | //		if req.New == true {
+103 | //			// 1.1 消息越界
+104 | //			return
+----
+110 | //		// 2、从redis缓存中读取
+111 | //		cacheList, next, err = s.GetCacheMessages(req, int64(maxSeqId))
+112 | //		if next == false || err != nil {
+----
+121 | //			// 3、从mongo缓存中读取
+122 | //			hotList, next, err = s.GetHotMessages(req, int64(maxSeqId))
+123 | //			if next == false || err != nil {
+----
+126 | //					if req.New == false {
+127 | //						sortMessageList(hotList, true)
+128 | //					}
+----
+138 | //	// 4、从mysql缓存中读取
+139 | //	historyList, err = s.GetHistoryMessages(req)
+140 | //	if err != nil {
+----
+163 |
+164 | //func sortMessageList(list []*po.Message, asc bool) {
+165 | //	sort.Slice(list, func(i, j int) bool {
+----
+
+# apps/message/internal/config/config.go
+29 | var (
+30 | 	confFile = flag.String("cfg", "./configs/message.yaml", "config file")
+31 | 	serverId = flag.Int("sid", 1, "server id")
+----
+
+# apps/message/internal/server/message/srv_message_service.go
+1 | package message
+2 |
+----
+7 |
+8 | func (s *messageServer) SendChatMessage(ctx context.Context, req *pb_msg.SendChatMessageReq) (resp *pb_msg.SendChatMessageResp, _ error) {
+9 | 	return s.messageService.SendChatMessage(ctx, req)
+10 | }
+----
+
+# apps/message/internal/server/message/srv_message.go
+1 | package message
+2 |
+----
+6 | 	"io"
+7 | 	"lark/apps/message/internal/config"
+8 | 	"lark/apps/message/internal/service"
+9 | 	"lark/pkg/common/xgrpc"
+----
+13 |
+14 | type MessageServer interface {
+15 | 	Run()
+----
+17 |
+18 | type messageServer struct {
+19 | 	pb_msg.UnimplementedMessageServer
+20 | 	cfg            *config.Config
+21 | 	grpcServer     *xgrpc.GrpcServer
+22 | 	messageService service.MessageService
+23 |
+----
+27 |
+28 | func NewMessageServer(cfg *config.Config, messageService service.MessageService) MessageServer {
+29 | 	srv := &messageServer{cfg: cfg, validate: validator.New(), messageService: messageService}
+30 | 	srv.producer = xkafka.NewKafkaProducer(cfg.MsgProducer.Address, cfg.MsgProducer.Topic)
+----
+33 |
+34 | func (s *messageServer) Run() {
+35 | 	var (
+----
+44 | 	}()
+45 | 	pb_msg.RegisterMessageServer(srv, s)
+46 | 	s.grpcServer = xgrpc.NewGrpcServer(s.cfg.GrpcServer, s.cfg.Etcd)
+----
+
+# apps/msg_history/internal/service/svc_msg_history_const.go
+9 | 	ERROR_CODE_MSG_HISTORY_GET_SEQ_ID_FAILED      int32 = 5006
+10 | 	ERROR_CODE_MSG_HISTORY_INSERT_MESSAGE_FAILED  int32 = 5007
+11 | 	ERROR_CODE_MSG_HISTORY_CHCHE_MESSAGE_FAILED   int32 = 5008
+12 | 	ERROR_CODE_MSG_HISTORY_UPDATE_VALUE_FAILED    int32 = 5009
+----
+20 | 	ERROR_MSG_HISTORY_GRPC_SERVICE_FAILURE   = "服务故障"
+21 | 	ERROR_MSG_HISTORY_MSG_PUSH_FAILED        = "消息推送失败"
+22 | 	ERROR_MSG_HISTORY_MSG_ENQUEUE_FAILED     = "消息ENQUEUE失败"
+23 | 	ERROR_MSG_HISTORY_GET_SEQ_ID_FAILED      = "生成 SEQUENCE ID 失败"
+24 | 	ERROR_MSG_HISTORY_INSERT_MESSAGE_FAILED  = "消息入库失败"
+25 | 	ERROR_MSG_HISTORY_CHCHE_MESSAGE_FAILED   = "消息缓存失败"
+26 | 	ERROR_MSG_HISTORY_UPDATE_VALUE_FAILED    = "更新Value失败"
+----
+
+# apps/msg_history/internal/service/svc_msg_history_msg_consumer.go
+16 |
+17 | func (s *messageHistoryService) MessageHandler(msg []byte, msgKey string) (err error) {
+18 | 	inbox := new(pb_mq.InboxMessage)
+19 | 	if err = proto.Unmarshal(msg, inbox); err != nil {
+----
+24 | 	case pb_enum.TOPIC_CHAT, pb_enum.TOPIC_RED_ENVELOPE:
+25 | 		err = s.SaveMessage(inbox.Body)
+26 | 	case pb_enum.TOPIC_MSG_OPR:
+27 | 		err = s.MessageOperation(inbox.Body)
+28 | 	default:
+----
+33 |
+34 | func (s *messageHistoryService) SaveMessage(msg []byte) (err error) {
+35 | 	var (
+36 | 		chatMsg = new(pb_msg.SrvChatMessage)
+37 | 		message = new(po.Message)
+38 | 	)
+----
+45 | 	}
+46 | 	copier.Copy(message, chatMsg)
+47 | 	message.Body = utils.MsgBodyToStr(chatMsg.MsgType, chatMsg.Body)
+48 |
+49 | 	// 1、消息入库
+50 | 	if err = s.chatMessageRepo.Create(message); err != nil {
+51 | 		xlog.Warn(ERROR_CODE_MSG_HISTORY_INSERT_MESSAGE_FAILED, ERROR_MSG_HISTORY_INSERT_MESSAGE_FAILED, err.Error())
+52 | 		switch err.(type) {
+----
+61 |
+62 | 	// 2、消息缓存
+63 | 	s.chatMessageCache.SetConvoMessage(message)
+64 | 	return
+----
+66 |
+67 | func (s *messageHistoryService) MessageOperation(msg []byte) (err error) {
+68 | 	var (
+69 | 		operation = new(pb_msg.MessageOperation)
+70 | 		u         = entity.NewMysqlUpdate()
+71 | 		message   *po.Message
+72 | 		nowTs     = utils.NowUnix()
+----
+77 | 	}
+78 | 	message, err = s.GetMessage(operation.ChatId, operation.SeqId)
+79 | 	if err != nil {
+----
+81 | 	}
+82 | 	if message.SrvMsgId == 0 {
+83 | 		return
+84 | 	}
+85 | 	message.Status = int(operation.Opn)
+86 | 	message.UpdatedTs = nowTs
+87 | 	// 1、更新 message
+88 | 	u.SetFilter("chat_id=?", operation.ChatId)
+----
+90 | 	u.Set("status", operation.Opn)
+91 | 	err = s.chatMessageRepo.UpdateMessage(u)
+92 | 	if err != nil {
+----
+96 | 	// 2、更新缓存
+97 | 	err = s.chatMessageCache.SetChatMessage(message)
+98 | 	if err != nil {
+----
+103 |
+104 | func (s *messageHistoryService) GetMessage(chatId int64, seqId int64) (message *po.Message, err error) {
+105 | 	message = new(po.Message)
+106 | 	var (
+----
+108 | 	)
+109 | 	message, err = s.chatMessageCache.GetChatMessage(chatId, seqId)
+110 | 	if message.SrvMsgId > 0 {
+111 | 		return
+----
+118 | 	w.SetFilter("seq_id=?", seqId)
+119 | 	message, err = s.chatMessageRepo.Message(w)
+120 | 	if err != nil {
+----
+
+# apps/message/internal/server/server.go
+3 | import (
+4 | 	"lark/apps/message/internal/server/message"
+5 | 	"lark/pkg/commands"
+----
+8 | type server struct {
+9 | 	messageServer message.MessageServer
+10 | }
+11 |
+12 | func NewServer(messageServer message.MessageServer) commands.MainInstance {
+13 | 	return &server{messageServer: messageServer}
+14 | }
+----
+20 | func (s *server) RunLoop() {
+21 | 	s.messageServer.Run()
+22 | }
+----
+
+# apps/chat_msg/internal/service/svc_chat_message.go
+13 |
+14 | type ChatMessageService interface {
+15 | 	GetChatMessageList(ctx context.Context, req *pb_chat_msg.GetChatMessageListReq) (resp *pb_chat_msg.GetChatMessageListResp, err error)
+16 | 	SearchMessage(ctx context.Context, req *pb_chat_msg.SearchMessageReq) (resp *pb_chat_msg.SearchMessageResp, err error)
+17 | 	MessageOperation(ctx context.Context, req *pb_chat_msg.MessageOperationReq) (resp *pb_chat_msg.MessageOperationResp, err error)
+18 | }
+19 |
+20 | type chatMessageService struct {
+21 | 	cfg              *config.Config
+22 | 	chatMessageRepo  repo.ChatMessageRepository
+23 | 	messageHotRepo   mrepo.MessageHotRepository
+24 | 	chatMessageCache cache.ChatMessageCache
+25 | 	chatMemberCache  cache.ChatMemberCache
+----
+29 |
+30 | func NewChatMessageService(
+31 | 	cfg *config.Config,
+32 | 	chatMessageRepo repo.ChatMessageRepository,
+33 | 	messageHotRepo mrepo.MessageHotRepository,
+34 | 	chatMessageCache cache.ChatMessageCache,
+35 | 	chatMemberCache cache.ChatMemberCache) ChatMessageService {
+36 | 	svc := &chatMessageService{
+37 | 		cfg:              cfg,
+38 | 		chatMessageRepo:  chatMessageRepo,
+39 | 		messageHotRepo:   messageHotRepo,
+40 | 		chatMessageCache: chatMessageCache,
+41 | 		chatMemberCache:  chatMemberCache}
+----
+
+# apps/message/internal/service/svc_message.go
+6 | 	chat_member_client "lark/apps/chat_member/client"
+7 | 	"lark/apps/message/internal/config"
+8 | 	"lark/domain/cache"
+----
+12 |
+13 | type MessageService interface {
+14 | 	SendChatMessage(ctx context.Context, req *pb_msg.SendChatMessageReq) (resp *pb_msg.SendChatMessageResp, err error)
+15 | }
+16 |
+17 | type messageService struct {
+18 | 	cfg              *config.Config
+----
+23 | 	chatMemberCache  cache.ChatMemberCache
+24 | 	chatMessageCache cache.ChatMessageCache
+25 | }
+26 |
+27 | func NewMessageService(
+28 | 	cfg *config.Config,
+29 | 	chatMemberCache cache.ChatMemberCache,
+30 | 	chatMessageCache cache.ChatMessageCache) MessageService {
+31 | 	chatMemberClient := chat_member_client.NewChatMemberClient(cfg.Etcd, cfg.ChatMemberServer, cfg.GrpcServer.Jaeger, cfg.Name)
+32 | 	svc := &messageService{
+33 | 		cfg:              cfg,
+----
+36 | 		chatMemberCache:  chatMemberCache,
+37 | 		chatMessageCache: chatMessageCache}
+38 | 	svc.producer = xkafka.NewKafkaProducer(cfg.MsgProducer.Address, cfg.MsgProducer.Topic)
+----
+
+# apps/chat_msg/internal/service/svc_chat_message_cache.go
+12 | /*
+ 13 | func (s *chatMessageService) GetCacheMessages(req *pb_chat_msg.GetChatMessagesReq, maxSeqId int64) (list []*po.Message, next bool, err error) {
+ 14 | 	var (
+----
+ 16 | 	)
+ 17 | 	list = s.GetCacheChatMessages(req, int(maxSeqId))
+ 18 | 	msgCount = len(list)
+----
+ 32 |
+ 33 | func (s *chatMessageService) GetCacheChatMessages(req *pb_chat_msg.GetChatMessagesReq, max int) (list []*po.Message) {
+ 34 | 	list = make([]*po.Message, 0)
+ 35 | 	var (
+----
+ 76 | 	}
+ 77 | 	values, err = s.chatMessageCache.MGetMessages(keys)
+ 78 | 	if err != nil {
+----
+ 81 | 	for _, val = range values {
+ 82 | 		msg := &po.Message{}
+ 83 | 		if val == nil {
+----
+ 92 |
+ 93 | func (s *chatMessageService) SaveCacheChatMessageCache(list []*po.Message) {
+ 94 | 	if len(list) == 0 {
+----
+100 | 	for index, _ = range list {
+101 | 		s.chatMessageCache.SetChatMessage(list[index])
+102 | 	}
+----
+104 |
+105 | func (s *chatMessageService) cacheChatMessage(msg *po.Message) {
+106 | 	xants.Submit(func() {
+107 | 		s.chatMessageCache.SetChatMessage(msg)
+108 | 	})
+----
+111 |
+112 | func (s *chatMessageService) GetCacheChatMessageList(req *pb_chat_msg.GetChatMessageListReq) (list []*po.Message, err error) {
+113 | 	var (
+----
+126 | 	}
+127 | 	values, err = s.chatMessageCache.MGetMessages(keys)
+128 | 	if err != nil {
+----
+134 | 		}
+135 | 		msg := &po.Message{}
+136 | 		utils.Unmarshal(val.(string), msg)
+----
+
+# apps/chat_msg/dig/dig.go
+ 19 | 	Provide(server.NewServer)
+ 20 | 	Provide(chat_msg.NewChatMessageServer)
+ 21 | 	Provide(service.NewChatMessageService)
+ 22 | 	Provide(repo.NewChatMessageRepository)
+ 23 | 	Provide(repo.NewChatMemberRepository)
+ 24 | 	Provide(mrepo.NewMessageHotRepository)
+ 25 | 	Provide(cache.NewChatMessageCache)
+ 26 | 	Provide(cache.NewChatMemberCache)
+----
+
+# apps/message/internal/service/svc_message_const.go
+  7 | const (
+  8 | 	ERROR_CODE_MESSAGE_UNMARSHAL_FAILED            int32 = 400001
+  9 | 	ERROR_CODE_MESSAGE_MARSHAL_FAILED              int32 = 400002
+ 10 | 	ERROR_CODE_MESSAGE_VALIDATOR_FAILED            int32 = 400003
+ 11 | 	ERROR_CODE_MESSAGE_REPEATED_MESSAGE            int32 = 400004
+ 12 | 	ERROR_CODE_MESSAGE_ENQUEUE_FAILED              int32 = 400005
+ 13 | 	ERROR_CODE_MESSAGE_RECORD_MSGID_FAILED         int32 = 400006
+ 14 | 	ERROR_CODE_MESSAGE_INCR_SEQ_ID_FAILED          int32 = 400007
+ 15 | 	ERROR_CODE_MESSAGE_DECR_SEQ_ID_FAILED          int32 = 400008
+ 16 | 	ERROR_CODE_MESSAGE_VERIFY_IDENTITY_FAILED      int32 = 400009
+ 17 | 	ERROR_CODE_MESSAGE_REDIS_GET_FAILED            int32 = 400010
+ 18 | 	ERROR_CODE_MESSAGE_GRPC_SERVICE_FAILURE        int32 = 400011 // 服务故障
+ 19 | 	ERROR_CODE_MESSAGE_CHCHE_MESSAGE_FAILED        int32 = 400012
+ 20 | 	ERROR_CODE_MESSAGE_UPDATE_CHCHE_MESSAGE_FAILED int32 = 400013
+ 21 | 	ERROR_CODE_MESSAGE_BEYOND_OPERABLE_TIME        int32 = 400014
+ 22 | 	ERROR_CODE_MESSAGE_GET_SENDER_INFO_FAILED      int32 = 400015
+ 23 | 	ERROR_CODE_MESSAGE_PRODUCER_IS_NULL            int32 = 400016
+ 24 | 	ERROR_CODE_MESSAGE_GRPC_LINK_TIMEOUT           int32 = 400017
+ 25 | )
+----
+ 27 | const (
+ 28 | 	ERROR_MESSAGE_UNMARSHAL_FAILED            = "消息反序列化错误"
+ 29 | 	ERROR_MESSAGE_MARSHAL_FAILED              = "消息序列化错误"
+ 30 | 	ERROR_MESSAGE_VALIDATOR_FAILED            = "参数校验错误"
+ 31 | 	ERROR_MESSAGE_REPEATED_MESSAGE            = "重复的消息"
+ 32 | 	ERROR_MESSAGE_ENQUEUE_FAILED              = "消息入队失败"
+ 33 | 	ERROR_MESSAGE_RECORD_MSGID_FAILED         = "缓存消息ID失败"
+ 34 | 	ERROR_MESSAGE_INCR_SEQ_ID_FAILED          = "生成 Sequence ID 失败"
+ 35 | 	ERROR_MESSAGE_DECR_SEQ_ID_FAILED          = "更新 Sequence ID 失败"
+ 36 | 	ERROR_MESSAGE_VERIFY_IDENTITY_FAILED      = "验证身份失败"
+ 37 | 	ERROR_MESSAGE_REDIS_GET_FAILED            = "读取redis缓存失败"
+ 38 | 	ERROR_MESSAGE_GRPC_SERVICE_FAILURE        = "服务故障"
+ 39 | 	ERROR_MESSAGE_CHCHE_MESSAGE_FAILED        = "消息缓存失败"
+ 40 | 	ERROR_MESSAGE_UPDATE_CHCHE_MESSAGE_FAILED = "更新缓存消息失败"
+ 41 | 	ERROR_MESSAGE_BEYOND_OPERABLE_TIME        = "仅可撤回 10 minutes 内的消息"
+ 42 | 	ERROR_MESSAGE_GET_SENDER_INFO_FAILED      = "获取发送者信息失败"
+ 43 | 	ERROR_MESSAGE_PRODUCER_IS_NULL            = "消息生成者为null"
+ 44 | 	ERROR_MESSAGE_GRPC_LINK_TIMEOUT           = "GRPC 服务超时"
+ 45 | )
+----
+ 47 | var (
+ 48 | 	ERROR_MESSAGE_BODY_TEXT_EMPTY_ERR = errors.New("消息为空")
+ 49 | 	ERROR_MESSAGE_OUT_MAX_RANGE       = errors.New("消息超出规定长度")
+ 50 | 	ERROR_MESSAGE_NON_CONTACT_ERR     = errors.New("非联系人")
+ 51 | 	ERROR_MESSAGE_NON_CHAT_MEMBER_ERR = errors.New("非联 Chat 成员")
+ 52 | )
+----
+ 54 | const (
+ 55 | 	MAX_MESSAGE_LENGTH = 1500
+ 56 | )
+----
+
+# apps/message/internal/service/svc_message_send.go
+ 17 |
+ 18 | func (s *messageService) SendChatMessage(ctx context.Context, req *pb_msg.SendChatMessageReq) (resp *pb_msg.SendChatMessageResp, _ error) {
+ 19 | 	resp = new(pb_msg.SendChatMessageResp)
+ 20 | 	var (
+ 21 | 		inbox = &pb_mq.InboxMessage{
+ 22 | 			Topic:    req.Topic,
+----
+ 24 | 		}
+ 25 | 		chatMsg    = new(pb_msg.SrvChatMessage)
+ 26 | 		senderInfo *pb_chat_member.ChatMemberInfo
+----
+ 33 | 	if err = s.validate.Struct(req.Msg); err != nil {
+ 34 | 		resp.Set(ERROR_CODE_MESSAGE_VALIDATOR_FAILED, ERROR_MESSAGE_VALIDATOR_FAILED)
+ 35 | 		xlog.Warn(resp.Code, resp.Msg, err.Error())
+----
+ 37 | 	}
+ 38 | 	if chatMsg.AssocId, err = s.verifyMessage(req); err != nil {
+ 39 | 		resp.Set(ERROR_CODE_MESSAGE_VALIDATOR_FAILED, ERROR_MESSAGE_VALIDATOR_FAILED)
+ 40 | 		xlog.Warn(resp.Code, resp.Msg, err.Error())
+----
+ 42 | 	}
+ 43 | 	// 2、重复消息校验
+ 44 | 	result, ok = s.chatMessageCache.RepeatMessageVerify(s.cfg.Redis.Prefix, req.Msg.ChatId, req.Msg.CliMsgId)
+ 45 | 	if ok == false {
+ 46 | 		resp.Set(ERROR_CODE_MESSAGE_VALIDATOR_FAILED, result)
+ 47 | 		xlog.Warn(resp.Code, resp.Msg)
+----
+ 53 | 	if err != nil {
+ 54 | 		resp.Set(ERROR_CODE_MESSAGE_GET_SENDER_INFO_FAILED, err.Error())
+ 55 | 		xlog.Warn(resp.Code, resp.Msg, err.Error())
+----
+ 61 | 		} else {
+ 62 | 			xlog.Warn(ERROR_CODE_MESSAGE_GET_SENDER_INFO_FAILED, ERROR_MESSAGE_GET_SENDER_INFO_FAILED)
+ 63 | 		}
+----
+ 66 |
+ 67 | 	// 4、补充消息内容
+ 68 | 	if seqId, err = s.chatMessageCache.IncrSeqID(req.Msg.ChatId); err != nil {
+ 69 | 		resp.Set(ERROR_CODE_MESSAGE_INCR_SEQ_ID_FAILED, ERROR_MESSAGE_INCR_SEQ_ID_FAILED)
+ 70 | 		xlog.Warn(resp.Code, resp.Msg, err.Error())
+----
+ 81 | 	inbox.Body, _ = proto.Marshal(chatMsg)
+ 82 | 	// 5、将消息推送到kafka消息队列
+ 83 | 	if s.producer == nil {
+ 84 | 		resp.Set(ERROR_CODE_MESSAGE_PRODUCER_IS_NULL, ERROR_MESSAGE_PRODUCER_IS_NULL)
+ 85 | 		xlog.Warn(resp.Code, resp.Msg)
+----
+ 89 | 	if err != nil {
+ 90 | 		resp.Set(ERROR_CODE_MESSAGE_ENQUEUE_FAILED, ERROR_MESSAGE_ENQUEUE_FAILED)
+ 91 | 		xlog.Warn(resp.Code, resp.Msg, err.Error())
+----
+102 | 	if err != nil {
+103 | 		xlog.Warn(ERROR_CODE_MESSAGE_ENQUEUE_FAILED, ERROR_MESSAGE_ENQUEUE_FAILED, err.Error())
+104 | 	}
+----
+107 |
+108 | func (s *messageService) getSenderInfo(chatId int64, uid int64, resp *pb_msg.SendChatMessageResp) (info *pb_chat_member.ChatMemberInfo, err error) {
+109 | 	var (
+----
+114 | 	if err != nil {
+115 | 		xlog.Warn(ERROR_CODE_MESSAGE_REDIS_GET_FAILED, ERROR_MESSAGE_REDIS_GET_FAILED, err.Error())
+116 | 	}
+----
+129 | 	if reply == nil {
+130 | 		resp.Set(ERROR_CODE_MESSAGE_GRPC_SERVICE_FAILURE, ERROR_MESSAGE_GRPC_SERVICE_FAILURE)
+131 | 		xlog.Warn(resp.Code, resp.Msg)
+----
+146 |
+147 | func (s *messageService) authentication(info *pb_chat_member.ChatMemberInfo) (err error) {
+148 | 	switch pb_enum.CHAT_STATUS(info.Status) {
+----
+150 | 		// 非联 Chat 成员
+151 | 		err = ERROR_MESSAGE_NON_CHAT_MEMBER_ERR
+152 | 	case pb_enum.CHAT_STATUS_NON_CONTACT:
+153 | 		// 非联系人
+154 | 		err = ERROR_MESSAGE_NON_CONTACT_ERR
+155 | 	}
+----
+
+# apps/chat_msg/internal/server/server.go
+  8 | type server struct {
+  9 | 	chatMessageServer chat_msg.ChatMessageServer
+ 10 | }
+ 11 |
+ 12 | func NewServer(chatMessageServer chat_msg.ChatMessageServer) commands.MainInstance {
+ 13 | 	return &server{chatMessageServer: chatMessageServer}
+ 14 | }
+----
+ 20 | func (s *server) RunLoop() {
+ 21 | 	s.chatMessageServer.Run()
+ 22 | }
+----
+
+# apps/chat_msg/internal/server/chat_msg/srv_chat_message.go
+ 11 |
+ 12 | type ChatMessageServer interface {
+ 13 | 	Run()
+----
+ 15 |
+ 16 | type chatMessageServer struct {
+ 17 | 	pb_chat_msg.UnimplementedChatMessageServer
+ 18 | 	cfg                *config.Config
+ 19 | 	grpcServer         *xgrpc.GrpcServer
+ 20 | 	chatMessageService service.ChatMessageService
+ 21 | }
+ 22 |
+ 23 | func NewChatMessageServer(cfg *config.Config, chatMessageService service.ChatMessageService) ChatMessageServer {
+ 24 | 	return &chatMessageServer{cfg: cfg, chatMessageService: chatMessageService}
+ 25 | }
+ 26 |
+ 27 | func (s *chatMessageServer) Run() {
+ 28 | 	var (
+----
+ 38 |
+ 39 | 	pb_chat_msg.RegisterChatMessageServer(srv, s)
+ 40 | 	s.grpcServer = xgrpc.NewGrpcServer(s.cfg.GrpcServer, s.cfg.Etcd)
+----
+
+# apps/chat_msg/internal/server/chat_msg/srv_chat_message_service.go
+  7 |
+  8 | func (s *chatMessageServer) GetChatMessageList(ctx context.Context, req *pb_chat_msg.GetChatMessageListReq) (resp *pb_chat_msg.GetChatMessageListResp, err error) {
+  9 | 	return s.chatMessageService.GetChatMessageList(ctx, req)
+ 10 | }
+----
+ 12 | // 弃用
+ 13 | //func (s *chatMessageServer) GetChatMessages(ctx context.Context, req *pb_chat_msg.GetChatMessagesReq) (resp *pb_chat_msg.GetChatMessagesResp, err error) {
+ 14 | //	return s.chatMessageService.GetChatMessages(ctx, req)
+ 15 | //}
+ 16 |
+ 17 | func (s *chatMessageServer) SearchMessage(ctx context.Context, req *pb_chat_msg.SearchMessageReq) (resp *pb_chat_msg.SearchMessageResp, err error) {
+ 18 | 	return s.chatMessageService.SearchMessage(ctx, req)
+ 19 | }
+ 20 |
+ 21 | func (s *chatMessageServer) MessageOperation(ctx context.Context, req *pb_chat_msg.MessageOperationReq) (resp *pb_chat_msg.MessageOperationResp, err error) {
+ 22 | 	return s.chatMessageService.MessageOperation(ctx, req)
+ 23 | }
+----
+
+# apps/message/cmd/main_message.go
+  3 | import (
+  4 | 	"lark/apps/message/dig"
+  5 | 	"lark/apps/message/internal/config"
+  6 | 	"lark/pkg/commands"
+----
+
+# apps/dist/internal/service/svc_dist_chat_invite_notification.go
+ 43 | 		for serverId, _ = range distMembers {
+ 44 | 			msgReq := &pb_gw.SendTopicMessageReq{
+ 45 | 				Topic:          pb_enum.TOPIC_CHAT_INVITE,
+----
+ 51 | 			}
+ 52 | 			s.asyncSendMessage(wg, msgReq, serverId, constant.CONST_MSG_KEY_CHAT_INVITE+utils.GetChatPartition(chatId))
+ 53 | 		}
+----
+
+# apps/dist/internal/service/svc_dist_message_operation.go
+ 14 |
+ 15 | func (s *distService) messageOperation(topic pb_enum.TOPIC, subTopic pb_enum.SUB_TOPIC, buf []byte) (err error) {
+ 16 | 	var (
+ 17 | 		operation     = new(pb_msg.MessageOperation)
+ 18 | 		serverMembers map[int64][]*pb_obj.Int64Array
+----
+ 33 | 			serverMembers = s.getChatMembers(operation.ChatId, slot)
+ 34 | 			s.sendMessageOperation(topic, subTopic, operation, buf, serverMembers)
+ 35 | 		}(i)
+----
+ 40 |
+ 41 | func (s *distService) sendMessageOperation(topic pb_enum.TOPIC, subTopic pb_enum.SUB_TOPIC, operation *pb_msg.MessageOperation, body []byte, distMembers map[int64][]*pb_obj.Int64Array) {
+ 42 | 	if len(distMembers) == 0 {
+----
+ 49 | 	for serverId, _ = range distMembers {
+ 50 | 		msgReq := &pb_gw.SendTopicMessageReq{
+ 51 | 			Topic:          topic,
+----
+ 57 | 		}
+ 58 | 		s.asyncSendMessage(wg, msgReq, serverId, constant.CONST_MSG_KEY_PUSH_OPERATION+utils.GetChatPartition(operation.ChatId))
+ 59 | 	}
+----
+
+# apps/dist/internal/service/svc_dist_chat_message.go
+ 15 |
+ 16 | func (s *distService) sendChatMessage(topic pb_enum.TOPIC, subTopic pb_enum.SUB_TOPIC, buf []byte) (err error) {
+ 17 | 	var (
+ 18 | 		chatMsg = new(pb_msg.SrvChatMessage)
+ 19 | 	)
+----
+ 23 | 	}
+ 24 | 	s.messageDistribution(topic, subTopic, chatMsg, buf)
+ 25 | 	return
+----
+ 27 |
+ 28 | func (s *distService) messageDistribution(topic pb_enum.TOPIC, subTopic pb_enum.SUB_TOPIC, msg *pb_msg.SrvChatMessage, body []byte) {
+ 29 | 	wg := new(sync.WaitGroup)
+----
+ 38 | 			distMembers := s.getChatMembers(msg.ChatId, slot)
+ 39 | 			s.sendMessage(topic, subTopic, msg, body, distMembers)
+ 40 | 		}(i)
+----
+ 44 |
+ 45 | func (s *distService) sendMessage(topic pb_enum.TOPIC, subTopic pb_enum.SUB_TOPIC, msg *pb_msg.SrvChatMessage, body []byte, distMembers map[int64][]*pb_obj.Int64Array) {
+ 46 | 	if msg.SrvMsgId == 0 {
+----
+ 55 | 	for serverId, _ := range distMembers {
+ 56 | 		msgReq := &pb_gw.SendTopicMessageReq{
+ 57 | 			Topic:          topic,
+----
+ 63 | 		}
+ 64 | 		s.asyncSendMessage(wg, msgReq, serverId, constant.CONST_MSG_KEY_PUSH_ONLINE+utils.GetChatPartition(msg.ChatId))
+ 65 | 	}
+----
+ 69 |
+ 70 | func (s *distService) asyncSendMessage(wg *sync.WaitGroup, req *pb_gw.SendTopicMessageReq, serverId int64, key string) {
+ 71 | 	wg.Add(1)
+----
+ 74 | 		var (
+ 75 | 			resp *pb_gw.SendTopicMessageResp
+ 76 | 			err  error
+----
+ 81 | 		} else {
+ 82 | 			resp = client.SendTopicMessage(req)
+ 83 | 		}
+----
+
+# apps/dist/internal/service/svc_dist_msg_consumer.go
+ 23 | 		select {
+ 24 | 		case msg, ok := <-claim.Messages():
+ 25 | 			if ok == false {
+ 26 | 				xlog.Info("message channel was closed")
+ 27 | 				return nil
+----
+ 29 | 			s.msgHandle[msg.Topic](msg.Value, string(msg.Key))
+ 30 | 			session.MarkMessage(msg, "")
+ 31 | 		case <-session.Context().Done():
+----
+ 37 |
+ 38 | func (s *distService) MessageHandler(msg []byte, msgKey string) (err error) {
+ 39 | 	index := new(pb_mq.InboxMessage)
+ 40 | 	if err = proto.Unmarshal(msg, index); err != nil {
+----
+ 45 | 	case pb_enum.TOPIC_CHAT, pb_enum.TOPIC_RED_ENVELOPE:
+ 46 | 		err = s.sendChatMessage(index.Topic, index.SubTopic, index.Body)
+ 47 | 	case pb_enum.TOPIC_MSG_OPR:
+ 48 | 		err = s.messageOperation(index.Topic, index.SubTopic, index.Body)
+ 49 | 	default:
+----
+ 86 |
+ 87 | func (s *distService) getClient(serverId int64) (client gw_client.MessageGatewayClient) {
+ 88 | 	s.mutex.RLock()
+----
+
+# apps/dist/internal/service/svc_dist_watcher.go
+ 61 | 		_, serverId, _ = utils.GetMsgGatewayServer(member)
+ 62 | 		cli            gw_client.MessageGatewayClient
+ 63 | 		producer       *xkafka.Producer
+----
+ 95 |
+ 96 | func (s *distService) NewPushOnlineClient(serverName string) (cli gw_client.MessageGatewayClient) {
+ 97 | 	msgGatewayServer := &conf.GrpcServer{}
+----
+
+# apps/server_mgr/internal/service/svc_server_mgr.go
+ 26 | func (s *serverMgrService) Run() {
+ 27 | 	s.watchMessageGateway()
+ 28 | }
+ 29 |
+ 30 | func (s *serverMgrService) watchMessageGateway() {
+ 31 | 	var (
+----
+
+# apps/dist/internal/service/svc_dist.go
+ 23 | 	mutex            sync.RWMutex
+ 24 | 	msgHandle        map[string]obj.KafkaMessageHandler
+ 25 | 	consumerGroup    *xkafka.MConsumerGroup
+ 26 | 	producers        map[int64]*xkafka.Producer
+ 27 | 	clients          map[int64]gw_client.MessageGatewayClient
+ 28 | 	chatMemberClient chat_member_client.ChatMemberClient
+----
+ 37 | 		cfg:              cfg,
+ 38 | 		msgHandle:        make(map[string]obj.KafkaMessageHandler),
+ 39 | 		clients:          make(map[int64]gw_client.MessageGatewayClient),
+ 40 | 		producers:        map[int64]*xkafka.Producer{},
+----
+ 45 |
+ 46 | 	svc.msgHandle[cfg.MsgConsumer.Topic[0]] = svc.MessageHandler
+ 47 |
+----
+
+# apps/chat/dig/dig.go
+ 26 | 	Provide(cache.NewChatCache)
+ 27 | 	Provide(cache.NewChatMessageCache)
+ 28 | 	Provide(cache.NewChatMemberCache)
+----
+
+# apps/msg_gateway/client/client.go
+ 11 |
+ 12 | type MessageGatewayClient interface {
+ 13 | 	HealthCheck(req *pb_gw.HealthCheckReq) (resp *pb_gw.HealthCheckResp)
+ 14 | 	SendTopicMessage(req *pb_gw.SendTopicMessageReq) (resp *pb_gw.SendTopicMessageResp)
+ 15 | }
+ 16 |
+ 17 | type messageGatewayClient struct {
+ 18 | 	opt *xgrpc.ClientDialOption
+----
+ 20 |
+ 21 | func NewMsgGwClient(etcd *conf.Etcd, server *conf.GrpcServer, jaeger *conf.Jaeger, clientName string) MessageGatewayClient {
+ 22 | 	return &messageGatewayClient{xgrpc.NewClientDialOption(etcd, server, jaeger, clientName)}
+ 23 | }
+ 24 |
+ 25 | func (c *messageGatewayClient) GetClientConn() (conn *grpc.ClientConn) {
+ 26 | 	conn = xgrpc.GetClientConn(c.opt.DialOption)
+----
+ 29 |
+ 30 | func (c *messageGatewayClient) HealthCheck(req *pb_gw.HealthCheckReq) (resp *pb_gw.HealthCheckResp) {
+ 31 | 	conn := c.GetClientConn()
+----
+ 34 | 	}
+ 35 | 	client := pb_gw.NewMessageGatewayClient(conn)
+ 36 | 	var err error
+----
+ 43 |
+ 44 | func (c *messageGatewayClient) SendTopicMessage(req *pb_gw.SendTopicMessageReq) (resp *pb_gw.SendTopicMessageResp) {
+ 45 | 	conn := c.GetClientConn()
+----
+ 48 | 	}
+ 49 | 	client := pb_gw.NewMessageGatewayClient(conn)
+ 50 | 	var err error
+ 51 | 	resp, err = client.SendTopicMessage(context.Background(), req)
+ 52 | 	if err != nil {
+----
+<environment_details>
+# VSCode Visible Files
+
+
+# VSCode Open Tabs
+
+
+# Current Time
+Current time in ISO 8601 UTC format: 2025-11-28T10:19:24.161Z
+User time zone: Asia/Shanghai, UTC+8:00
+
+# Current Cost
+$0.01
+
+# Current Mode
+<slug>code</slug>
+<name>💻 Code</name>
+<model>deepseek-reasoner</model>
+You have not created a todo list yet. Create one with \`update_todo_list\` if your task is complicated or involves multiple steps.
+</environment_details>`,
+  },
+  {
+    role: "assistant",
+    content: `Based on the search results, I can see there's a comprehensive message system in this codebase. Let me examine the key components to understand how message forwarding is implemented.
+
+<read_file>
+<args>
+  <file>
+    <path>apps/message/internal/service/svc_message_send.go</path>
+  </file>
+  <file>
+    <path>apps/dist/internal/service/svc_dist_chat_message.go</path>
+  </file>
+  <file>
+    <path>apps/msg_gateway/client/client.go</path>
+  </file>
+  <file>
+    <path>apps/msg_history/internal/service/svc_msg_history_msg_consumer.go</path>
+  </file>
+</args>
+</read_file>`,
+  },
+  {
+    role: "user",
+    content: `[read_file for 4 files] Result:
+<files>
+<file><path>apps/message/internal/service/svc_message_send.go</path>
+<content lines="1-157">
+  1 | package service
+  2 |
+  3 | import (
+  4 | 	"context"
+  5 |
+  6 | 	"github.com/jinzhu/copier"
+  7 | 	"google.golang.org/protobuf/proto"
+  8 | 	"lark/pkg/common/xlog"
+  9 | 	"lark/pkg/common/xsnowflake"
+ 10 | 	"lark/pkg/constant"
+ 11 | 	"lark/pkg/proto/pb_chat_member"
+ 12 | 	"lark/pkg/proto/pb_enum"
+ 13 | 	"lark/pkg/proto/pb_mq"
+ 14 | 	"lark/pkg/proto/pb_msg"
+ 15 | 	"lark/pkg/utils"
+ 16 | )
+ 17 |
+ 18 | func (s *messageService) SendChatMessage(ctx context.Context, req *pb_msg.SendChatMessageReq) (resp *pb_msg.SendChatMessageResp, _ error) {
+ 19 | 	resp = new(pb_msg.SendChatMessageResp)
+ 20 | 	var (
+ 21 | 		inbox = &pb_mq.InboxMessage{
+ 22 | 			Topic:    req.Topic,
+ 23 | 			SubTopic: req.SubTopic,
+ 24 | 		}
+ 25 | 		chatMsg    = new(pb_msg.SrvChatMessage)
+ 26 | 		senderInfo *pb_chat_member.ChatMemberInfo
+ 27 | 		seqId      int64
+ 28 | 		result     string
+ 29 | 		ok         bool
+ 30 | 		err        error
+ 31 | 	)
+ 32 | 	// 1、参数校验
+ 33 | 	if err = s.validate.Struct(req.Msg); err != nil {
+ 34 | 		resp.Set(ERROR_CODE_MESSAGE_VALIDATOR_FAILED, ERROR_MESSAGE_VALIDATOR_FAILED)
+ 35 | 		xlog.Warn(resp.Code, resp.Msg, err.Error())
+ 36 | 		return
+ 37 | 	}
+ 38 | 	if chatMsg.AssocId, err = s.verifyMessage(req); err != nil {
+ 39 | 		resp.Set(ERROR_CODE_MESSAGE_VALIDATOR_FAILED, ERROR_MESSAGE_VALIDATOR_FAILED)
+ 40 | 		xlog.Warn(resp.Code, resp.Msg, err.Error())
+ 41 | 		return
+ 42 | 	}
+ 43 | 	// 2、重复消息校验
+ 44 | 	result, ok = s.chatMessageCache.RepeatMessageVerify(s.cfg.Redis.Prefix, req.Msg.ChatId, req.Msg.CliMsgId)
+ 45 | 	if ok == false {
+ 46 | 		resp.Set(ERROR_CODE_MESSAGE_VALIDATOR_FAILED, result)
+ 47 | 		xlog.Warn(resp.Code, resp.Msg)
+ 48 | 		return
+ 49 | 	}
+ 50 |
+ 51 | 	// 3、获取发送者信息
+ 52 | 	senderInfo, err = s.getSenderInfo(req.Msg.ChatId, req.Msg.SenderId, resp)
+ 53 | 	if err != nil {
+ 54 | 		resp.Set(ERROR_CODE_MESSAGE_GET_SENDER_INFO_FAILED, err.Error())
+ 55 | 		xlog.Warn(resp.Code, resp.Msg, err.Error())
+ 56 | 		return
+ 57 | 	}
+ 58 | 	if senderInfo.Uid == 0 {
+ 59 | 		if resp.Code > 0 {
+ 60 | 			xlog.Warn(resp.Code, resp.Msg)
+ 61 | 		} else {
+ 62 | 			xlog.Warn(ERROR_CODE_MESSAGE_GET_SENDER_INFO_FAILED, ERROR_MESSAGE_GET_SENDER_INFO_FAILED)
+ 63 | 		}
+ 64 | 		return
+ 65 | 	}
+ 66 |
+ 67 | 	// 4、补充消息内容
+ 68 | 	if seqId, err = s.chatMessageCache.IncrSeqID(req.Msg.ChatId); err != nil {
+ 69 | 		resp.Set(ERROR_CODE_MESSAGE_INCR_SEQ_ID_FAILED, ERROR_MESSAGE_INCR_SEQ_ID_FAILED)
+ 70 | 		xlog.Warn(resp.Code, resp.Msg, err.Error())
+ 71 | 		return
+ 72 | 	}
+ 73 | 	copier.Copy(chatMsg, req.Msg)
+ 74 | 	chatMsg.SrvMsgId = xsnowflake.NewSnowflakeID()
+ 75 | 	chatMsg.ChatType = senderInfo.ChatType
+ 76 | 	chatMsg.SeqId = seqId
+ 77 | 	chatMsg.SrvTs = utils.NowUnix()
+ 78 | 	chatMsg.MsgFrom = pb_enum.MSG_FROM_USER
+ 79 | 	chatMsg.SenderName = senderInfo.Alias
+ 80 | 	chatMsg.SenderAvatar = senderInfo.MemberAvatar
+ 81 | 	inbox.Body, _ = proto.Marshal(chatMsg)
+ 82 | 	// 5、将消息推送到kafka消息队列
+ 83 | 	if s.producer == nil {
+ 84 | 		resp.Set(ERROR_CODE_MESSAGE_PRODUCER_IS_NULL, ERROR_MESSAGE_PRODUCER_IS_NULL)
+ 85 | 		xlog.Warn(resp.Code, resp.Msg)
+ 86 | 		return
+ 87 | 	}
+ 88 | 	_, _, err = s.producer.EnQueue(inbox, constant.CONST_MSG_KEY_MSG+utils.GetChatPartition(chatMsg.ChatId))
+ 89 | 	if err != nil {
+ 90 | 		resp.Set(ERROR_CODE_MESSAGE_ENQUEUE_FAILED, ERROR_MESSAGE_ENQUEUE_FAILED)
+ 91 | 		xlog.Warn(resp.Code, resp.Msg, err.Error())
+ 92 | 		return
+ 93 | 	}
+ 94 | 	chatSeq := &pb_msg.ChatSeq{
+ 95 | 		ChatId:   chatMsg.ChatId,
+ 96 | 		SeqId:    seqId,
+ 97 | 		SrvTs:    chatMsg.SrvTs,
+ 98 | 		SenderId: chatMsg.SenderId,
+ 99 | 		MsgFrom:  chatMsg.MsgFrom,
+100 | 	}
+101 | 	_, _, err = s.seqProducer.EnQueue(chatSeq, constant.CONST_MSG_KEY_CHAT_SEQ+utils.GetChatPartition(chatMsg.ChatId))
+102 | 	if err != nil {
+103 | 		xlog.Warn(ERROR_CODE_MESSAGE_ENQUEUE_FAILED, ERROR_MESSAGE_ENQUEUE_FAILED, err.Error())
+104 | 	}
+105 | 	return
+106 | }
+107 |
+108 | func (s *messageService) getSenderInfo(chatId int64, uid int64, resp *pb_msg.SendChatMessageResp) (info *pb_chat_member.ChatMemberInfo, err error) {
+109 | 	var (
+110 | 		req   *pb_chat_member.GetChatMemberInfoReq
+111 | 		reply *pb_chat_member.GetChatMemberInfoResp
+112 | 	)
+113 | 	info, err = s.chatMemberCache.GetChatMemberInfo(chatId, uid)
+114 | 	if err != nil {
+115 | 		xlog.Warn(ERROR_CODE_MESSAGE_REDIS_GET_FAILED, ERROR_MESSAGE_REDIS_GET_FAILED, err.Error())
+116 | 	}
+117 | 	if info.Uid > 0 {
+118 | 		err = s.authentication(info)
+119 | 		if err != nil {
+120 | 			return
+121 | 		}
+122 | 		return
+123 | 	}
+124 | 	req = &pb_chat_member.GetChatMemberInfoReq{
+125 | 		ChatId: chatId,
+126 | 		Uid:    uid,
+127 | 	}
+128 | 	reply = s.chatMemberClient.GetChatMemberInfo(req)
+129 | 	if reply == nil {
+130 | 		resp.Set(ERROR_CODE_MESSAGE_GRPC_SERVICE_FAILURE, ERROR_MESSAGE_GRPC_SERVICE_FAILURE)
+131 | 		xlog.Warn(resp.Code, resp.Msg)
+132 | 		return
+133 | 	}
+134 | 	if reply.Code > 0 {
+135 | 		resp.Set(reply.Code, reply.Msg)
+136 | 		xlog.Warn(resp.Code, resp.Msg)
+137 | 		return
+138 | 	}
+139 | 	err = s.authentication(reply.Info)
+140 | 	if err != nil {
+141 | 		return
+142 | 	}
+143 | 	info = reply.Info
+144 | 	return
+145 | }
+146 |
+147 | func (s *messageService) authentication(info *pb_chat_member.ChatMemberInfo) (err error) {
+148 | 	switch pb_enum.CHAT_STATUS(info.Status) {
+149 | 	case pb_enum.CHAT_STATUS_QUITTED, pb_enum.CHAT_STATUS_DELETED, pb_enum.CHAT_STATUS_REMOVED:
+150 | 		// 非联 Chat 成员
+151 | 		err = ERROR_MESSAGE_NON_CHAT_MEMBER_ERR
+152 | 	case pb_enum.CHAT_STATUS_NON_CONTACT:
+153 | 		// 非联系人
+154 | 		err = ERROR_MESSAGE_NON_CONTACT_ERR
+155 | 	}
+156 | 	return
+157 | }
+</content>
+</file>
+<file><path>apps/dist/internal/service/svc_dist_chat_message.go</path>
+<content lines="1-97">
+ 1 | package service
+ 2 |
+ 3 | import (
+ 4 | 	"google.golang.org/protobuf/proto"
+ 5 | 	"lark/pkg/common/xants"
+ 6 | 	"lark/pkg/common/xlog"
+ 7 | 	"lark/pkg/constant"
+ 8 | 	"lark/pkg/proto/pb_enum"
+ 9 | 	"lark/pkg/proto/pb_gw"
+10 | 	"lark/pkg/proto/pb_msg"
+11 | 	"lark/pkg/proto/pb_obj"
+12 | 	"lark/pkg/utils"
+13 | 	"sync"
+14 | )
+15 |
+16 | func (s *distService) sendChatMessage(topic pb_enum.TOPIC, subTopic pb_enum.SUB_TOPIC, buf []byte) (err error) {
+17 | 	var (
+18 | 		chatMsg = new(pb_msg.SrvChatMessage)
+19 | 	)
+20 | 	if err = proto.Unmarshal(buf, chatMsg); err != nil {
+21 | 		xlog.Warn(ERROR_CODE_DIST_PROTOCOL_UNMARSHAL_FAILED, ERROR_DIST_PROTOCOL_UNMARSHAL_FAILED, err.Error())
+22 | 		return
+23 | 	}
+24 | 	s.messageDistribution(topic, subTopic, chatMsg, buf)
+25 | 	return
+26 | }
+27 |
+28 | func (s *distService) messageDistribution(topic pb_enum.TOPIC, subTopic pb_enum.SUB_TOPIC, msg *pb_msg.SrvChatMessage, body []byte) {
+29 | 	wg := new(sync.WaitGroup)
+30 | 	slots := int(constant.MAX_CHAT_SLOT)
+31 | 	if msg.ChatType == pb_enum.CHAT_TYPE_PRIVATE {
+32 | 		slots = 1
+33 | 	}
+34 | 	for i := 0; i < slots; i++ {
+35 | 		wg.Add(1)
+36 | 		go func(slot int) {
+37 | 			defer wg.Done()
+38 | 			distMembers := s.getChatMembers(msg.ChatId, slot)
+39 | 			s.sendMessage(topic, subTopic, msg, body, distMembers)
+40 | 		}(i)
+41 | 	}
+42 | 	wg.Wait()
+43 | }
+44 |
+45 | func (s *distService) sendMessage(topic pb_enum.TOPIC, subTopic pb_enum.SUB_TOPIC, msg *pb_msg.SrvChatMessage, body []byte, distMembers map[int64][]*pb_obj.Int64Array) {
+46 | 	if msg.SrvMsgId == 0 {
+47 | 		return
+48 | 	}
+49 | 	if len(distMembers) == 0 {
+50 | 		return
+51 | 	}
+52 | 	var (
+53 | 		wg = new(sync.WaitGroup)
+54 | 	)
+55 | 	for serverId, _ := range distMembers {
+56 | 		msgReq := &pb_gw.SendTopicMessageReq{
+57 | 			Topic:          topic,
+58 | 			SubTopic:       subTopic,
+59 | 			Members:        distMembers[serverId],
+60 | 			SenderId:       msg.SenderId,
+61 | 			SenderPlatform: msg.SenderPlatform,
+62 | 			Body:           body,
+63 | 		}
+64 | 		s.asyncSendMessage(wg, msgReq, serverId, constant.CONST_MSG_KEY_PUSH_ONLINE+utils.GetChatPartition(msg.ChatId))
+65 | 	}
+66 | 	wg.Wait()
+67 | 	return
+68 | }
+69 |
+70 | func (s *distService) asyncSendMessage(wg *sync.WaitGroup, req *pb_gw.SendTopicMessageReq, serverId int64, key string) {
+71 | 	wg.Add(1)
+72 | 	xants.Submit(func() {
+73 | 		defer wg.Done()
+74 | 		var (
+75 | 			resp *pb_gw.SendTopicMessageResp
+76 | 			err  error
+77 | 		)
+78 | 		client := s.getClient(serverId)
+79 | 		if client == nil {
+80 | 			xlog.Warn(ERROR_CODE_DIST_GET_GRPC_CLIENT_FAILED, ERROR_DIST_GET_GRPC_CLIENT_FAILED)
+81 | 		} else {
+82 | 			resp = client.SendTopicMessage(req)
+83 | 		}
+84 | 		if resp == nil {
+85 | 			xlog.Warn(ERROR_CODE_DIST_GRPC_SERVICE_FAILURE, ERROR_DIST_GRPC_SERVICE_FAILURE)
+86 | 			producer := s.getProducer(serverId)
+87 | 			if producer == nil {
+88 | 				xlog.Warn(ERROR_CODE_DIST_GET_KAFKA_PRODUCER_FAILED, ERROR_DIST_GET_KAFKA_PRODUCER_FAILED)
+89 | 				return
+90 | 			}
+91 | 			_, _, err = producer.EnQueue(req, key)
+92 | 			if err != nil {
+93 | 				xlog.Warn(err.Error())
+94 | 			}
+95 | 		}
+96 | 	})
+97 | }
+</content>
+</file>
+<file><path>apps/msg_gateway/client/client.go</path>
+<content lines="1-56">
+ 1 | package gw_client
+ 2 |
+ 3 | import (
+ 4 | 	"context"
+ 5 | 	"google.golang.org/grpc"
+ 6 | 	"lark/pkg/common/xgrpc"
+ 7 | 	"lark/pkg/common/xlog"
+ 8 | 	"lark/pkg/conf"
+ 9 | 	"lark/pkg/proto/pb_gw"
+10 | )
+11 |
+12 | type MessageGatewayClient interface {
+13 | 	HealthCheck(req *pb_gw.HealthCheckReq) (resp *pb_gw.HealthCheckResp)
+14 | 	SendTopicMessage(req *pb_gw.SendTopicMessageReq) (resp *pb_gw.SendTopicMessageResp)
+15 | }
+16 |
+17 | type messageGatewayClient struct {
+18 | 	opt *xgrpc.ClientDialOption
+19 | }
+20 |
+21 | func NewMsgGwClient(etcd *conf.Etcd, server *conf.GrpcServer, jaeger *conf.Jaeger, clientName string) MessageGatewayClient {
+22 | 	return &messageGatewayClient{xgrpc.NewClientDialOption(etcd, server, jaeger, clientName)}
+23 | }
+24 |
+25 | func (c *messageGatewayClient) GetClientConn() (conn *grpc.ClientConn) {
+26 | 	conn = xgrpc.GetClientConn(c.opt.DialOption)
+27 | 	return
+28 | }
+29 |
+30 | func (c *messageGatewayClient) HealthCheck(req *pb_gw.HealthCheckReq) (resp *pb_gw.HealthCheckResp) {
+31 | 	conn := c.GetClientConn()
+32 | 	if conn == nil {
+33 | 		return
+34 | 	}
+35 | 	client := pb_gw.NewMessageGatewayClient(conn)
+36 | 	var err error
+37 | 	resp, err = client.HealthCheck(context.Background(), req)
+38 | 	if err != nil {
+39 | 		xlog.Warn(err.Error())
+40 | 	}
+41 | 	return
+42 | }
+43 |
+44 | func (c *messageGatewayClient) SendTopicMessage(req *pb_gw.SendTopicMessageReq) (resp *pb_gw.SendTopicMessageResp) {
+45 | 	conn := c.GetClientConn()
+46 | 	if conn == nil {
+47 | 		return
+48 | 	}
+49 | 	client := pb_gw.NewMessageGatewayClient(conn)
+50 | 	var err error
+51 | 	resp, err = client.SendTopicMessage(context.Background(), req)
+52 | 	if err != nil {
+53 | 		xlog.Warn(err.Error())
+54 | 	}
+55 | 	return
+56 | }
+</content>
+</file>
+<file><path>apps/msg_history/internal/service/svc_msg_history_msg_consumer.go</path>
+<content lines="1-125">
+  1 | package service
+  2 |
+  3 | import (
+  4 | 	"github.com/go-sql-driver/mysql"
+  5 | 	"github.com/jinzhu/copier"
+  6 | 	"google.golang.org/protobuf/proto"
+  7 | 	"lark/domain/po"
+  8 | 	"lark/pkg/common/xlog"
+  9 | 	"lark/pkg/constant"
+ 10 | 	"lark/pkg/entity"
+ 11 | 	"lark/pkg/proto/pb_enum"
+ 12 | 	"lark/pkg/proto/pb_mq"
+ 13 | 	"lark/pkg/proto/pb_msg"
+ 14 | 	"lark/pkg/utils"
+ 15 | )
+ 16 |
+ 17 | func (s *messageHistoryService) MessageHandler(msg []byte, msgKey string) (err error) {
+ 18 | 	inbox := new(pb_mq.InboxMessage)
+ 19 | 	if err = proto.Unmarshal(msg, inbox); err != nil {
+ 20 | 		xlog.Warn(ERROR_CODE_MSG_HISTORY_PROTOCOL_UNMARSHAL_ERR, ERROR_MSG_HISTORY_PROTOCOL_UNMARSHAL_ERR, err.Error())
+ 21 | 		return
+ 22 | 	}
+ 23 | 	switch inbox.Topic {
+ 24 | 	case pb_enum.TOPIC_CHAT, pb_enum.TOPIC_RED_ENVELOPE:
+ 25 | 		err = s.SaveMessage(inbox.Body)
+ 26 | 	case pb_enum.TOPIC_MSG_OPR:
+ 27 | 		err = s.MessageOperation(inbox.Body)
+ 28 | 	default:
+ 29 | 		return
+ 30 | 	}
+ 31 | 	return
+ 32 | }
+ 33 |
+ 34 | func (s *messageHistoryService) SaveMessage(msg []byte) (err error) {
+ 35 | 	var (
+ 36 | 		chatMsg = new(pb_msg.SrvChatMessage)
+ 37 | 		message = new(po.Message)
+ 38 | 	)
+ 39 | 	if err = proto.Unmarshal(msg, chatMsg); err != nil {
+ 40 | 		xlog.Warn(ERROR_CODE_MSG_HISTORY_PROTOCOL_UNMARSHAL_ERR, ERROR_MSG_HISTORY_PROTOCOL_UNMARSHAL_ERR, err.Error())
+ 41 | 		return
+ 42 | 	}
+ 43 | 	if chatMsg.SrvMsgId == 0 {
+ 44 | 		return
+ 45 | 	}
+ 46 | 	copier.Copy(message, chatMsg)
+ 47 | 	message.Body = utils.MsgBodyToStr(chatMsg.MsgType, chatMsg.Body)
+ 48 |
+ 49 | 	// 1、消息入库
+ 50 | 	if err = s.chatMessageRepo.Create(message); err != nil {
+ 51 | 		xlog.Warn(ERROR_CODE_MSG_HISTORY_INSERT_MESSAGE_FAILED, ERROR_MSG_HISTORY_INSERT_MESSAGE_FAILED, err.Error())
+ 52 | 		switch err.(type) {
+ 53 | 		case *mysql.MySQLError:
+ 54 | 			if err.(*mysql.MySQLError).Number == constant.ERROR_CODE_MYSQL_DUPLICATE_ENTRY {
+ 55 | 				err = nil
+ 56 | 				return
+ 57 | 			}
+ 58 | 		}
+ 59 | 		return
+ 60 | 	}
+ 61 |
+ 62 | 	// 2、消息缓存
+ 63 | 	s.chatMessageCache.SetConvoMessage(message)
+ 64 | 	return
+ 65 | }
+ 66 |
+ 67 | func (s *messageHistoryService) MessageOperation(msg []byte) (err error) {
+ 68 | 	var (
+ 69 | 		operation = new(pb_msg.MessageOperation)
+ 70 | 		u         = entity.NewMysqlUpdate()
+ 71 | 		message   *po.Message
+ 72 | 		nowTs     = utils.NowUnix()
+ 73 | 	)
+ 74 | 	if err = proto.Unmarshal(msg, operation); err != nil {
+ 75 | 		xlog.Warn(ERROR_CODE_MSG_HISTORY_PROTOCOL_UNMARSHAL_ERR, ERROR_MSG_HISTORY_PROTOCOL_UNMARSHAL_ERR, err.Error())
+ 76 | 		return
+ 77 | 	}
+ 78 | 	message, err = s.GetMessage(operation.ChatId, operation.SeqId)
+ 79 | 	if err != nil {
+ 80 | 		return
+ 81 | 	}
+ 82 | 	if message.SrvMsgId == 0 {
+ 83 | 		return
+ 84 | 	}
+ 85 | 	message.Status = int(operation.Opn)
+ 86 | 	message.UpdatedTs = nowTs
+ 87 | 	// 1、更新 message
+ 88 | 	u.SetFilter("chat_id=?", operation.ChatId)
+ 89 | 	u.SetFilter("seq_id=?", operation.SeqId)
+ 90 | 	u.Set("status", operation.Opn)
+ 91 | 	err = s.chatMessageRepo.UpdateMessage(u)
+ 92 | 	if err != nil {
+ 93 | 		xlog.Warn(ERROR_CODE_MSG_HISTORY_UPDATE_VALUE_FAILED, ERROR_MSG_HISTORY_UPDATE_VALUE_FAILED, err.Error())
+ 94 | 		return
+ 95 | 	}
+ 96 | 	// 2、更新缓存
+ 97 | 	err = s.chatMessageCache.SetChatMessage(message)
+ 98 | 	if err != nil {
+ 99 | 		return
+100 | 	}
+101 | 	return
+102 | }
+103 |
+104 | func (s *messageHistoryService) GetMessage(chatId int64, seqId int64) (message *po.Message, err error) {
+105 | 	message = new(po.Message)
+106 | 	var (
+107 | 		w = entity.NewNormalQuery()
+108 | 	)
+109 | 	message, err = s.chatMessageCache.GetChatMessage(chatId, seqId)
+110 | 	if message.SrvMsgId > 0 {
+111 | 		return
+112 | 	}
+113 |
+114 | 	if err != nil {
+115 | 		xlog.Warn(ERROR_CODE_MSG_HISTORY_REDIS_GET_FAILED, ERROR_MSG_HISTORY_REDIS_GET_FAILED, err.Error())
+116 | 	}
+117 | 	w.SetFilter("chat_id=?", chatId)
+118 | 	w.SetFilter("seq_id=?", seqId)
+119 | 	message, err = s.chatMessageRepo.Message(w)
+120 | 	if err != nil {
+121 | 		xlog.Warn(ERROR_CODE_MSG_HISTORY_QUERY_DB_FAILED, ERROR_MSG_HISTORY_QUERY_DB_FAILED, err.Error())
+122 | 		return
+123 | 	}
+124 | 	return
+125 | }
+</content>
+</file>
+</files>
+<environment_details>
+# VSCode Visible Files
+
+
+# VSCode Open Tabs
+
+
+# Current Time
+Current time in ISO 8601 UTC format: 2025-11-28T10:20:58.836Z
+User time zone: Asia/Shanghai, UTC+8:00
+
+# Current Cost
+$0.02
+
+# Current Mode
+<slug>code</slug>
+<name>💻 Code</name>
+<model>deepseek-reasoner</model>
+You have not created a todo list yet. Create one with \`update_todo_list\` if your task is complicated or involves multiple steps.
+</environment_details>`,
+  },
+  {
+    role: "assistant",
+    content: `Now let me examine the message gateway server implementation and the distribution service to complete the understanding of the message forwarding architecture.
+
+<read_file>
+<args>
+  <file>
+    <path>apps/dist/internal/service/svc_dist_msg_consumer.go</path>
+  </file>
+  <file>
+    <path>apps/dist/internal/service/svc_dist.go</path>
+  </file>
+</args>
+</read_file>`,
+  },
+  {
+    role: "user",
+    content: `[read_file for 'apps/dist/internal/service/svc_dist_msg_consumer.go', 'apps/dist/internal/service/svc_dist.go'] Result:
+<files>
+<file><path>apps/dist/internal/service/svc_dist_msg_consumer.go</path>
+<content lines="1-99">
+ 1 | package service
+ 2 |
+ 3 | import (
+ 4 | 	"github.com/IBM/sarama"
+ 5 | 	"google.golang.org/protobuf/proto"
+ 6 | 	"lark/apps/dist/internal/logic"
+ 7 | 	gw_client "lark/apps/msg_gateway/client"
+ 8 | 	"lark/pkg/common/xkafka"
+ 9 | 	"lark/pkg/common/xlog"
+10 | 	"lark/pkg/proto/pb_chat_member"
+11 | 	"lark/pkg/proto/pb_enum"
+12 | 	"lark/pkg/proto/pb_mq"
+13 | 	"lark/pkg/proto/pb_obj"
+14 | )
+15 |
+16 | func (s *distService) Setup(_ sarama.ConsumerGroupSession) error {
+17 | 	close(s.consumerGroup.Ready)
+18 | 	return nil
+19 | }
+20 | func (s *distService) Cleanup(_ sarama.ConsumerGroupSession) error { return nil }
+21 | func (s *distService) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+22 | 	for {
+23 | 		select {
+24 | 		case msg, ok := <-claim.Messages():
+25 | 			if ok == false {
+26 | 				xlog.Info("message channel was closed")
+27 | 				return nil
+28 | 			}
+29 | 			s.msgHandle[msg.Topic](msg.Value, string(msg.Key))
+30 | 			session.MarkMessage(msg, "")
+31 | 		case <-session.Context().Done():
+32 | 			return nil
+33 | 		}
+34 | 	}
+35 | 	return nil
+36 | }
+37 |
+38 | func (s *distService) MessageHandler(msg []byte, msgKey string) (err error) {
+39 | 	index := new(pb_mq.InboxMessage)
+40 | 	if err = proto.Unmarshal(msg, index); err != nil {
+41 | 		xlog.Warn(ERROR_CODE_DIST_PROTOCOL_UNMARSHAL_FAILED, ERROR_DIST_PROTOCOL_UNMARSHAL_FAILED, err.Error())
+42 | 		return
+43 | 	}
+44 | 	switch index.Topic {
+45 | 	case pb_enum.TOPIC_CHAT, pb_enum.TOPIC_RED_ENVELOPE:
+46 | 		err = s.sendChatMessage(index.Topic, index.SubTopic, index.Body)
+47 | 	case pb_enum.TOPIC_MSG_OPR:
+48 | 		err = s.messageOperation(index.Topic, index.SubTopic, index.Body)
+49 | 	default:
+50 | 		return
+51 | 	}
+52 | 	return
+53 | }
+54 |
+55 | func (s *distService) getChatMembers(chatId int64, slot int) (serverMembers map[int64][]*pb_obj.Int64Array) {
+56 | 	var (
+57 | 		hashmap map[string]string
+58 | 	)
+59 | 	// 1万人占用 753KB Redis Memory
+60 | 	hashmap = s.chatMemberCache.GetDistChatMembers(chatId, slot)
+61 | 	if len(hashmap) > 0 {
+62 | 		serverMembers = logic.GetMembersFromHash(hashmap)
+63 | 	} else {
+64 | 		hashmap = s.getMemberList(chatId, slot)
+65 | 		serverMembers = logic.GetMembersFromHash(hashmap)
+66 | 	}
+67 | 	return
+68 | }
+69 |
+70 | func (s *distService) getMemberList(chatId int64, slot int) (members map[string]string) {
+71 | 	var (
+72 | 		userListReq = &pb_chat_member.GetDistMemberListReq{ChatId: chatId, Slot: int32(slot)}
+73 | 		resp        *pb_chat_member.GetDistMemberListResp
+74 | 	)
+75 | 	resp = s.chatMemberClient.GetDistMemberList(userListReq)
+76 | 	if resp == nil {
+77 | 		xlog.Warn(ERROR_CODE_DIST_GRPC_SERVICE_FAILURE, ERROR_DIST_GRPC_SERVICE_FAILURE)
+78 | 		return
+79 | 	}
+80 | 	if resp.Code > 0 {
+81 | 		xlog.Warn(resp.Code, resp.Msg)
+82 | 		return
+83 | 	}
+84 | 	return resp.Members
+85 | }
+86 |
+87 | func (s *distService) getClient(serverId int64) (client gw_client.MessageGatewayClient) {
+88 | 	s.mutex.RLock()
+89 | 	client, _ = s.clients[serverId]
+90 | 	s.mutex.RUnlock()
+91 | 	return
+92 | }
+93 |
+94 | func (s *distService) getProducer(serverId int64) (producer *xkafka.Producer) {
+95 | 	s.mutex.RLock()
+96 | 	producer, _ = s.producers[serverId]
+97 | 	s.mutex.RUnlock()
+98 | 	return
+99 | }
+</content>
+</file>
+<file><path>apps/dist/internal/service/svc_dist.go</path>
+<content lines="1-57">
+ 1 | package service
+ 2 |
+ 3 | import (
+ 4 | 	"context"
+ 5 | 	"github.com/IBM/sarama"
+ 6 | 	"lark/apps/chat_member/client"
+ 7 | 	"lark/apps/dist/internal/config"
+ 8 | 	gw_client "lark/apps/msg_gateway/client"
+ 9 | 	"lark/domain/cache"
+10 | 	"lark/pkg/common/xetcd"
+11 | 	"lark/pkg/common/xkafka"
+12 | 	"lark/pkg/obj"
+13 | 	"lark/pkg/proto/pb_dist"
+14 | 	"sync"
+15 | )
+16 |
+17 | type DistService interface {
+18 | 	ChatInviteNotification(ctx context.Context, req *pb_dist.ChatInviteNotificationReq) (resp *pb_dist.ChatInviteNotificationResp, err error)
+19 | }
+20 |
+21 | type distService struct {
+22 | 	cfg              *config.Config
+23 | 	mutex            sync.RWMutex
+24 | 	msgHandle        map[string]obj.KafkaMessageHandler
+25 | 	consumerGroup    *xkafka.MConsumerGroup
+26 | 	producers        map[int64]*xkafka.Producer
+27 | 	clients          map[int64]gw_client.MessageGatewayClient
+28 | 	chatMemberClient chat_member_client.ChatMemberClient
+29 | 	watcher          *xetcd.Watcher
+30 | 	serverMgrCache   cache.ServerMgrCache
+31 | 	chatMemberCache  cache.ChatMemberCache
+32 | }
+33 |
+34 | func NewDistService(cfg *config.Config, serverMgrCache cache.ServerMgrCache, chatMemberCache cache.ChatMemberCache) DistService {
+35 | 	chatMemberClient := chat_member_client.NewChatMemberClient(cfg.Etcd, cfg.ChatMemberServer, cfg.GrpcServer.Jaeger, cfg.Name)
+36 | 	svc := &distService{
+37 | 		cfg:              cfg,
+38 | 		msgHandle:        make(map[string]obj.KafkaMessageHandler),
+39 | 		clients:          make(map[int64]gw_client.MessageGatewayClient),
+40 | 		producers:        map[int64]*xkafka.Producer{},
+41 | 		chatMemberClient: chatMemberClient,
+42 | 		serverMgrCache:   serverMgrCache,
+43 | 		chatMemberCache:  chatMemberCache,
+44 | 	}
+45 |
+46 | 	svc.msgHandle[cfg.MsgConsumer.Topic[0]] = svc.MessageHandler
+47 |
+48 | 	svc.consumerGroup = xkafka.NewMConsumerGroup(&xkafka.MConsumerGroupConfig{KafkaVersion: sarama.V3_2_1_0, OffsetsInitial: sarama.OffsetNewest, IsReturnErr: false},
+49 | 		cfg.MsgConsumer.Topic,
+50 | 		cfg.MsgConsumer.Address,
+51 | 		cfg.MsgConsumer.GroupID)
+52 | 	svc.consumerGroup.RegisterHandler(svc)
+53 |
+54 | 	svc.watchMsgGatewayServer()
+55 |
+56 | 	return svc
+57 | }
+</content>
+</file>
+</files>
+<environment_details>
+# VSCode Visible Files
+
+
+# VSCode Open Tabs
+
+
+# Current Time
+Current time in ISO 8601 UTC format: 2025-11-28T10:21:29.372Z
+User time zone: Asia/Shanghai, UTC+8:00
+
+# Current Cost
+$0.03
+
+# Current Mode
+<slug>code</slug>
+<name>💻 Code</name>
+<model>deepseek-reasoner</model>
+You have not created a todo list yet. Create one with \`update_todo_list\` if your task is complicated or involves multiple steps.
+</environment_details>`,
+  },
+  {
+    role: "assistant",
+    content: `<attempt_completion>
+<result>
+基于对代码的深入分析，我找到了这个项目中消息转发服务的完整实现架构。消息转发采用分布式微服务架构，主要包含以下几个核心组件：
+
+## 消息转发架构概览
+
+### 1. 消息发送服务 ([\`apps/message/internal/service/svc_message_send.go\`](apps/message/internal/service/svc_message_send.go:18))
+- **入口**: [\`SendChatMessage()\`](apps/message/internal/service/svc_message_send.go:18) 方法
+- **处理流程**:
+  - 参数验证和重复消息检查
+  - 获取发送者身份信息
+  - 生成消息序列号 ([\`IncrSeqID()\`](apps/message/internal/service/svc_message_send.go:68))
+  - 构造服务端消息对象
+  - 将消息推送到Kafka队列 ([\`EnQueue()\`](apps/message/internal/service/svc_message_send.go:88))
+
+### 2. 消息分发服务 ([\`apps/dist/internal/service/svc_dist_chat_message.go\`](apps/dist/internal/service/svc_dist_chat_message.go:16))
+- **核心方法**: [\`sendChatMessage()\`](apps/dist/internal/service/svc_dist_chat_message.go:16) 和 [\`messageDistribution()\`](apps/dist/internal/service/svc_dist_chat_message.go:28)
+- **分发策略**:
+  - 根据聊天类型（私聊/群聊）确定分发槽位
+  - 并行获取聊天成员信息 ([\`getChatMembers()\`](apps/dist/internal/service/svc_dist_msg_consumer.go:55))
+  - 按服务器ID分组推送消息
+
+### 3. 消息网关客户端 ([\`apps/msg_gateway/client/client.go\`](apps/msg_gateway/client/client.go:44))
+- **核心接口**: [\`SendTopicMessage()\`](apps/msg_gateway/client/client.go:44)
+- **功能**: 通过gRPC将消息推送到具体的消息网关服务器
+
+### 4. 消息历史服务 ([\`apps/msg_history/internal/service/svc_msg_history_msg_consumer.go\`](apps/msg_history/internal/service/svc_msg_history_msg_consumer.go:17))
+- **消息持久化**: [\`SaveMessage()\`](apps/msg_history/internal/service/svc_msg_history_msg_consumer.go:34) 方法
+- **操作处理**: 支持消息撤回等操作
+
+## 关键特性
+
+### 1. 消息可靠性保证
+- 重复消息检查机制 ([\`RepeatMessageVerify()\`](apps/message/internal/service/svc_message_send.go:44))
+- 消息序列号生成 ([\`IncrSeqID()\`](apps/message/internal/service/svc_message_send.go:68))
+- 失败重试机制（gRPC失败时降级到Kafka）
+
+### 2. 分布式推送
+- 基于聊天ID的分片策略 ([\`GetChatPartition()\`](apps/message/internal/service/svc_message_send.go:88))
+- 并行分发到多个消息网关服务器
+- 动态服务发现和连接管理
+
+### 3. 消息类型支持
+- 普通聊天消息 ([\`TOPIC_CHAT\`](apps/message/internal/service/svc_message_send.go:22))
+- 红包消息 ([\`TOPIC_RED_ENVELOPE\`](apps/msg_history/internal/service/svc_msg_history_msg_consumer.go:24))
+- 消息操作（撤回等）([\`TOPIC_MSG_OPR\`](apps/msg_history/internal/service/svc_msg_history_msg_consumer.go:26))
+
+### 4. 缓存策略
+- Redis缓存消息数据
+- 成员信息缓存加速推送
+- 多级缓存架构（L1/L2缓存）
+
+整个消息转发系统采用了生产者-消费者模式，通过Kafka实现服务间解耦，支持水平扩展和高可用性。
+</result>
+</attempt_completion>`,
+  },
+  {
+    role: "user",
+    content: `[attempt_completion] Result:
+The user has provided feedback on the results. Consider their input to continue the task, and then attempt completion again.
+<feedback>
+可以再总结一下吗？
+</feedback>
+<environment_details>
+# VSCode Visible Files
+
+
+# VSCode Open Tabs
+
+
+# Current Time
+Current time in ISO 8601 UTC format: 2025-11-28T10:26:16.928Z
+User time zone: Asia/Shanghai, UTC+8:00
+
+# Current Cost
+$0.03
+
+# Current Mode
+<slug>code</slug>
+<name>💻 Code</name>
+<model>deepseek-reasoner</model>
+You have not created a todo list yet. Create one with \`update_todo_list\` if your task is complicated or involves multiple steps.
+</environment_details>`,
+  },
+]
