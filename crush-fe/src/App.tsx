@@ -22,6 +22,8 @@ function App() {
   const [files, setFiles] = useState<FileNode[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const [wsConnection, setWsConnection] = useState<WebSocket | null>(null);
+
   // Derive the active file object from the ID and openFiles list
   const activeFile = openFiles.find(f => f.id === activeFileId) || null;
 
@@ -52,6 +54,73 @@ function App() {
     };
 
     fetchFiles();
+
+    // WebSocket Connection
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
+
+    ws.onopen = () => {
+      console.log('Connected to WebSocket');
+      setWsConnection(ws);
+    };
+
+    ws.onmessage = (event) => {
+      // ... message handling ...
+      try {
+        const data = JSON.parse(event.data);
+        console.log('WS Message:', data);
+
+        // Convert backend message format to frontend Message type
+        let content = "";
+        if (data.Parts && Array.isArray(data.Parts)) {
+            content = data.Parts.map((p: any) => {
+                // Adjust parsing based on actual backend JSON structure
+                if (p.type === 'text' && p.data && p.data.text) return p.data.text;
+                if (p.type === 'reasoning' && p.data && p.data.text) return `[Reasoning: ${p.data.text}]`;
+                return "";
+            }).join("");
+        }
+        
+        // Handle "content" string field if parts are complex or not used in simple broadcast
+        if (!content && typeof data.Content === 'string') {
+             // Sometimes the broadcast might use a simpler format or String() representation
+             // Check if data is already the message object we expect
+        }
+
+        const newMessage: Message = {
+            id: data.ID || Date.now().toString(),
+            role: data.Role === 'assistant' ? 'assistant' : 'user',
+            content: content || "...", // Placeholder if empty
+            timestamp: Date.now()
+        };
+
+        setMessages(prev => {
+            const index = prev.findIndex(m => m.id === newMessage.id);
+            if (index !== -1) {
+                // Update existing message (streaming update)
+                const newMessages = [...prev];
+                // Accumulate content if needed, but usually the backend sends the full state or delta.
+                // If it sends full message state update:
+                newMessages[index] = newMessage;
+                return newMessages;
+            } else {
+                // Append new message
+                return [...prev, newMessage];
+            }
+        });
+
+      } catch (e) {
+        console.error('Error parsing WS message:', e);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+
+    return () => {
+      ws.close();
+    };
   }, []);
 
   const handleSendMessage = (content: string) => {
@@ -63,16 +132,11 @@ function App() {
     };
     setMessages(prev => [...prev, newMessage]);
 
-    // Mock response
-    setTimeout(() => {
-      const response: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: 'I see you are interested in that. I am just a demo UI for now, but I will be connected to a backend soon!',
-        timestamp: Date.now()
-      };
-      setMessages(prev => [...prev, response]);
-    }, 1000);
+    if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({ content }));
+    } else {
+        console.error("WebSocket is not connected");
+    }
   };
 
   const handleFileSelect = (file: FileNode) => {

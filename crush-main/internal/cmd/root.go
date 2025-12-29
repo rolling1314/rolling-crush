@@ -3,16 +3,16 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/crush/internal/app"
@@ -20,7 +20,6 @@ import (
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/event"
 	termutil "github.com/charmbracelet/crush/internal/term"
-	"github.com/charmbracelet/crush/internal/tui"
 	"github.com/charmbracelet/crush/internal/version"
 	"github.com/charmbracelet/fang"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -83,23 +82,20 @@ crush -y
 
 		event.AppInitialized()
 
-		// Set up the TUI.
-		var env uv.Environ = os.Environ()
-		ui := tui.New(app)
-		ui.QueryVersion = shouldQueryTerminalVersion(env)
+		// Start background subscription (replaces TUI event loop)
+		go app.Subscribe()
 
-		program := tea.NewProgram(
-			ui,
-			tea.WithEnvironment(env),
-			tea.WithContext(cmd.Context()),
-			tea.WithFilter(tui.MouseEventFilter)) // Filter mouse events based on focus state
-		go app.Subscribe(program)
+		// Start WebSocket server on 8080 for chat communication with frontend
+		go app.WSServer.Start("8080")
 
-		if _, err := program.Run(); err != nil {
-			event.Error(err)
-			slog.Error("TUI run error", "error", err)
-			return errors.New("Crush crashed. If metrics are enabled, we were notified about it. If you'd like to report it, please copy the stacktrace above and open an issue at https://github.com/charmbracelet/crush/issues/new?template=bug.yml") //nolint:staticcheck
-		}
+		slog.Info("Crush WebSocket server is running on :8080. Press Ctrl+C to stop.")
+
+		// Wait for interrupt signal to gracefully shutdown
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+		<-quit
+
+		slog.Info("Shutting down...")
 		return nil
 	},
 	PostRun: func(cmd *cobra.Command, args []string) {

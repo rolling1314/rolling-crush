@@ -132,7 +132,7 @@ func main() {
 	})
 
 	// 启动服务
-	port := ":8080"
+	port := ":8081"
 	println("Server is running on http://localhost" + port)
 	println("访问 http://localhost" + port + "/api/files 获取当前目录文件树")
 	println("访问 http://localhost" + port + "/api/files?path=/your/path 获取指定目录文件树")

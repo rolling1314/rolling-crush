@@ -5,6 +5,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -28,6 +29,7 @@ import (
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/pubsub"
+	"github.com/charmbracelet/crush/internal/server"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/charmbracelet/crush/internal/term"
@@ -55,6 +57,11 @@ type App struct {
 	eventsCtx       context.Context
 	events          chan tea.Msg
 	tuiWG           *sync.WaitGroup
+	
+	WSServer *server.Server
+	
+	// Track the current active session for the single-user mode
+	currentSessionID string
 
 	// global context and cleanup functions
 	globalCtx    context.Context
@@ -87,7 +94,12 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 		events:          make(chan tea.Msg, 100),
 		serviceEventsWG: &sync.WaitGroup{},
 		tuiWG:           &sync.WaitGroup{},
+		
+		WSServer: server.New(),
 	}
+
+	// Register the handler for incoming WebSocket messages
+	app.WSServer.SetMessageHandler(app.HandleClientMessage)
 
 	app.setupEvents()
 
@@ -114,6 +126,49 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 		return nil, fmt.Errorf("failed to initialize coder agent: %w", err)
 	}
 	return app, nil
+}
+
+// HandleClientMessage processes messages from the WebSocket client
+func (app *App) HandleClientMessage(rawMsg []byte) {
+	type ClientMsg struct {
+		Content string `json:"content"`
+		SessionID string `json:"sessionID"` // Optional: if frontend sends it
+	}
+
+	var msg ClientMsg
+	if err := json.Unmarshal(rawMsg, &msg); err != nil {
+		slog.Error("Failed to unmarshal client message", "error", err)
+		return
+	}
+	
+	// Use existing session or create new one
+	sessionID := msg.SessionID
+	if sessionID == "" {
+		if app.currentSessionID == "" {
+			// Create a default session if none exists
+			sess, err := app.Sessions.Create(context.Background(), "Web Session")
+			if err != nil {
+				slog.Error("Failed to create session", "error", err)
+				return
+			}
+			app.currentSessionID = sess.ID
+			// Auto-approve for web mode for now
+			app.Permissions.AutoApproveSession(sess.ID)
+		}
+		sessionID = app.currentSessionID
+	} else {
+		app.currentSessionID = sessionID
+	}
+
+	slog.Info("Received message from client", "content", msg.Content, "sessionID", sessionID)
+
+	// Run the agent asynchronously
+	go func() {
+		_, err := app.AgentCoordinator.Run(context.Background(), sessionID, msg.Content)
+		if err != nil {
+			slog.Error("Agent run error", "error", err)
+		}
+	}()
 }
 
 // Config returns the application configuration.
@@ -336,17 +391,17 @@ func (app *App) InitCoderAgent(ctx context.Context) error {
 	return nil
 }
 
-// Subscribe sends events to the TUI as tea.Msgs.
-func (app *App) Subscribe(program *tea.Program) {
+// Subscribe handles event processing and broadcasting.
+// Note: This was previously connected to the TUI (tea.Program), but now runs independently.
+func (app *App) Subscribe() {
 	defer log.RecoverPanic("app.Subscribe", func() {
-		slog.Info("TUI subscription panic: attempting graceful shutdown")
-		program.Quit()
+		slog.Info("Subscription panic: attempting graceful shutdown")
 	})
 
 	app.tuiWG.Add(1)
 	tuiCtx, tuiCancel := context.WithCancel(app.globalCtx)
 	app.cleanupFuncs = append(app.cleanupFuncs, func() error {
-		slog.Debug("Cancelling TUI message handler")
+		slog.Debug("Cancelling message handler")
 		tuiCancel()
 		app.tuiWG.Wait()
 		return nil
@@ -356,14 +411,18 @@ func (app *App) Subscribe(program *tea.Program) {
 	for {
 		select {
 		case <-tuiCtx.Done():
-			slog.Debug("TUI message handler shutting down")
+			slog.Debug("Message handler shutting down")
 			return
 		case msg, ok := <-app.events:
 			if !ok {
-				slog.Debug("TUI message channel closed")
+				slog.Debug("Message channel closed")
 				return
 			}
-			program.Send(msg)
+			
+			// Broadcast to WebSocket
+			if event, ok := msg.(pubsub.Event[message.Message]); ok {
+				app.WSServer.Broadcast(event.Payload)
+			}
 		}
 	}
 }
