@@ -1,7 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, User, Bot } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
 import { type Message } from '../types';
 import { cn } from '../lib/utils';
+import 'highlight.js/styles/github-dark.css';
 
 interface ChatPanelProps {
   messages: Message[];
@@ -48,13 +52,100 @@ export const ChatPanel = ({ messages, onSendMessage }: ChatPanelProps) => {
             )}>
               {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
             </div>
-            <div className={cn(
-              "p-3 rounded-lg text-sm leading-relaxed",
-              msg.role === 'user' 
-                ? "bg-blue-600/10 text-blue-100 border border-blue-600/20" 
-                : "bg-gray-700/50 text-gray-200 border border-gray-600/30"
-            )}>
-              {msg.content}
+            <div className="flex flex-col gap-2 flex-1">
+              {/* Reasoning content (if present) */}
+              {msg.reasoning && (
+                <div className="p-3 rounded-md text-xs bg-purple-900/20 text-purple-200 border border-purple-700/30">
+                  <div className="font-semibold mb-2 flex items-center gap-2">
+                    <span className="text-purple-400">💭</span>
+                    <span>Thinking Process</span>
+                  </div>
+                  <div className="whitespace-pre-wrap font-mono text-purple-100/80 leading-relaxed">
+                    {msg.reasoning}
+                  </div>
+                </div>
+              )}
+              
+              {/* Main content */}
+              <div className={cn(
+                "p-3 rounded-lg text-sm leading-relaxed prose prose-invert prose-sm max-w-none",
+                msg.role === 'user' 
+                  ? "bg-blue-600/10 text-blue-100 border border-blue-600/20" 
+                  : "bg-gray-700/50 text-gray-200 border border-gray-600/30",
+                msg.isStreaming && "animate-pulse"
+              )}>
+                {msg.role === 'assistant' ? (
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeHighlight]}
+                    components={{
+                      code: ({node, inline, className, children, ...props}: any) => {
+                        return inline ? (
+                          <code className="bg-gray-800 px-1.5 py-0.5 rounded text-xs font-mono text-green-400" {...props}>
+                            {children}
+                          </code>
+                        ) : (
+                          <code className={cn("block bg-gray-900 p-3 rounded-md overflow-x-auto text-xs", className)} {...props}>
+                            {children}
+                          </code>
+                        );
+                      },
+                      pre: ({children, ...props}: any) => (
+                        <pre className="bg-gray-900 rounded-md overflow-x-auto my-2" {...props}>
+                          {children}
+                        </pre>
+                      ),
+                      p: ({children, ...props}: any) => (
+                        <p className="mb-2 last:mb-0 leading-relaxed" {...props}>
+                          {children}
+                        </p>
+                      ),
+                      ul: ({children, ...props}: any) => (
+                        <ul className="list-disc list-inside mb-2 space-y-1" {...props}>
+                          {children}
+                        </ul>
+                      ),
+                      ol: ({children, ...props}: any) => (
+                        <ol className="list-decimal list-inside mb-2 space-y-1" {...props}>
+                          {children}
+                        </ol>
+                      ),
+                      li: ({children, ...props}: any) => (
+                        <li className="ml-2" {...props}>
+                          {children}
+                        </li>
+                      ),
+                      h1: ({children, ...props}: any) => (
+                        <h1 className="text-lg font-bold mb-2 mt-3 first:mt-0" {...props}>
+                          {children}
+                        </h1>
+                      ),
+                      h2: ({children, ...props}: any) => (
+                        <h2 className="text-base font-bold mb-2 mt-3 first:mt-0" {...props}>
+                          {children}
+                        </h2>
+                      ),
+                      h3: ({children, ...props}: any) => (
+                        <h3 className="text-sm font-bold mb-2 mt-2 first:mt-0" {...props}>
+                          {children}
+                        </h3>
+                      ),
+                      blockquote: ({children, ...props}: any) => (
+                        <blockquote className="border-l-4 border-gray-600 pl-3 italic my-2" {...props}>
+                          {children}
+                        </blockquote>
+                      ),
+                    }}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
+                ) : (
+                  <span className="whitespace-pre-wrap">{msg.content}</span>
+                )}
+                {msg.isStreaming && (
+                  <span className="inline-block w-1.5 h-4 ml-1 bg-green-500 animate-pulse align-middle"></span>
+                )}
+              </div>
             </div>
           </div>
         ))}

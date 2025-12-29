@@ -65,48 +65,62 @@ function App() {
     };
 
     ws.onmessage = (event) => {
-      // ... message handling ...
       try {
         const data = JSON.parse(event.data);
         console.log('WS Message:', data);
 
-        // Convert backend message format to frontend Message type
-        let content = "";
-        if (data.Parts && Array.isArray(data.Parts)) {
-            content = data.Parts.map((p: any) => {
-                // Adjust parsing based on actual backend JSON structure
-                if (p.type === 'text' && p.data && p.data.text) return p.data.text;
-                if (p.type === 'reasoning' && p.data && p.data.text) return `[Reasoning: ${p.data.text}]`;
-                return "";
-            }).join("");
-        }
+        // Parse backend message format
+        let textContent = "";
+        let reasoningContent = "";
         
-        // Handle "content" string field if parts are complex or not used in simple broadcast
-        if (!content && typeof data.Content === 'string') {
-             // Sometimes the broadcast might use a simpler format or String() representation
-             // Check if data is already the message object we expect
+        if (data.Parts && Array.isArray(data.Parts)) {
+          data.Parts.forEach((part: any) => {
+            // Handle direct text field
+            if (part.text) {
+              textContent += part.text;
+            }
+            // Handle thinking field (reasoning)
+            if (part.thinking) {
+              reasoningContent += part.thinking;
+            }
+            // Handle nested data structure (fallback)
+            if (part.type === 'text' && part.data?.text) {
+              textContent += part.data.text;
+            }
+            if (part.type === 'reasoning' && part.data?.thinking) {
+              reasoningContent += part.data.thinking;
+            }
+          });
+        }
+
+        // Skip if message has no content yet (initial empty message)
+        if (!textContent && !reasoningContent) {
+          console.log('Skipping empty message');
+          return;
         }
 
         const newMessage: Message = {
-            id: data.ID || Date.now().toString(),
-            role: data.Role === 'assistant' ? 'assistant' : 'user',
-            content: content || "...", // Placeholder if empty
-            timestamp: Date.now()
+          id: data.ID || Date.now().toString(),
+          role: data.Role === 'assistant' ? 'assistant' : 'user',
+          content: textContent || reasoningContent || "...",
+          reasoning: reasoningContent || undefined,
+          timestamp: data.UpdatedAt || data.CreatedAt || Date.now(),
+          isStreaming: data.Role === 'assistant' && (!textContent || textContent.length < 10)
         };
 
+        console.log('Parsed message:', newMessage);
+
         setMessages(prev => {
-            const index = prev.findIndex(m => m.id === newMessage.id);
-            if (index !== -1) {
-                // Update existing message (streaming update)
-                const newMessages = [...prev];
-                // Accumulate content if needed, but usually the backend sends the full state or delta.
-                // If it sends full message state update:
-                newMessages[index] = newMessage;
-                return newMessages;
-            } else {
-                // Append new message
-                return [...prev, newMessage];
-            }
+          const index = prev.findIndex(m => m.id === newMessage.id);
+          if (index !== -1) {
+            // Update existing message (streaming update)
+            const newMessages = [...prev];
+            newMessages[index] = newMessage;
+            return newMessages;
+          } else {
+            // Append new message
+            return [...prev, newMessage];
+          }
         });
 
       } catch (e) {

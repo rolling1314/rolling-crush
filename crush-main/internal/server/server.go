@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -61,6 +62,7 @@ func (s *Server) HandleConnections(w http.ResponseWriter, r *http.Request) {
 
 		for {
 			_, msg, err := ws.ReadMessage()
+			fmt.Println(msg)
 			if err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 					slog.Error("WebSocket read error", "error", err)
