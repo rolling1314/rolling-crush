@@ -70,8 +70,8 @@ function App() {
         const data = JSON.parse(event.data);
         console.log('WS Message:', data);
 
-        // Handle permission requests
-        if (data.Type === 'permission_request' || data.tool_call_id) {
+        // Handle permission requests (只有明确标记为 permission_request 的才处理)
+        if (data.Type === 'permission_request' && data.tool_call_id) {
           const permissionReq: PermissionRequest = {
             id: data.id || data.ID,
             session_id: data.session_id || data.SessionID,
@@ -80,7 +80,7 @@ function App() {
             action: data.action
           };
           setPendingPermissions(prev => new Map(prev).set(permissionReq.tool_call_id, permissionReq));
-          console.log('Permission request received:', permissionReq);
+          console.log('✅ Permission request received:', permissionReq);
           return;
         }
 
@@ -110,6 +110,7 @@ function App() {
                 provider_executed: part.provider_executed ?? part.data?.provider_executed
               };
               toolCalls.push(toolCall);
+              console.log('🔧 Tool call detected:', toolCall);
             }
             // Handle tool results
             if (part.type === 'tool_result' || part.tool_call_id) {
@@ -151,7 +152,14 @@ function App() {
           toolResults: toolResults.length > 0 ? toolResults : undefined
         };
 
-        console.log('Parsed message:', newMessage);
+        console.log('📨 Parsed message:', {
+          id: newMessage.id,
+          role: newMessage.role,
+          hasContent: !!newMessage.content,
+          toolCallsCount: newMessage.toolCalls?.length || 0,
+          toolResultsCount: newMessage.toolResults?.length || 0,
+          toolCalls: newMessage.toolCalls
+        });
 
         setMessages(prev => {
           const index = prev.findIndex(m => m.id === newMessage.id);
