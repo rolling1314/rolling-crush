@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 
+	"github.com/charmbracelet/crush/internal/auth"
 	"github.com/gorilla/websocket"
 )
 
@@ -39,6 +42,23 @@ func (s *Server) SetMessageHandler(handler HandlerFunc) {
 }
 
 func (s *Server) HandleConnections(w http.ResponseWriter, r *http.Request) {
+	// Validate JWT token before upgrading connection
+	token := extractToken(r)
+	if token == "" {
+		slog.Warn("WebSocket connection rejected: no token provided")
+		http.Error(w, "Unauthorized: token required", http.StatusUnauthorized)
+		return
+	}
+
+	claims, err := auth.ValidateToken(token)
+	if err != nil {
+		slog.Warn("WebSocket connection rejected: invalid token", "error", err)
+		http.Error(w, "Unauthorized: invalid or expired token", http.StatusUnauthorized)
+		return
+	}
+
+	slog.Info("WebSocket authentication successful", "user_id", claims.UserID, "username", claims.Username)
+
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		slog.Error("WebSocket upgrade error", "error", err)
@@ -48,7 +68,7 @@ func (s *Server) HandleConnections(w http.ResponseWriter, r *http.Request) {
 	s.mutex.Lock()
 	s.clients[ws] = true
 	s.mutex.Unlock()
-	slog.Info("New WebSocket connection established")
+	slog.Info("New WebSocket connection established", "username", claims.Username)
 
 	// Keep connection alive and handle disconnects
 	go func() {
@@ -96,6 +116,32 @@ func (s *Server) Broadcast(msg interface{}) {
 			delete(s.clients, client)
 		}
 	}
+}
+
+// extractToken extracts the JWT token from the request
+// It checks Authorization header first, then query parameters
+func extractToken(r *http.Request) string {
+	// Try Authorization header first
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" {
+		parts := strings.Split(authHeader, " ")
+		if len(parts) == 2 && parts[0] == "Bearer" {
+			return parts[1]
+		}
+	}
+
+	// Try query parameter (for WebSocket connections that can't set headers easily)
+	token := r.URL.Query().Get("token")
+	if token != "" {
+		// Decode URL-encoded token
+		decoded, err := url.QueryUnescape(token)
+		if err == nil {
+			return decoded
+		}
+		return token
+	}
+
+	return ""
 }
 
 // Start starts the WebSocket server on the specified port

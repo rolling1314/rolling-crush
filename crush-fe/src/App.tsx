@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, LogOut } from 'lucide-react';
 import { ChatPanel } from './components/ChatPanel';
 import { FileTree } from './components/FileTree';
 import { CodeEditor } from './components/CodeEditor';
+import { LoginPage } from './components/LoginPage';
 import { type FileNode, type Message, type ToolCall, type ToolResult, type PermissionRequest } from './types';
 import { cn } from './lib/utils';
 
@@ -16,6 +17,10 @@ const INITIAL_MESSAGES: Message[] = [
 ];
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [jwtToken, setJwtToken] = useState<string | null>(null);
+  const [currentUsername, setCurrentUsername] = useState<string>('');
+  
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
   const [openFiles, setOpenFiles] = useState<FileNode[]>([]);
   const [activeFileId, setActiveFileId] = useState<string | null>(null);
@@ -30,7 +35,39 @@ function App() {
   // Derive the active file object from the ID and openFiles list
   const activeFile = openFiles.find(f => f.id === activeFileId) || null;
 
+  // Check for existing token on mount
   useEffect(() => {
+    const token = localStorage.getItem('jwt_token');
+    const username = localStorage.getItem('username');
+    if (token && username) {
+      setJwtToken(token);
+      setCurrentUsername(username);
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  const handleLoginSuccess = (token: string, username: string) => {
+    setJwtToken(token);
+    setCurrentUsername(username);
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('jwt_token');
+    localStorage.removeItem('username');
+    setJwtToken(null);
+    setCurrentUsername('');
+    setIsAuthenticated(false);
+    if (wsConnection) {
+      wsConnection.close();
+      setWsConnection(null);
+    }
+    setMessages(INITIAL_MESSAGES);
+  };
+
+  useEffect(() => {
+    if (!isAuthenticated || !jwtToken) return;
+
     const fetchFiles = async () => {
       try {
         const response = await fetch('/api/files');
@@ -58,9 +95,10 @@ function App() {
 
     fetchFiles();
 
-    // WebSocket Connection
+    // WebSocket Connection with JWT token
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
+    const wsUrl = `${wsProtocol}//${window.location.hostname}:8080/ws?token=${encodeURIComponent(jwtToken)}`;
+    const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
       console.log('Connected to WebSocket');
@@ -185,10 +223,18 @@ function App() {
       console.error('WebSocket error:', error);
     };
 
+    ws.onclose = (event) => {
+      console.log('WebSocket closed:', event.code, event.reason);
+      if (event.code === 1008 || event.code === 1006) {
+        // Unauthorized or abnormal closure - might be auth issue
+        console.warn('WebSocket closed due to authentication issue');
+      }
+    };
+
     return () => {
       ws.close();
     };
-  }, []);
+  }, [isAuthenticated, jwtToken]);
 
   const handleSendMessage = (content: string) => {
     const newMessage: Message = {
@@ -310,13 +356,35 @@ function App() {
     };
   }, [isResizing]);
 
+  // Show login page if not authenticated
+  if (!isAuthenticated) {
+    return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="flex h-screen w-screen bg-[#1e1e1e] text-white overflow-hidden">
       {/* Left Sidebar: Chat (Resizable) */}
       <div 
-        className="shrink-0 h-full flex"
+        className="shrink-0 h-full flex flex-col"
         style={{ width: `${chatWidth}px` }}
       >
+        {/* User Info Header */}
+        <div className="px-4 py-2 bg-[#252526] border-b border-gray-700 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-sm font-semibold">
+              {currentUsername.charAt(0).toUpperCase()}
+            </div>
+            <span className="text-sm text-gray-300">{currentUsername}</span>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="p-1.5 hover:bg-gray-700 rounded-md transition-colors"
+            title="Logout"
+          >
+            <LogOut size={16} className="text-gray-400" />
+          </button>
+        </div>
+
         <div className="flex-1 h-full overflow-hidden">
           <ChatPanel 
             messages={messages} 
