@@ -10,3 +10,63 @@
 body {
   @apply bg-background text-foreground;
 }
+
+/* 平滑的流式输出动画 */
+@keyframes smoothFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes smoothGrow {
+  from {
+    max-height: 0;
+    opacity: 0;
+  }
+  to {
+    max-height: 1000px;
+    opacity: 1;
+  }
+}
+
+/* 打字机效果的光标 */
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+.streaming-message {
+  animation: smoothFadeIn 0.3s ease-out;
+}
+
+.streaming-content {
+  transition: all 0.15s ease-out;
+  will-change: contents;
+}
+
+.streaming-cursor::after {
+  content: '▋';
+  animation: blink 1s step-end infinite;
+  color: #60a5fa;
+  margin-left: 2px;
+}
+
+/* 优化 Reasoning 展开动画 */
+.reasoning-box {
+  animation: smoothGrow 0.3s ease-out;
+  overflow: hidden;
+}
+
+/* 防止布局抖动 */
+.message-container {
+  contain: layout style;
+}

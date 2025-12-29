@@ -1,5 +1,5 @@
-import React from 'react';
-import { Wrench, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { Wrench, CheckCircle, XCircle, Clock, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { type ToolCall, type ToolResult } from '../types';
 import { cn } from '../lib/utils';
 
@@ -18,6 +18,9 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
   onDeny,
   needsPermission = false
 }) => {
+  const [isParamsExpanded, setIsParamsExpanded] = useState(false);
+  const [isResultExpanded, setIsResultExpanded] = useState(true);
+  
   const isPending = !toolCall.finished && !result;
   const isError = result?.is_error;
   const isSuccess = result && !result.is_error;
@@ -44,7 +47,7 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
 
   return (
     <div className={cn(
-      "my-2 rounded-lg border-l-4 p-3 bg-gray-800/50",
+      "my-2 rounded-lg border-l-4 p-3 bg-gray-800/50 max-w-[95%]",
       isPending && "border-yellow-500",
       isSuccess && "border-green-500",
       isError && "border-red-500",
@@ -94,42 +97,64 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
         </div>
       )}
 
-      {/* Input Parameters */}
+      {/* Input Parameters (Collapsible) */}
       {parsedInput && (
         <div className="mt-2 text-xs">
-          <div className="text-gray-400 mb-1">Parameters:</div>
-          <div className="bg-gray-900/50 rounded p-2 overflow-x-auto">
-            {typeof parsedInput === 'object' ? (
-              <pre className="text-gray-300 font-mono">
-                {JSON.stringify(parsedInput, null, 2)}
-              </pre>
+          <button
+            onClick={() => setIsParamsExpanded(!isParamsExpanded)}
+            className="flex items-center gap-1 text-gray-400 hover:text-gray-300 mb-1 transition-colors"
+          >
+            {isParamsExpanded ? (
+              <ChevronUp className="w-3 h-3" />
             ) : (
-              <div className="text-gray-300">{parsedInput}</div>
+              <ChevronDown className="w-3 h-3" />
             )}
-          </div>
+            <span>Parameters</span>
+          </button>
+          {isParamsExpanded && (
+            <div className="bg-gray-900/50 rounded p-2 overflow-x-auto max-h-[200px] overflow-y-auto">
+              {typeof parsedInput === 'object' ? (
+                <pre className="text-gray-300 font-mono text-xs">
+                  {JSON.stringify(parsedInput, null, 2)}
+                </pre>
+              ) : (
+                <div className="text-gray-300 break-words">{parsedInput}</div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Result */}
+      {/* Result (Collapsible) */}
       {result && (
         <div className="mt-2 text-xs">
-          <div className={cn(
-            "mb-1",
-            result.is_error ? "text-red-400" : "text-green-400"
-          )}>
-            {result.is_error ? 'Error:' : 'Result:'}
-          </div>
-          <div className={cn(
-            "rounded p-2 overflow-x-auto max-h-40 overflow-y-auto",
-            result.is_error ? "bg-red-900/20 border border-red-800/30" : "bg-gray-900/50"
-          )}>
-            <pre className={cn(
-              "font-mono whitespace-pre-wrap break-words",
-              result.is_error ? "text-red-200" : "text-gray-300"
+          <button
+            onClick={() => setIsResultExpanded(!isResultExpanded)}
+            className={cn(
+              "flex items-center gap-1 mb-1 transition-colors",
+              result.is_error ? "text-red-400 hover:text-red-300" : "text-green-400 hover:text-green-300"
+            )}
+          >
+            {isResultExpanded ? (
+              <ChevronUp className="w-3 h-3" />
+            ) : (
+              <ChevronDown className="w-3 h-3" />
+            )}
+            <span>{result.is_error ? 'Error' : 'Result'}</span>
+          </button>
+          {isResultExpanded && (
+            <div className={cn(
+              "rounded p-2 overflow-x-auto max-h-[200px] overflow-y-auto",
+              result.is_error ? "bg-red-900/20 border border-red-800/30" : "bg-gray-900/50"
             )}>
-              {result.content}
-            </pre>
-          </div>
+              <pre className={cn(
+                "font-mono text-xs whitespace-pre-wrap break-words",
+                result.is_error ? "text-red-200" : "text-gray-300"
+              )}>
+                {result.content}
+              </pre>
+            </div>
+          )}
         </div>
       )}
     </div>

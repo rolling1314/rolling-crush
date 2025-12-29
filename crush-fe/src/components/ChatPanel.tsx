@@ -42,7 +42,7 @@ export const ChatPanel = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#1e1e1e] border-r border-gray-700">
+    <div className="flex flex-col h-full bg-[#1e1e1e]">
       <div className="p-4 border-b border-gray-700 bg-[#252526]">
         <h2 className="text-sm font-semibold text-gray-200">AI Assistant</h2>
       </div>
@@ -52,7 +52,7 @@ export const ChatPanel = ({
           <div
             key={msg.id}
             className={cn(
-              "flex gap-3 max-w-[90%]",
+              "flex gap-3 max-w-[90%] message-container streaming-message",
               msg.role === 'user' ? "ml-auto flex-row-reverse" : "mr-auto"
             )}
           >
@@ -65,12 +65,12 @@ export const ChatPanel = ({
             <div className="flex flex-col gap-2 flex-1">
               {/* Reasoning content (if present) */}
               {msg.reasoning && (
-                <div className="p-3 rounded-md text-xs bg-purple-900/20 text-purple-200 border border-purple-700/30">
+                <div className="p-3 rounded-md text-xs bg-purple-900/20 text-purple-200 border border-purple-700/30 reasoning-box">
                   <div className="font-semibold mb-2 flex items-center gap-2">
                     <span className="text-purple-400">💭</span>
                     <span>Thinking Process</span>
                   </div>
-                  <div className="whitespace-pre-wrap font-mono text-purple-100/80 leading-relaxed">
+                  <div className="whitespace-pre-wrap font-mono text-purple-100/80 leading-relaxed streaming-content">
                     {msg.reasoning}
                   </div>
                 </div>
@@ -99,11 +99,11 @@ export const ChatPanel = ({
               {/* Main content */}
               {msg.content && msg.content !== '...' && !msg.content.startsWith('Executing') && (
                 <div className={cn(
-                  "p-3 rounded-lg text-sm leading-relaxed prose prose-invert prose-sm max-w-none",
+                  "p-3 rounded-lg text-sm leading-relaxed prose prose-invert prose-sm max-w-none streaming-content",
                   msg.role === 'user' 
                     ? "bg-blue-600/10 text-blue-100 border border-blue-600/20" 
                     : "bg-gray-700/50 text-gray-200 border border-gray-600/30",
-                  msg.isStreaming && "animate-pulse"
+                  msg.isStreaming && "streaming-cursor"
                 )}>
                   {msg.role === 'assistant' || msg.role === 'tool' ? (
                     <ReactMarkdown

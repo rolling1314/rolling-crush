@@ -24,6 +24,8 @@ function App() {
 
   const [wsConnection, setWsConnection] = useState<WebSocket | null>(null);
   const [pendingPermissions, setPendingPermissions] = useState<Map<string, PermissionRequest>>(new Map());
+  const [chatWidth, setChatWidth] = useState(400); // Chat panel width
+  const [isResizing, setIsResizing] = useState(false);
 
   // Derive the active file object from the ID and openFiles list
   const activeFile = openFiles.find(f => f.id === activeFileId) || null;
@@ -272,17 +274,66 @@ function App() {
     }
   };
 
+  // Handle resize
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      
+      const newWidth = e.clientX;
+      // Constrain width between 280px and 800px
+      if (newWidth >= 280 && newWidth <= 800) {
+        setChatWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing]);
+
   return (
     <div className="flex h-screen w-screen bg-[#1e1e1e] text-white overflow-hidden">
-      {/* Left Sidebar: Chat */}
-      <div className="w-[400px] shrink-0 h-full border-r border-gray-700">
-        <ChatPanel 
-          messages={messages} 
-          onSendMessage={handleSendMessage}
-          pendingPermissions={pendingPermissions}
-          onPermissionApprove={handlePermissionApprove}
-          onPermissionDeny={handlePermissionDeny}
-        />
+      {/* Left Sidebar: Chat (Resizable) */}
+      <div 
+        className="shrink-0 h-full flex"
+        style={{ width: `${chatWidth}px` }}
+      >
+        <div className="flex-1 h-full overflow-hidden">
+          <ChatPanel 
+            messages={messages} 
+            onSendMessage={handleSendMessage}
+            pendingPermissions={pendingPermissions}
+            onPermissionApprove={handlePermissionApprove}
+            onPermissionDeny={handlePermissionDeny}
+          />
+        </div>
+        
+        {/* Resize Handle */}
+        <div
+          className="w-1 h-full bg-gray-700 hover:bg-blue-500 cursor-col-resize transition-colors relative group"
+          onMouseDown={handleMouseDown}
+        >
+          <div className="absolute inset-y-0 -left-1 -right-1" />
+        </div>
       </div>
 
       {/* Right Area: File Tree + Code */}

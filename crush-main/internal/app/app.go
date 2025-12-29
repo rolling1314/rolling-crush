@@ -131,13 +131,45 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 // HandleClientMessage processes messages from the WebSocket client
 func (app *App) HandleClientMessage(rawMsg []byte) {
 	type ClientMsg struct {
-		Content string `json:"content"`
-		SessionID string `json:"sessionID"` // Optional: if frontend sends it
+		Type         string `json:"type"`
+		Content      string `json:"content"`
+		SessionID    string `json:"sessionID"` // Optional: if frontend sends it
+		ID           string `json:"id"`
+		ToolCallID   string `json:"tool_call_id"`
+		Granted      bool   `json:"granted"`
+		Denied       bool   `json:"denied"`
 	}
 
 	var msg ClientMsg
 	if err := json.Unmarshal(rawMsg, &msg); err != nil {
 		slog.Error("Failed to unmarshal client message", "error", err)
+		return
+	}
+	
+	// Handle permission responses
+	if msg.Type == "permission_response" {
+		// Find the permission request by ID
+		ctx := context.Background()
+		permissionChan := app.Permissions.Subscribe(ctx)
+		
+		// Create a permission request object
+		permissionReq := permission.PermissionRequest{
+			ID:         msg.ID,
+			ToolCallID: msg.ToolCallID,
+		}
+		
+		if msg.Granted {
+			slog.Info("Permission granted by client", "tool_call_id", msg.ToolCallID)
+			app.Permissions.Grant(permissionReq)
+		} else if msg.Denied {
+			slog.Info("Permission denied by client", "tool_call_id", msg.ToolCallID)
+			app.Permissions.Deny(permissionReq)
+		}
+		
+		// Clean up subscription
+		go func() {
+			<-permissionChan
+		}()
 		return
 	}
 	
@@ -152,8 +184,8 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 				return
 			}
 			app.currentSessionID = sess.ID
-			// Auto-approve for web mode for now
-			app.Permissions.AutoApproveSession(sess.ID)
+			// Don't auto-approve - let frontend handle permissions
+			// app.Permissions.AutoApproveSession(sess.ID)
 		}
 		sessionID = app.currentSessionID
 	} else {
@@ -419,9 +451,36 @@ func (app *App) Subscribe() {
 				return
 			}
 			
-			// Broadcast to WebSocket
+			// Broadcast messages to WebSocket
 			if event, ok := msg.(pubsub.Event[message.Message]); ok {
 				app.WSServer.Broadcast(event.Payload)
+			}
+			
+			// Broadcast permission requests to WebSocket
+			if event, ok := msg.(pubsub.Event[permission.PermissionRequest]); ok {
+				slog.Info("Broadcasting permission request to WebSocket", "tool_call_id", event.Payload.ToolCallID)
+				app.WSServer.Broadcast(map[string]interface{}{
+					"Type":        "permission_request",
+					"id":          event.Payload.ID,
+					"session_id":  event.Payload.SessionID,
+					"tool_call_id": event.Payload.ToolCallID,
+					"tool_name":   event.Payload.ToolName,
+					"description": event.Payload.Description,
+					"action":      event.Payload.Action,
+					"params":      event.Payload.Params,
+					"path":        event.Payload.Path,
+				})
+			}
+			
+			// Broadcast permission notifications to WebSocket
+			if event, ok := msg.(pubsub.Event[permission.PermissionNotification]); ok {
+				slog.Info("Broadcasting permission notification to WebSocket", "tool_call_id", event.Payload.ToolCallID, "granted", event.Payload.Granted)
+				app.WSServer.Broadcast(map[string]interface{}{
+					"Type":        "permission_notification",
+					"tool_call_id": event.Payload.ToolCallID,
+					"granted":     event.Payload.Granted,
+					"denied":      event.Payload.Denied,
+				})
 			}
 		}
 	}
