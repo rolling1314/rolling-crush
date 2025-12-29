@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import { ChatPanel } from './components/ChatPanel';
 import { FileTree } from './components/FileTree';
 import { CodeEditor } from './components/CodeEditor';
-import { type FileNode, type Message } from './types';
+import { type FileNode, type Message, type ToolCall, type ToolResult, type PermissionRequest } from './types';
 import { cn } from './lib/utils';
 
 const INITIAL_MESSAGES: Message[] = [
@@ -23,6 +23,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
 
   const [wsConnection, setWsConnection] = useState<WebSocket | null>(null);
+  const [pendingPermissions, setPendingPermissions] = useState<Map<string, PermissionRequest>>(new Map());
 
   // Derive the active file object from the ID and openFiles list
   const activeFile = openFiles.find(f => f.id === activeFileId) || null;
@@ -69,9 +70,25 @@ function App() {
         const data = JSON.parse(event.data);
         console.log('WS Message:', data);
 
+        // Handle permission requests
+        if (data.Type === 'permission_request' || data.tool_call_id) {
+          const permissionReq: PermissionRequest = {
+            id: data.id || data.ID,
+            session_id: data.session_id || data.SessionID,
+            tool_call_id: data.tool_call_id,
+            tool_name: data.tool_name,
+            action: data.action
+          };
+          setPendingPermissions(prev => new Map(prev).set(permissionReq.tool_call_id, permissionReq));
+          console.log('Permission request received:', permissionReq);
+          return;
+        }
+
         // Parse backend message format
         let textContent = "";
         let reasoningContent = "";
+        const toolCalls: ToolCall[] = [];
+        const toolResults: ToolResult[] = [];
         
         if (data.Parts && Array.isArray(data.Parts)) {
           data.Parts.forEach((part: any) => {
@@ -83,6 +100,30 @@ function App() {
             if (part.thinking) {
               reasoningContent += part.thinking;
             }
+            // Handle tool calls
+            if (part.type === 'tool_call' || (part.id && part.name && part.input !== undefined)) {
+              const toolCall: ToolCall = {
+                id: part.id || part.data?.id,
+                name: part.name || part.data?.name,
+                input: part.input || part.data?.input || '',
+                finished: part.finished ?? part.data?.finished ?? false,
+                provider_executed: part.provider_executed ?? part.data?.provider_executed
+              };
+              toolCalls.push(toolCall);
+            }
+            // Handle tool results
+            if (part.type === 'tool_result' || part.tool_call_id) {
+              const toolResult: ToolResult = {
+                tool_call_id: part.tool_call_id || part.data?.tool_call_id,
+                name: part.name || part.data?.name,
+                content: part.content || part.data?.content || '',
+                data: part.data?.data,
+                mime_type: part.mime_type || part.data?.mime_type,
+                metadata: part.metadata || part.data?.metadata,
+                is_error: part.is_error ?? part.data?.is_error ?? false
+              };
+              toolResults.push(toolResult);
+            }
             // Handle nested data structure (fallback)
             if (part.type === 'text' && part.data?.text) {
               textContent += part.data.text;
@@ -93,19 +134,21 @@ function App() {
           });
         }
 
-        // Skip if message has no content yet (initial empty message)
-        if (!textContent && !reasoningContent) {
+        // Skip if message has no content and no tool calls
+        if (!textContent && !reasoningContent && toolCalls.length === 0 && toolResults.length === 0) {
           console.log('Skipping empty message');
           return;
         }
 
         const newMessage: Message = {
           id: data.ID || Date.now().toString(),
-          role: data.Role === 'assistant' ? 'assistant' : 'user',
-          content: textContent || reasoningContent || "...",
+          role: data.Role === 'assistant' ? 'assistant' : (data.Role === 'tool' ? 'tool' : 'user'),
+          content: textContent || reasoningContent || (toolCalls.length > 0 ? `Executing ${toolCalls.length} tool(s)...` : "..."),
           reasoning: reasoningContent || undefined,
           timestamp: data.UpdatedAt || data.CreatedAt || Date.now(),
-          isStreaming: data.Role === 'assistant' && (!textContent || textContent.length < 10)
+          isStreaming: data.Role === 'assistant' && (!textContent || textContent.length < 10),
+          toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+          toolResults: toolResults.length > 0 ? toolResults : undefined
         };
 
         console.log('Parsed message:', newMessage);
@@ -182,13 +225,55 @@ function App() {
     }
   };
 
+  const handlePermissionApprove = (toolCallId: string) => {
+    const permission = pendingPermissions.get(toolCallId);
+    if (!permission) return;
+
+    if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+      wsConnection.send(JSON.stringify({
+        type: 'permission_response',
+        id: permission.id,
+        tool_call_id: toolCallId,
+        granted: true
+      }));
+      setPendingPermissions(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(toolCallId);
+        return newMap;
+      });
+    }
+  };
+
+  const handlePermissionDeny = (toolCallId: string) => {
+    const permission = pendingPermissions.get(toolCallId);
+    if (!permission) return;
+
+    if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+      wsConnection.send(JSON.stringify({
+        type: 'permission_response',
+        id: permission.id,
+        tool_call_id: toolCallId,
+        granted: false,
+        denied: true
+      }));
+      setPendingPermissions(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(toolCallId);
+        return newMap;
+      });
+    }
+  };
+
   return (
     <div className="flex h-screen w-screen bg-[#1e1e1e] text-white overflow-hidden">
       {/* Left Sidebar: Chat */}
       <div className="w-[400px] shrink-0 h-full border-r border-gray-700">
         <ChatPanel 
           messages={messages} 
-          onSendMessage={handleSendMessage} 
+          onSendMessage={handleSendMessage}
+          pendingPermissions={pendingPermissions}
+          onPermissionApprove={handlePermissionApprove}
+          onPermissionDeny={handlePermissionDeny}
         />
       </div>
 

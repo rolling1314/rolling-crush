@@ -7,15 +7,50 @@ export type FileNode = {
   path: string;
 };
 
+// Tool call and result types
+export interface ToolCall {
+  id: string;
+  name: string;
+  input: string;
+  provider_executed?: boolean;
+  finished: boolean;
+}
+
+export interface ToolResult {
+  tool_call_id: string;
+  name: string;
+  content: string;
+  data?: string;
+  mime_type?: string;
+  metadata?: string;
+  is_error: boolean;
+}
+
+export interface FinishInfo {
+  reason: string;
+  time: number;
+  message?: string;
+  details?: string;
+}
+
 // Backend message structure
 export interface ContentPart {
-  type: 'text' | 'reasoning' | 'image_url' | 'tool_call' | 'tool_result';
-  data: {
-    text?: string;
-    thinking?: string;
-    signature?: string;
-    [key: string]: any;
-  };
+  type?: 'text' | 'reasoning' | 'image_url' | 'tool_call' | 'tool_result' | 'finish';
+  data?: any;
+  // Direct fields (actual backend structure)
+  text?: string;
+  thinking?: string;
+  signature?: string;
+  id?: string;
+  name?: string;
+  input?: string;
+  finished?: boolean;
+  tool_call_id?: string;
+  content?: string;
+  is_error?: boolean;
+  reason?: string;
+  time?: number;
+  [key: string]: any;
 }
 
 export interface BackendMessage {
@@ -30,12 +65,24 @@ export interface BackendMessage {
   IsSummaryMessage?: boolean;
 }
 
+// Permission types
+export interface PermissionRequest {
+  id: string;
+  session_id: string;
+  tool_call_id: string;
+  tool_name: string;
+  action?: string;
+}
+
 export type Message = {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'tool';
   content: string;
   reasoning?: string;
   timestamp: number;
   isStreaming?: boolean;
+  toolCalls?: ToolCall[];
+  toolResults?: ToolResult[];
+  finishInfo?: FinishInfo;
 };
 
