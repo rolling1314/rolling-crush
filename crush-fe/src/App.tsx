@@ -70,7 +70,11 @@ function App() {
 
     const fetchFiles = async () => {
       try {
-        const response = await fetch('/api/files');
+        const response = await fetch('http://localhost:8081/api/files', {
+          headers: {
+            'Authorization': `Bearer ${jwtToken}`,
+          },
+        });
         if (!response.ok) {
           throw new Error('Failed to fetch files');
         }
@@ -365,39 +369,41 @@ function App() {
     <div className="flex h-screen w-screen bg-[#1e1e1e] text-white overflow-hidden">
       {/* Left Sidebar: Chat (Resizable) */}
       <div 
-        className="shrink-0 h-full flex flex-col"
+        className="shrink-0 h-full flex flex-row"
         style={{ width: `${chatWidth}px` }}
       >
-        {/* User Info Header */}
-        <div className="px-4 py-2 bg-[#252526] border-b border-gray-700 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-sm font-semibold">
-              {currentUsername.charAt(0).toUpperCase()}
+        <div className="flex-1 flex flex-col h-full">
+          {/* User Info Header */}
+          <div className="px-4 py-2 bg-[#252526] border-b border-gray-700 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-sm font-semibold">
+                {currentUsername.charAt(0).toUpperCase()}
+              </div>
+              <span className="text-sm text-gray-300">{currentUsername}</span>
             </div>
-            <span className="text-sm text-gray-300">{currentUsername}</span>
+            <button
+              onClick={handleLogout}
+              className="p-1.5 hover:bg-gray-700 rounded-md transition-colors"
+              title="Logout"
+            >
+              <LogOut size={16} className="text-gray-400" />
+            </button>
           </div>
-          <button
-            onClick={handleLogout}
-            className="p-1.5 hover:bg-gray-700 rounded-md transition-colors"
-            title="Logout"
-          >
-            <LogOut size={16} className="text-gray-400" />
-          </button>
-        </div>
 
-        <div className="flex-1 h-full overflow-hidden">
-          <ChatPanel 
-            messages={messages} 
-            onSendMessage={handleSendMessage}
-            pendingPermissions={pendingPermissions}
-            onPermissionApprove={handlePermissionApprove}
-            onPermissionDeny={handlePermissionDeny}
-          />
+          <div className="flex-1 h-full overflow-hidden">
+            <ChatPanel 
+              messages={messages} 
+              onSendMessage={handleSendMessage}
+              pendingPermissions={pendingPermissions}
+              onPermissionApprove={handlePermissionApprove}
+              onPermissionDeny={handlePermissionDeny}
+            />
+          </div>
         </div>
         
         {/* Resize Handle */}
         <div
-          className="w-1 h-full bg-gray-700 hover:bg-blue-500 cursor-col-resize transition-colors relative group"
+          className="w-1 h-full bg-gray-700 hover:bg-blue-500 cursor-col-resize transition-colors relative shrink-0"
           onMouseDown={handleMouseDown}
         >
           <div className="absolute inset-y-0 -left-1 -right-1" />
