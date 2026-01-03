@@ -29,6 +29,7 @@ import (
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/internal/project"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/server"
 	"github.com/charmbracelet/crush/internal/session"
@@ -37,6 +38,7 @@ import (
 	"github.com/charmbracelet/crush/internal/tui/components/anim"
 	"github.com/charmbracelet/crush/internal/tui/styles"
 	"github.com/charmbracelet/crush/internal/update"
+	"github.com/charmbracelet/crush/internal/user"
 	"github.com/charmbracelet/crush/internal/version"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/charmtone"
@@ -47,6 +49,8 @@ type App struct {
 	Messages    message.Service
 	History     history.Service
 	Permissions permission.Service
+	Users       user.Service
+	Projects    project.Service
 
 	AgentCoordinator agent.Coordinator
 
@@ -76,6 +80,8 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 	sessions := session.NewService(q)
 	messages := message.NewService(q)
 	files := history.NewService(q, conn)
+	users := user.NewService(q)
+	projects := project.NewService(q)
 	skipPermissionsRequests := cfg.Permissions != nil && cfg.Permissions.SkipRequests
 	allowedTools := []string{}
 	if cfg.Permissions != nil && cfg.Permissions.AllowedTools != nil {
@@ -86,6 +92,8 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 		Sessions:    sessions,
 		Messages:    messages,
 		History:     files,
+		Users:       users,
+		Projects:    projects,
 		Permissions: permission.NewPermissionService(cfg.WorkingDir(), skipPermissionsRequests, allowedTools),
 		LSPClients:  csync.NewMap[string, *lsp.Client](),
 
@@ -98,7 +106,7 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 		tuiWG:           &sync.WaitGroup{},
 
 		WSServer:   server.New(),
-		HTTPServer: httpserver.New("8081"),
+		HTTPServer: httpserver.New("8081", users, projects, sessions),
 	}
 
 	// Register the handler for incoming WebSocket messages
@@ -181,7 +189,7 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 	if sessionID == "" {
 		if app.currentSessionID == "" {
 			// Create a default session if none exists
-			sess, err := app.Sessions.Create(context.Background(), "Web Session")
+			sess, err := app.Sessions.Create(context.Background(), "", "Web Session")
 			if err != nil {
 				slog.Error("Failed to create session", "error", err)
 				return
@@ -263,7 +271,7 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt 
 	}
 	title := titlePrefix + titleSuffix
 
-	sess, err := app.Sessions.Create(ctx, title)
+	sess, err := app.Sessions.Create(ctx, "", title)
 	if err != nil {
 		return fmt.Errorf("failed to create session for non-interactive mode: %w", err)
 	}

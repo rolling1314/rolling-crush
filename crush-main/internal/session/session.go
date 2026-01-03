@@ -15,6 +15,7 @@ import (
 type Session struct {
 	ID               string
 	ParentSessionID  string
+	ProjectID        string
 	Title            string
 	MessageCount     int64
 	PromptTokens     int64
@@ -27,11 +28,11 @@ type Session struct {
 
 type Service interface {
 	pubsub.Suscriber[Session]
-	Create(ctx context.Context, title string) (Session, error)
-	CreateTitleSession(ctx context.Context, parentSessionID string) (Session, error)
+	Create(ctx context.Context, projectID, title string) (Session, error)
+	CreateTitleSession(ctx context.Context, projectID, parentSessionID string) (Session, error)
 	CreateTaskSession(ctx context.Context, toolCallID, parentSessionID, title string) (Session, error)
 	Get(ctx context.Context, id string) (Session, error)
-	List(ctx context.Context) ([]Session, error)
+	List(ctx context.Context, projectID string) ([]Session, error)
 	Save(ctx context.Context, session Session) (Session, error)
 	Delete(ctx context.Context, id string) error
 
@@ -46,10 +47,11 @@ type service struct {
 	q db.Querier
 }
 
-func (s *service) Create(ctx context.Context, title string) (Session, error) {
+func (s *service) Create(ctx context.Context, projectID, title string) (Session, error) {
 	dbSession, err := s.q.CreateSession(ctx, db.CreateSessionParams{
-		ID:    uuid.New().String(),
-		Title: title,
+		ID:        uuid.New().String(),
+		ProjectID: sql.NullString{String: projectID, Valid: projectID != ""},
+		Title:     title,
 	})
 	if err != nil {
 		return Session{}, err
@@ -61,9 +63,17 @@ func (s *service) Create(ctx context.Context, title string) (Session, error) {
 }
 
 func (s *service) CreateTaskSession(ctx context.Context, toolCallID, parentSessionID, title string) (Session, error) {
+	// Get parent session to inherit project_id
+	parentSession, err := s.q.GetSessionByID(ctx, parentSessionID)
+	if err != nil {
+		return Session{}, err
+	}
+
+	sessionID := s.CreateAgentToolSessionID(parentSessionID, toolCallID)
 	dbSession, err := s.q.CreateSession(ctx, db.CreateSessionParams{
-		ID:              toolCallID,
+		ID:              sessionID,
 		ParentSessionID: sql.NullString{String: parentSessionID, Valid: true},
+		ProjectID:       parentSession.ProjectID,
 		Title:           title,
 	})
 	if err != nil {
@@ -71,20 +81,23 @@ func (s *service) CreateTaskSession(ctx context.Context, toolCallID, parentSessi
 	}
 	session := s.fromDBItem(dbSession)
 	s.Publish(pubsub.CreatedEvent, session)
+	event.SessionCreated()
 	return session, nil
 }
 
-func (s *service) CreateTitleSession(ctx context.Context, parentSessionID string) (Session, error) {
+func (s *service) CreateTitleSession(ctx context.Context, projectID, parentSessionID string) (Session, error) {
 	dbSession, err := s.q.CreateSession(ctx, db.CreateSessionParams{
-		ID:              "title-" + parentSessionID,
+		ID:              uuid.New().String(),
 		ParentSessionID: sql.NullString{String: parentSessionID, Valid: true},
-		Title:           "Generate a title",
+		ProjectID:       sql.NullString{String: projectID, Valid: projectID != ""},
+		Title:           "Generating Title...",
 	})
 	if err != nil {
 		return Session{}, err
 	}
 	session := s.fromDBItem(dbSession)
 	s.Publish(pubsub.CreatedEvent, session)
+	event.SessionCreated()
 	return session, nil
 }
 
@@ -130,8 +143,8 @@ func (s *service) Save(ctx context.Context, session Session) (Session, error) {
 	return session, nil
 }
 
-func (s *service) List(ctx context.Context) ([]Session, error) {
-	dbSessions, err := s.q.ListSessions(ctx)
+func (s *service) List(ctx context.Context, projectID string) ([]Session, error) {
+	dbSessions, err := s.q.ListSessions(ctx, sql.NullString{String: projectID, Valid: projectID != ""})
 	if err != nil {
 		return nil, err
 	}
@@ -146,6 +159,7 @@ func (s service) fromDBItem(item db.Session) Session {
 	return Session{
 		ID:               item.ID,
 		ParentSessionID:  item.ParentSessionID.String,
+		ProjectID:        item.ProjectID.String,
 		Title:            item.Title,
 		MessageCount:     item.MessageCount,
 		PromptTokens:     item.PromptTokens,

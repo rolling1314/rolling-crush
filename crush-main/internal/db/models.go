@@ -31,6 +31,18 @@ type Message struct {
 	IsSummaryMessage int64          `json:"is_summary_message"`
 }
 
+type Project struct {
+	ID            string         `json:"id"`
+	UserID        string         `json:"user_id"`
+	Name          string         `json:"name"`
+	Description   sql.NullString `json:"description"`
+	Host          string         `json:"host"`
+	Port          int32          `json:"port"`
+	WorkspacePath string         `json:"workspace_path"`
+	CreatedAt     int64          `json:"created_at"`
+	UpdatedAt     int64          `json:"updated_at"`
+}
+
 type Session struct {
 	ID               string         `json:"id"`
 	ParentSessionID  sql.NullString `json:"parent_session_id"`
@@ -42,4 +54,15 @@ type Session struct {
 	UpdatedAt        int64          `json:"updated_at"`
 	CreatedAt        int64          `json:"created_at"`
 	SummaryMessageID sql.NullString `json:"summary_message_id"`
+	ProjectID        sql.NullString `json:"project_id"`
+}
+
+type User struct {
+	ID           string         `json:"id"`
+	Username     string         `json:"username"`
+	Email        string         `json:"email"`
+	PasswordHash string         `json:"password_hash"`
+	AvatarUrl    sql.NullString `json:"avatar_url"`
+	CreatedAt    int64          `json:"created_at"`
+	UpdatedAt    int64          `json:"updated_at"`
 }

@@ -14,6 +14,7 @@ const createSession = `-- name: CreateSession :one
 INSERT INTO sessions (
     id,
     parent_session_id,
+    project_id,
     title,
     message_count,
     prompt_tokens,
@@ -30,15 +31,17 @@ INSERT INTO sessions (
     $5,
     $6,
     $7,
+    $8,
     null,
     EXTRACT(EPOCH FROM NOW()) * 1000,
     EXTRACT(EPOCH FROM NOW()) * 1000
-) RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id
+) RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, project_id
 `
 
 type CreateSessionParams struct {
 	ID               string         `json:"id"`
 	ParentSessionID  sql.NullString `json:"parent_session_id"`
+	ProjectID        sql.NullString `json:"project_id"`
 	Title            string         `json:"title"`
 	MessageCount     int64          `json:"message_count"`
 	PromptTokens     int64          `json:"prompt_tokens"`
@@ -50,6 +53,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 	row := q.queryRow(ctx, q.createSessionStmt, createSession,
 		arg.ID,
 		arg.ParentSessionID,
+		arg.ProjectID,
 		arg.Title,
 		arg.MessageCount,
 		arg.PromptTokens,
@@ -68,6 +72,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		&i.UpdatedAt,
 		&i.CreatedAt,
 		&i.SummaryMessageID,
+		&i.ProjectID,
 	)
 	return i, err
 }
@@ -83,7 +88,7 @@ func (q *Queries) DeleteSession(ctx context.Context, id string) error {
 }
 
 const getSessionByID = `-- name: GetSessionByID :one
-SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id
+SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, project_id
 FROM sessions
 WHERE id = $1 LIMIT 1
 `
@@ -102,19 +107,21 @@ func (q *Queries) GetSessionByID(ctx context.Context, id string) (Session, error
 		&i.UpdatedAt,
 		&i.CreatedAt,
 		&i.SummaryMessageID,
+		&i.ProjectID,
 	)
 	return i, err
 }
 
 const listSessions = `-- name: ListSessions :many
-SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id
+SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, project_id
 FROM sessions
 WHERE parent_session_id is NULL
+AND project_id = $1
 ORDER BY created_at DESC
 `
 
-func (q *Queries) ListSessions(ctx context.Context) ([]Session, error) {
-	rows, err := q.query(ctx, q.listSessionsStmt, listSessions)
+func (q *Queries) ListSessions(ctx context.Context, projectID sql.NullString) ([]Session, error) {
+	rows, err := q.query(ctx, q.listSessionsStmt, listSessions, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -133,6 +140,7 @@ func (q *Queries) ListSessions(ctx context.Context) ([]Session, error) {
 			&i.UpdatedAt,
 			&i.CreatedAt,
 			&i.SummaryMessageID,
+			&i.ProjectID,
 		); err != nil {
 			return nil, err
 		}
@@ -156,7 +164,7 @@ SET
     summary_message_id = $4,
     cost = $5
 WHERE id = $6
-RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id
+RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, project_id
 `
 
 type UpdateSessionParams struct {
@@ -189,6 +197,7 @@ func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) (S
 		&i.UpdatedAt,
 		&i.CreatedAt,
 		&i.SummaryMessageID,
+		&i.ProjectID,
 	)
 	return i, err
 }

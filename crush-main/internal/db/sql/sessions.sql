@@ -2,6 +2,7 @@
 INSERT INTO sessions (
     id,
     parent_session_id,
+    project_id,
     title,
     message_count,
     prompt_tokens,
@@ -18,6 +19,7 @@ INSERT INTO sessions (
     $5,
     $6,
     $7,
+    $8,
     null,
     EXTRACT(EPOCH FROM NOW()) * 1000,
     EXTRACT(EPOCH FROM NOW()) * 1000
@@ -32,6 +34,7 @@ WHERE id = $1 LIMIT 1;
 SELECT *
 FROM sessions
 WHERE parent_session_id is NULL
+AND project_id = $1
 ORDER BY created_at DESC;
 
 -- name: UpdateSession :one
