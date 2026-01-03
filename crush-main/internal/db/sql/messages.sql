@@ -1,12 +1,12 @@
 -- name: GetMessage :one
 SELECT *
 FROM messages
-WHERE id = ? LIMIT 1;
+WHERE id = $1 LIMIT 1;
 
 -- name: ListMessagesBySession :many
 SELECT *
 FROM messages
-WHERE session_id = ?
+WHERE session_id = $1
 ORDER BY created_at ASC;
 
 -- name: CreateMessage :one
@@ -21,23 +21,23 @@ INSERT INTO messages (
     created_at,
     updated_at
 ) VALUES (
-    ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'), strftime('%s', 'now')
+    $1, $2, $3, $4, $5, $6, $7, EXTRACT(EPOCH FROM NOW()) * 1000, EXTRACT(EPOCH FROM NOW()) * 1000
 )
 RETURNING *;
 
 -- name: UpdateMessage :exec
 UPDATE messages
 SET
-    parts = ?,
-    finished_at = ?,
-    updated_at = strftime('%s', 'now')
-WHERE id = ?;
+    parts = $1,
+    finished_at = $2,
+    updated_at = EXTRACT(EPOCH FROM NOW()) * 1000
+WHERE id = $3;
 
 
 -- name: DeleteMessage :exec
 DELETE FROM messages
-WHERE id = ?;
+WHERE id = $1;
 
 -- name: DeleteSessionMessages :exec
 DELETE FROM messages
-WHERE session_id = ?;
+WHERE session_id = $1;

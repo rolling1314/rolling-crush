@@ -19,7 +19,7 @@ INSERT INTO files (
     created_at,
     updated_at
 ) VALUES (
-    ?, ?, ?, ?, ?, strftime('%s', 'now'), strftime('%s', 'now')
+    $1, $2, $3, $4, $5, EXTRACT(EPOCH FROM NOW()) * 1000, EXTRACT(EPOCH FROM NOW()) * 1000
 )
 RETURNING id, session_id, path, content, version, created_at, updated_at
 `
@@ -55,7 +55,7 @@ func (q *Queries) CreateFile(ctx context.Context, arg CreateFileParams) (File, e
 
 const deleteFile = `-- name: DeleteFile :exec
 DELETE FROM files
-WHERE id = ?
+WHERE id = $1
 `
 
 func (q *Queries) DeleteFile(ctx context.Context, id string) error {
@@ -65,7 +65,7 @@ func (q *Queries) DeleteFile(ctx context.Context, id string) error {
 
 const deleteSessionFiles = `-- name: DeleteSessionFiles :exec
 DELETE FROM files
-WHERE session_id = ?
+WHERE session_id = $1
 `
 
 func (q *Queries) DeleteSessionFiles(ctx context.Context, sessionID string) error {
@@ -76,7 +76,7 @@ func (q *Queries) DeleteSessionFiles(ctx context.Context, sessionID string) erro
 const getFile = `-- name: GetFile :one
 SELECT id, session_id, path, content, version, created_at, updated_at
 FROM files
-WHERE id = ? LIMIT 1
+WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) GetFile(ctx context.Context, id string) (File, error) {
@@ -97,7 +97,7 @@ func (q *Queries) GetFile(ctx context.Context, id string) (File, error) {
 const getFileByPathAndSession = `-- name: GetFileByPathAndSession :one
 SELECT id, session_id, path, content, version, created_at, updated_at
 FROM files
-WHERE path = ? AND session_id = ?
+WHERE path = $1 AND session_id = $2
 ORDER BY version DESC, created_at DESC
 LIMIT 1
 `
@@ -125,7 +125,7 @@ func (q *Queries) GetFileByPathAndSession(ctx context.Context, arg GetFileByPath
 const listFilesByPath = `-- name: ListFilesByPath :many
 SELECT id, session_id, path, content, version, created_at, updated_at
 FROM files
-WHERE path = ?
+WHERE path = $1
 ORDER BY version DESC, created_at DESC
 `
 
@@ -163,7 +163,7 @@ func (q *Queries) ListFilesByPath(ctx context.Context, path string) ([]File, err
 const listFilesBySession = `-- name: ListFilesBySession :many
 SELECT id, session_id, path, content, version, created_at, updated_at
 FROM files
-WHERE session_id = ?
+WHERE session_id = $1
 ORDER BY version ASC, created_at ASC
 `
 
@@ -206,7 +206,7 @@ INNER JOIN (
     FROM files
     GROUP BY path
 ) latest ON f.path = latest.path AND f.version = latest.max_version AND f.created_at = latest.max_created_at
-WHERE f.session_id = ?
+WHERE f.session_id = $1
 ORDER BY f.path
 `
 

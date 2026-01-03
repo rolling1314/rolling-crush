@@ -22,7 +22,7 @@ INSERT INTO messages (
     created_at,
     updated_at
 ) VALUES (
-    ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'), strftime('%s', 'now')
+    $1, $2, $3, $4, $5, $6, $7, EXTRACT(EPOCH FROM NOW()) * 1000, EXTRACT(EPOCH FROM NOW()) * 1000
 )
 RETURNING id, session_id, role, parts, model, created_at, updated_at, finished_at, provider, is_summary_message
 `
@@ -65,7 +65,7 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (M
 
 const deleteMessage = `-- name: DeleteMessage :exec
 DELETE FROM messages
-WHERE id = ?
+WHERE id = $1
 `
 
 func (q *Queries) DeleteMessage(ctx context.Context, id string) error {
@@ -75,7 +75,7 @@ func (q *Queries) DeleteMessage(ctx context.Context, id string) error {
 
 const deleteSessionMessages = `-- name: DeleteSessionMessages :exec
 DELETE FROM messages
-WHERE session_id = ?
+WHERE session_id = $1
 `
 
 func (q *Queries) DeleteSessionMessages(ctx context.Context, sessionID string) error {
@@ -86,7 +86,7 @@ func (q *Queries) DeleteSessionMessages(ctx context.Context, sessionID string) e
 const getMessage = `-- name: GetMessage :one
 SELECT id, session_id, role, parts, model, created_at, updated_at, finished_at, provider, is_summary_message
 FROM messages
-WHERE id = ? LIMIT 1
+WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) GetMessage(ctx context.Context, id string) (Message, error) {
@@ -110,7 +110,7 @@ func (q *Queries) GetMessage(ctx context.Context, id string) (Message, error) {
 const listMessagesBySession = `-- name: ListMessagesBySession :many
 SELECT id, session_id, role, parts, model, created_at, updated_at, finished_at, provider, is_summary_message
 FROM messages
-WHERE session_id = ?
+WHERE session_id = $1
 ORDER BY created_at ASC
 `
 
@@ -151,10 +151,10 @@ func (q *Queries) ListMessagesBySession(ctx context.Context, sessionID string) (
 const updateMessage = `-- name: UpdateMessage :exec
 UPDATE messages
 SET
-    parts = ?,
-    finished_at = ?,
-    updated_at = strftime('%s', 'now')
-WHERE id = ?
+    parts = $1,
+    finished_at = $2,
+    updated_at = EXTRACT(EPOCH FROM NOW()) * 1000
+WHERE id = $3
 `
 
 type UpdateMessageParams struct {

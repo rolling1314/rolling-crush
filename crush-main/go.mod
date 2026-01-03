@@ -37,10 +37,10 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/invopop/jsonschema v0.13.0
 	github.com/joho/godotenv v1.5.1
+	github.com/lib/pq v1.10.9
 	github.com/lucasb-eyer/go-colorful v1.3.0
 	github.com/modelcontextprotocol/go-sdk v1.1.0
 	github.com/muesli/termenv v0.16.0
-	github.com/ncruces/go-sqlite3 v0.30.2
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
 	github.com/nxadm/tail v1.4.11
 	github.com/openai/openai-go/v2 v2.7.1
@@ -150,7 +150,6 @@ require (
 	github.com/muesli/mango-cobra v1.2.0 // indirect
 	github.com/muesli/mango-pflag v0.1.0 // indirect
 	github.com/muesli/roff v0.1.0 // indirect
-	github.com/ncruces/julianday v1.0.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
@@ -158,7 +157,6 @@ require (
 	github.com/sethvargo/go-retry v0.3.0 // indirect
 	github.com/sourcegraph/jsonrpc2 v0.2.1 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
-	github.com/tetratelabs/wazero v1.10.1 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
