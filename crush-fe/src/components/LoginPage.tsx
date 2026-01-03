@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { LogIn, AlertCircle } from 'lucide-react';
 
 interface LoginPageProps {
@@ -6,10 +7,11 @@ interface LoginPageProps {
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,16 +24,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await response.json();
 
       if (response.ok && data.success) {
-        // Store token in localStorage
         localStorage.setItem('jwt_token', data.token);
         localStorage.setItem('username', data.user.username);
+        localStorage.setItem('user_id', data.user.id);
         onLoginSuccess(data.token, data.user.username);
+        navigate('/projects');
       } else {
         setError(data.message || 'Login failed. Please try again.');
       }
@@ -46,7 +49,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#1e1e1e] via-[#252526] to-[#2d2d2d]">
       <div className="w-full max-w-md p-8 space-y-6 bg-[#252526] rounded-lg shadow-2xl border border-gray-700">
-        {/* Header */}
         <div className="text-center">
           <div className="flex justify-center mb-4">
             <div className="p-3 bg-blue-600 rounded-full">
@@ -55,11 +57,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           </div>
           <h1 className="text-3xl font-bold text-white">Welcome to Crush</h1>
           <p className="mt-2 text-sm text-gray-400">
-            Sign in to access your AI assistant
+            Sign in to access your projects
           </p>
         </div>
 
-        {/* Login Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
             <div className="flex items-center gap-2 p-3 bg-red-900/20 border border-red-700/50 rounded-md">
@@ -69,18 +70,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           )}
 
           <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-300 mb-2">
-              Username
+            <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
+              Email
             </label>
             <input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               required
               disabled={isLoading}
               className="w-full px-4 py-2 bg-[#3c3c3c] border border-gray-600 rounded-md text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              placeholder="Enter your username"
+              placeholder="Enter your email"
             />
           </div>
 
@@ -119,16 +120,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           </button>
         </form>
 
-        {/* Demo Credentials */}
-        <div className="pt-4 border-t border-gray-700">
-          <p className="text-xs text-gray-400 text-center mb-2">Demo Credentials:</p>
-          <div className="space-y-1 text-xs text-gray-500 text-center">
-            <p><span className="text-gray-400">Username:</span> admin <span className="text-gray-400">Password:</span> admin123</p>
-            <p><span className="text-gray-400">Username:</span> user <span className="text-gray-400">Password:</span> password123</p>
-          </div>
+        <div className="pt-4 border-t border-gray-700 text-center">
+          <p className="text-sm text-gray-400">
+            Don't have an account?{' '}
+            <button
+              onClick={() => navigate('/register')}
+              className="text-blue-500 hover:text-blue-400 font-medium"
+            >
+              Register
+            </button>
+          </p>
         </div>
       </div>
     </div>
   );
 };
-
