@@ -97,7 +97,7 @@ export const ChatPanel = ({
               )}
               
               {/* Main content */}
-              {msg.content && msg.content !== '...' && !msg.content.startsWith('Executing') && (
+              {msg.content && (
                 <div className={cn(
                   "p-3 rounded-lg text-sm leading-relaxed prose prose-invert prose-sm max-w-none streaming-content",
                   msg.role === 'user' 

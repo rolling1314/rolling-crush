@@ -1,13 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { X, Plus, MessageSquare, LogOut, ChevronDown, ChevronRight } from 'lucide-react';
 import axios from 'axios';
 import { ChatPanel } from '../components/ChatPanel';
 import { FileTree } from '../components/FileTree';
 import { CodeEditor } from '../components/CodeEditor';
-import { type FileNode, type Message } from '../types';
+import { type FileNode, type Message, type BackendMessage } from '../types';
 
 const API_URL = 'http://localhost:8081/api';
+const WS_URL = 'ws://localhost:8080/ws';
 
 interface Session {
   id: string;
@@ -41,6 +42,10 @@ export default function WorkspacePage() {
   const [activeFileId, setActiveFileId] = useState<string | null>(null);
   const [files, setFiles] = useState<FileNode[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
+  
+  // WebSocket connection
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<number | null>(null);
 
   const activeFile = openFiles.find(f => f.id === activeFileId) || null;
 
@@ -61,6 +66,117 @@ export default function WorkspacePage() {
       loadSessionMessages(currentSessionId);
     }
   }, [currentSessionId]);
+
+  // WebSocket 连接管理
+  useEffect(() => {
+    connectWebSocket();
+    
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const connectWebSocket = useCallback(() => {
+    const token = localStorage.getItem('jwt_token');
+    if (!token) {
+      console.error('No JWT token found');
+      return;
+    }
+
+    // 创建 WebSocket 连接，将 token 作为查询参数
+    const ws = new WebSocket(`${WS_URL}?token=${encodeURIComponent(token)}`);
+    
+    ws.onopen = () => {
+      console.log('WebSocket connected');
+      wsRef.current = ws;
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        handleWebSocketMessage(data);
+      } catch (error) {
+        console.error('Failed to parse WebSocket message:', error);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected, attempting to reconnect...');
+      wsRef.current = null;
+      
+      // 5秒后重连
+      reconnectTimeoutRef.current = setTimeout(() => {
+        connectWebSocket();
+      }, 5000);
+    };
+  }, []);
+
+  const handleWebSocketMessage = (data: any) => {
+    console.log('WebSocket message received:', data);
+    
+    // 后端直接广播 message.Message 对象
+    // 检查是否是消息对象（有 ID, Role, Parts 等字段）
+    if (data.ID && data.Role && data.Parts) {
+      const convertedMsg = convertBackendMessageToFrontend(data);
+      
+      setMessages(prev => {
+        // 检查消息是否已存在
+        const existingIndex = prev.findIndex(m => m.id === convertedMsg.id);
+        
+        if (existingIndex !== -1) {
+          // 更新现有消息（流式更新）
+          const newMessages = [...prev];
+          newMessages[existingIndex] = convertedMsg;
+          return newMessages;
+        } else {
+          // 添加新消息
+          return [...prev, convertedMsg];
+        }
+      });
+    } else if (data.Type === 'permission_request' || data.type === 'permission_request') {
+      // 处理权限请求
+      console.log('Permission request:', data);
+      // TODO: 显示权限请求UI
+    }
+  };
+
+  const convertBackendMessageToFrontend = (backendMsg: any): Message => {
+    let textContent = '';
+    let reasoning = '';
+    
+    if (backendMsg.Parts && Array.isArray(backendMsg.Parts)) {
+      backendMsg.Parts.forEach((part: any) => {
+        // Parts 直接包含字段
+        if (part.text) {
+          textContent += part.text;
+        }
+        if (part.thinking) {
+          reasoning = part.thinking;
+        }
+      });
+    }
+    
+    // 检查消息是否完成（有 finish part）
+    const isFinished = backendMsg.Parts?.some((part: any) => part.reason);
+    
+    return {
+      id: backendMsg.ID || backendMsg.id,
+      role: backendMsg.Role || backendMsg.role,
+      content: textContent,
+      reasoning: reasoning || undefined,
+      timestamp: backendMsg.CreatedAt || backendMsg.created_at || Date.now(),
+      isStreaming: !isFinished, // 如果没有 finish reason，说明还在流式传输
+    };
+  };
 
   const loadProjectInfo = async () => {
     try {
@@ -127,19 +243,22 @@ export default function WorkspacePage() {
         headers: { Authorization: `Bearer ${token}` }
       });
       
+      console.log('Loaded session messages:', response.data);
+      
       // 转换后端消息格式为前端格式
       const backendMessages = response.data || [];
       const convertedMessages: Message[] = backendMessages.map((msg: any) => {
-        // 解析 Parts 字段
         let textContent = '';
         let reasoning = '';
         
         if (msg.Parts && Array.isArray(msg.Parts)) {
           msg.Parts.forEach((part: any) => {
-            if (part.type === 'text' && part.data?.text) {
-              textContent += part.data.text;
-            } else if (part.type === 'reasoning' && part.data?.thinking) {
-              reasoning = part.data.thinking;
+            // Parts 直接包含字段，没有 type/data 包装
+            if (part.text) {
+              textContent += part.text;
+            }
+            if (part.thinking) {
+              reasoning = part.thinking;
             }
           });
         }
@@ -154,6 +273,7 @@ export default function WorkspacePage() {
         };
       });
       
+      console.log('Converted messages:', convertedMessages);
       setMessages(convertedMessages);
     } catch (error) {
       console.error('Failed to load session messages:', error);
@@ -183,8 +303,35 @@ export default function WorkspacePage() {
   };
 
   const handleSendMessage = (content: string) => {
-    // TODO: WebSocket 集成
-    console.log('Send message:', content);
+    if (!currentSessionId) {
+      console.error('No session selected');
+      return;
+    }
+
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      console.error('WebSocket not connected');
+      return;
+    }
+
+    // 添加用户消息到UI
+    const userMessage: Message = {
+      id: `temp-${Date.now()}`,
+      role: 'user',
+      content,
+      timestamp: Date.now(),
+      isStreaming: false,
+    };
+    setMessages(prev => [...prev, userMessage]);
+
+    // 通过 WebSocket 发送消息
+    const messageData = {
+      type: 'message',
+      content,
+      sessionID: currentSessionId,
+    };
+    
+    wsRef.current.send(JSON.stringify(messageData));
+    console.log('Message sent via WebSocket:', messageData);
   };
 
   const handleFileSelect = (file: FileNode) => {
