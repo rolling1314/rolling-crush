@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { X, Plus, MessageSquare, LogOut } from 'lucide-react';
+import { X, Plus, MessageSquare, LogOut, ChevronDown, ChevronRight } from 'lucide-react';
 import axios from 'axios';
 import { ChatPanel } from '../components/ChatPanel';
 import { FileTree } from '../components/FileTree';
@@ -34,6 +34,7 @@ export default function WorkspacePage() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
   const [newSessionTitle, setNewSessionTitle] = useState('');
+  const [sessionsCollapsed, setSessionsCollapsed] = useState(false);
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [openFiles, setOpenFiles] = useState<FileNode[]>([]);
@@ -53,6 +54,13 @@ export default function WorkspacePage() {
       loadFiles(project.workspace_path);
     }
   }, [project]);
+
+  // 当选择会话时加载消息历史
+  useEffect(() => {
+    if (currentSessionId) {
+      loadSessionMessages(currentSessionId);
+    }
+  }, [currentSessionId]);
 
   const loadProjectInfo = async () => {
     try {
@@ -112,6 +120,47 @@ export default function WorkspacePage() {
     }
   };
 
+  const loadSessionMessages = async (sessionId: string) => {
+    try {
+      const token = localStorage.getItem('jwt_token');
+      const response = await axios.get(`${API_URL}/sessions/${sessionId}/messages`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      // 转换后端消息格式为前端格式
+      const backendMessages = response.data || [];
+      const convertedMessages: Message[] = backendMessages.map((msg: any) => {
+        // 解析 Parts 字段
+        let textContent = '';
+        let reasoning = '';
+        
+        if (msg.Parts && Array.isArray(msg.Parts)) {
+          msg.Parts.forEach((part: any) => {
+            if (part.type === 'text' && part.data?.text) {
+              textContent += part.data.text;
+            } else if (part.type === 'reasoning' && part.data?.thinking) {
+              reasoning = part.data.thinking;
+            }
+          });
+        }
+        
+        return {
+          id: msg.ID || msg.id,
+          role: msg.Role || msg.role,
+          content: textContent,
+          reasoning: reasoning || undefined,
+          timestamp: msg.CreatedAt || msg.created_at || Date.now(),
+          isStreaming: false,
+        };
+      });
+      
+      setMessages(convertedMessages);
+    } catch (error) {
+      console.error('Failed to load session messages:', error);
+      setMessages([]);
+    }
+  };
+
   const createSession = async () => {
     if (!newSessionTitle.trim()) return;
     
@@ -165,68 +214,112 @@ export default function WorkspacePage() {
   };
 
   return (
-    <div className="flex h-screen bg-[#1e1e1e]">
-      {/* 左侧：会话列表 */}
-      <div className="w-64 bg-[#252526] border-r border-gray-700 flex flex-col">
-        <div className="p-4 border-b border-gray-700">
-          <button
-            onClick={() => navigate('/projects')}
-            className="text-gray-400 hover:text-white text-sm mb-3"
-          >
-            ← Back to Projects
-          </button>
-          <div className="flex items-center justify-between">
-            <h2 className="text-white font-semibold">Sessions</h2>
+    <div className="flex h-screen w-screen bg-[#1e1e1e] overflow-hidden">
+      {/* 最左侧：会话列表（可折叠） */}
+      <div className={`${sessionsCollapsed ? 'w-12' : 'w-64'} bg-[#252526] border-r border-gray-700 flex flex-col transition-all duration-300`}>
+        {sessionsCollapsed ? (
+          // 折叠状态
+          <div className="flex flex-col h-full">
             <button
-              onClick={() => setShowNewSessionModal(true)}
-              className="p-1 hover:bg-gray-700 rounded"
-              title="New Session"
+              onClick={() => setSessionsCollapsed(false)}
+              className="p-3 hover:bg-gray-700 border-b border-gray-700"
+              title="Expand Sessions"
             >
-              <Plus size={18} className="text-gray-400" />
+              <ChevronRight size={18} className="text-gray-400" />
+            </button>
+            <div className="flex-1"></div>
+            <button
+              onClick={handleLogout}
+              className="p-3 hover:bg-gray-700 border-t border-gray-700"
+              title="Logout"
+            >
+              <LogOut size={18} className="text-gray-400" />
             </button>
           </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
-          {sessions.map(session => (
-            <div
-              key={session.id}
-              onClick={() => setCurrentSessionId(session.id)}
-              className={`p-3 cursor-pointer border-b border-gray-700 hover:bg-gray-700 ${
-                currentSessionId === session.id ? 'bg-gray-700' : ''
-              }`}
-            >
-              <div className="flex items-start gap-2">
-                <MessageSquare size={16} className="text-gray-400 mt-1 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-white text-sm truncate">{session.title}</div>
-                  <div className="text-gray-500 text-xs">{session.message_count} messages</div>
+        ) : (
+          // 展开状态
+          <>
+            <div className="p-4 border-b border-gray-700">
+              <button
+                onClick={() => navigate('/projects')}
+                className="text-gray-400 hover:text-white text-sm mb-3"
+              >
+                ← Back to Projects
+              </button>
+              <div className="flex items-center justify-between">
+                <h2 className="text-white font-semibold">Sessions</h2>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setShowNewSessionModal(true)}
+                    className="p-1 hover:bg-gray-700 rounded"
+                    title="New Session"
+                  >
+                    <Plus size={18} className="text-gray-400" />
+                  </button>
+                  <button
+                    onClick={() => setSessionsCollapsed(true)}
+                    className="p-1 hover:bg-gray-700 rounded"
+                    title="Collapse"
+                  >
+                    <ChevronDown size={18} className="text-gray-400" />
+                  </button>
                 </div>
               </div>
             </div>
-          ))}
-          
-          {sessions.length === 0 && (
-            <div className="p-4 text-center text-gray-500 text-sm">
-              No sessions yet.<br/>Click + to create one.
-            </div>
-          )}
-        </div>
 
-        {/* 退出登录按钮 */}
-        <div className="p-3 border-t border-gray-700">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
-          >
-            <LogOut size={16} />
-            <span className="text-sm">Logout</span>
-          </button>
-        </div>
+            <div className="flex-1 overflow-y-auto">
+              {sessions.map(session => (
+                <div
+                  key={session.id}
+                  onClick={() => setCurrentSessionId(session.id)}
+                  className={`p-3 cursor-pointer border-b border-gray-700 hover:bg-gray-700 ${
+                    currentSessionId === session.id ? 'bg-gray-700' : ''
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    <MessageSquare size={16} className="text-gray-400 mt-1 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-white text-sm truncate">{session.title}</div>
+                      <div className="text-gray-500 text-xs">{session.message_count} messages</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              
+              {sessions.length === 0 && (
+                <div className="p-4 text-center text-gray-500 text-sm">
+                  No sessions yet.<br/>Click + to create one.
+                </div>
+              )}
+            </div>
+
+            {/* 退出登录按钮 */}
+            <div className="p-3 border-t border-gray-700">
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+              >
+                <LogOut size={16} />
+                <span className="text-sm">Logout</span>
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* 中间：文件树和编辑器 */}
-      <div className="flex-1 flex">
+      {/* 左侧：AI 助手 */}
+      <div className="w-[350px] shrink-0 border-r border-gray-700 flex flex-col">
+        <ChatPanel 
+          messages={messages} 
+          onSendMessage={handleSendMessage}
+          pendingPermissions={new Map()}
+          onPermissionApprove={() => {}}
+          onPermissionDeny={() => {}}
+        />
+      </div>
+
+      {/* 右侧：文件树和编辑器 */}
+      <div className="flex-1 flex min-w-0">
         <div className="w-[250px] shrink-0 border-r border-gray-700 bg-[#1e1e1e]">
           {loadingFiles ? (
             <div className="flex items-center justify-center h-full text-gray-500 text-sm">
@@ -283,17 +376,6 @@ export default function WorkspacePage() {
             </div>
           )}
         </div>
-      </div>
-
-      {/* 右侧：聊天面板 */}
-      <div className="w-[400px] shrink-0 border-l border-gray-700">
-        <ChatPanel 
-          messages={messages} 
-          onSendMessage={handleSendMessage}
-          pendingPermissions={new Map()}
-          onPermissionApprove={() => {}}
-          onPermissionDeny={() => {}}
-        />
       </div>
 
       {/* 新建会话模态框 */}

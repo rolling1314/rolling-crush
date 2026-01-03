@@ -106,7 +106,7 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 		tuiWG:           &sync.WaitGroup{},
 
 		WSServer:   server.New(),
-		HTTPServer: httpserver.New("8081", users, projects, sessions),
+		HTTPServer: httpserver.New("8081", users, projects, sessions, messages),
 	}
 
 	// Register the handler for incoming WebSocket messages

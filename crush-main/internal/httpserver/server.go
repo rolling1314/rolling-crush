@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/charmbracelet/crush/internal/auth"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/project"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/user"
@@ -22,9 +23,10 @@ type Server struct {
 	userService    user.Service
 	projectService project.Service
 	sessionService session.Service
+	messageService message.Service
 }
 
-func New(port string, userService user.Service, projectService project.Service, sessionService session.Service) *Server {
+func New(port string, userService user.Service, projectService project.Service, sessionService session.Service, messageService message.Service) *Server {
 	gin.SetMode(gin.DebugMode)
 	engine := gin.Default()
 
@@ -34,6 +36,7 @@ func New(port string, userService user.Service, projectService project.Service, 
 		userService:    userService,
 		projectService: projectService,
 		sessionService: sessionService,
+		messageService: messageService,
 	}
 }
 
@@ -137,6 +140,7 @@ func (s *Server) Start() error {
 		sessionGroup.Use(auth.GinAuthMiddleware())
 		{
 			sessionGroup.POST("", s.handleCreateSession)
+			sessionGroup.GET("/:id/messages", s.handleGetSessionMessages)
 		}
 
 		apiGroup.GET("/files", auth.GinAuthMiddleware(), s.handleGetFiles)
@@ -399,6 +403,22 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 		CreatedAt:        sess.CreatedAt,
 		UpdatedAt:        sess.UpdatedAt,
 	})
+}
+
+func (s *Server) handleGetSessionMessages(c *gin.Context) {
+	sessionID := c.Param("id")
+	if sessionID == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "session_id is required"})
+		return
+	}
+
+	messages, err := s.messageService.List(c.Request.Context(), sessionID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, messages)
 }
 
 func (s *Server) handleGetFiles(c *gin.Context) {
