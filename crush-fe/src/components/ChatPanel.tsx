@@ -82,6 +82,13 @@ export const ChatPanel = ({
                   {msg.toolCalls.map((toolCall) => {
                     const result = msg.toolResults?.find(r => r.tool_call_id === toolCall.id);
                     const needsPermission = pendingPermissions.has(toolCall.id);
+                    console.log('Rendering ToolCall:', {
+                      id: toolCall.id,
+                      name: toolCall.name,
+                      needsPermission,
+                      pendingPermissionsSize: pendingPermissions.size,
+                      pendingKeys: Array.from(pendingPermissions.keys())
+                    });
                     return (
                       <ToolCallDisplay
                         key={toolCall.id}

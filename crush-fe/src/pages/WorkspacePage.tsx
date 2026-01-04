@@ -6,7 +6,7 @@ import { ChatPanel } from '../components/ChatPanel';
 import { FileTree } from '../components/FileTree';
 import { CodeEditor } from '../components/CodeEditor';
 import { ModelSelector } from '../components/ModelSelector';
-import { type FileNode, type Message, type BackendMessage } from '../types';
+import { type FileNode, type Message, type PermissionRequest, type ToolCall, type ToolResult } from '../types';
 
 const API_URL = 'http://localhost:8081/api';
 const WS_URL = 'ws://localhost:8080/ws';
@@ -39,19 +39,6 @@ interface SessionModelConfig {
   think?: boolean;
 }
 
-interface Provider {
-  id: string;
-  name: string;
-  base_url: string;
-  type: string;
-}
-
-interface Model {
-  id: string;
-  name: string;
-  default_max_tokens: number;
-}
-
 export default function WorkspacePage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -64,10 +51,6 @@ export default function WorkspacePage() {
   const [sessionsCollapsed, setSessionsCollapsed] = useState(false);
   
   // Model selection state
-  const [providers, setProviders] = useState<Provider[]>([]);
-  const [models, setModels] = useState<Model[]>([]);
-  const [selectedProvider, setSelectedProvider] = useState<string>('');
-  const [selectedModel, setSelectedModel] = useState<string>('');
   const [modelConfig, setModelConfig] = useState<SessionModelConfig>({
     provider: '',
     model: '',
@@ -79,6 +62,9 @@ export default function WorkspacePage() {
   const [activeFileId, setActiveFileId] = useState<string | null>(null);
   const [files, setFiles] = useState<FileNode[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
+  
+  // Pending permissions state
+  const [pendingPermissions, setPendingPermissions] = useState<Map<string, PermissionRequest>>(new Map());
   
   // WebSocket connection
   const wsRef = useRef<WebSocket | null>(null);
@@ -181,14 +167,39 @@ export default function WorkspacePage() {
       });
     } else if (data.Type === 'permission_request' || data.type === 'permission_request') {
       // 处理权限请求
-      console.log('Permission request:', data);
-      // TODO: 显示权限请求UI
+      console.log('=== Permission request received ===', data);
+      const request: PermissionRequest = {
+        id: data.id,
+        session_id: data.session_id,
+        tool_call_id: data.tool_call_id,
+        tool_name: data.tool_name,
+        action: data.action
+      };
+      
+      console.log('Adding permission to map, tool_call_id:', request.tool_call_id);
+      setPendingPermissions(prev => {
+        const next = new Map(prev);
+        next.set(request.tool_call_id, request);
+        console.log('Pending permissions now has', next.size, 'items:', Array.from(next.keys()));
+        return next;
+      });
+    } else if (data.Type === 'permission_notification' || data.type === 'permission_notification') {
+      // 处理权限结果通知
+      console.log('Permission notification:', data);
+      setPendingPermissions(prev => {
+        const next = new Map(prev);
+        next.delete(data.tool_call_id);
+        console.log('Removed permission, remaining:', next.size);
+        return next;
+      });
     }
   };
 
   const convertBackendMessageToFrontend = (backendMsg: any): Message => {
     let textContent = '';
     let reasoning = '';
+    const toolCalls: ToolCall[] = [];
+    const toolResults: ToolResult[] = [];
     
     if (backendMsg.Parts && Array.isArray(backendMsg.Parts)) {
       backendMsg.Parts.forEach((part: any) => {
@@ -198,6 +209,29 @@ export default function WorkspacePage() {
         }
         if (part.thinking) {
           reasoning = part.thinking;
+        }
+        // 解析 tool_call
+        if (part.name && part.input !== undefined && (part.id || part.ID)) {
+          const toolCall: ToolCall = {
+            id: part.id || part.ID,
+            name: part.name,
+            input: part.input,
+            finished: part.finished ?? true,
+            provider_executed: part.provider_executed ?? false
+          };
+          toolCalls.push(toolCall);
+          console.log('Found tool call:', toolCall.id, toolCall.name);
+        }
+        // 解析 tool_result
+        if (part.content !== undefined && (part.tool_call_id || part.ToolCallID)) {
+          const toolResult: ToolResult = {
+            tool_call_id: part.tool_call_id || part.ToolCallID,
+            name: part.name || '',
+            content: part.content,
+            is_error: part.is_error ?? false
+          };
+          toolResults.push(toolResult);
+          console.log('Found tool result for:', toolResult.tool_call_id);
         }
       });
     }
@@ -212,6 +246,8 @@ export default function WorkspacePage() {
       reasoning: reasoning || undefined,
       timestamp: backendMsg.CreatedAt || backendMsg.created_at || Date.now(),
       isStreaming: !isFinished, // 如果没有 finish reason，说明还在流式传输
+      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+      toolResults: toolResults.length > 0 ? toolResults : undefined,
     };
   };
 
@@ -391,6 +427,37 @@ export default function WorkspacePage() {
     console.log('Message sent via WebSocket:', messageData);
   };
 
+  const handlePermissionResponse = (toolCallId: string, granted: boolean) => {
+    const request = pendingPermissions.get(toolCallId);
+    if (!request) {
+      console.error('Permission request not found for tool_call_id:', toolCallId);
+      return;
+    }
+
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      console.error('WebSocket not connected');
+      return;
+    }
+
+    const response = {
+      type: 'permission_response',
+      id: request.id,
+      tool_call_id: toolCallId,
+      granted,
+      denied: !granted
+    };
+
+    wsRef.current.send(JSON.stringify(response));
+    console.log('Permission response sent:', response);
+
+    // Optimistically remove from pending
+    setPendingPermissions(prev => {
+      const next = new Map(prev);
+      next.delete(toolCallId);
+      return next;
+    });
+  };
+
   const handleFileSelect = (file: FileNode) => {
     if (!openFiles.some(f => f.id === file.id)) {
       setOpenFiles(prev => [...prev, file]);
@@ -516,9 +583,9 @@ export default function WorkspacePage() {
         <ChatPanel 
           messages={messages} 
           onSendMessage={handleSendMessage}
-          pendingPermissions={new Map()}
-          onPermissionApprove={() => {}}
-          onPermissionDeny={() => {}}
+          pendingPermissions={pendingPermissions}
+          onPermissionApprove={(toolCallId) => handlePermissionResponse(toolCallId, true)}
+          onPermissionDeny={(toolCallId) => handlePermissionResponse(toolCallId, false)}
         />
       </div>
 

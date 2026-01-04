@@ -21,6 +21,14 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
   const [isParamsExpanded, setIsParamsExpanded] = useState(false);
   const [isResultExpanded, setIsResultExpanded] = useState(true);
   
+  console.log('ToolCallDisplay rendering:', {
+    toolCallId: toolCall.id,
+    needsPermission,
+    hasOnApprove: !!onApprove,
+    hasOnDeny: !!onDeny,
+    willShowButtons: needsPermission && !!onApprove && !!onDeny
+  });
+  
   const isPending = !toolCall.finished && !result;
   const isError = result?.is_error;
   const isSuccess = result && !result.is_error;
