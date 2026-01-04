@@ -5,6 +5,7 @@ import axios from 'axios';
 import { ChatPanel } from '../components/ChatPanel';
 import { FileTree } from '../components/FileTree';
 import { CodeEditor } from '../components/CodeEditor';
+import { ModelSelector } from '../components/ModelSelector';
 import { type FileNode, type Message, type BackendMessage } from '../types';
 
 const API_URL = 'http://localhost:8081/api';
@@ -26,6 +27,31 @@ interface Project {
   workspace_path: string;
 }
 
+interface SessionModelConfig {
+  provider: string;
+  model: string;
+  base_url?: string;
+  api_key?: string;
+  max_tokens?: number;
+  temperature?: number;
+  top_p?: number;
+  reasoning_effort?: string;
+  think?: boolean;
+}
+
+interface Provider {
+  id: string;
+  name: string;
+  base_url: string;
+  type: string;
+}
+
+interface Model {
+  id: string;
+  name: string;
+  default_max_tokens: number;
+}
+
 export default function WorkspacePage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -36,6 +62,17 @@ export default function WorkspacePage() {
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
   const [newSessionTitle, setNewSessionTitle] = useState('');
   const [sessionsCollapsed, setSessionsCollapsed] = useState(false);
+  
+  // Model selection state
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [models, setModels] = useState<Model[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState<string>('');
+  const [selectedModel, setSelectedModel] = useState<string>('');
+  const [modelConfig, setModelConfig] = useState<SessionModelConfig>({
+    provider: '',
+    model: '',
+    max_tokens: 4096,
+  });
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [openFiles, setOpenFiles] = useState<FileNode[]>([]);
@@ -282,23 +319,43 @@ export default function WorkspacePage() {
   };
 
   const createSession = async () => {
-    if (!newSessionTitle.trim()) return;
+    if (!newSessionTitle.trim()) {
+      alert('Please enter a session title');
+      return;
+    }
+    
+    if (!modelConfig.provider || !modelConfig.model) {
+      alert('Please select a provider and model');
+      return;
+    }
+
+    if (!modelConfig.api_key || !modelConfig.api_key.trim()) {
+      alert('Please enter an API key');
+      return;
+    }
     
     try {
       const token = localStorage.getItem('jwt_token');
       const response = await axios.post(`${API_URL}/sessions`, {
         project_id: projectId,
-        title: newSessionTitle
+        title: newSessionTitle,
+        model_config: modelConfig
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
       setShowNewSessionModal(false);
       setNewSessionTitle('');
+      setModelConfig({
+        provider: '',
+        model: '',
+        max_tokens: 4096,
+      });
       loadSessions();
       setCurrentSessionId(response.data.id);
     } catch (error) {
       console.error('Failed to create session:', error);
+      alert('Failed to create session. Please try again.');
     }
   };
 
@@ -528,22 +585,36 @@ export default function WorkspacePage() {
       {/* 新建会话模态框 */}
       {showNewSessionModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-[#252526] p-6 rounded-lg w-96 border border-gray-700">
+          <div className="bg-[#252526] p-6 rounded-lg w-[500px] max-h-[80vh] overflow-y-auto border border-gray-700">
             <h2 className="text-xl font-bold text-white mb-4">New Session</h2>
-            <input
-              type="text"
-              placeholder="Session title..."
-              value={newSessionTitle}
-              onChange={e => setNewSessionTitle(e.target.value)}
-              onKeyPress={e => e.key === 'Enter' && createSession()}
-              className="w-full px-4 py-2 bg-[#3c3c3c] border border-gray-600 rounded text-white mb-4 focus:outline-none focus:border-blue-500"
-              autoFocus
-            />
-            <div className="flex gap-2">
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Session Title
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter session title..."
+                  value={newSessionTitle}
+                  onChange={e => setNewSessionTitle(e.target.value)}
+                  onKeyPress={e => e.key === 'Enter' && createSession()}
+                  className="w-full px-4 py-2 bg-[#3c3c3c] border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+                  autoFocus
+                />
+              </div>
+
+              <ModelSelector 
+                onConfigChange={(config) => setModelConfig(config)}
+                initialConfig={modelConfig}
+              />
+            </div>
+
+            <div className="flex gap-2 mt-6">
               <button
                 onClick={createSession}
-                disabled={!newSessionTitle.trim()}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                disabled={!newSessionTitle.trim() || !modelConfig.provider || !modelConfig.model || !modelConfig.api_key}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Create
               </button>
