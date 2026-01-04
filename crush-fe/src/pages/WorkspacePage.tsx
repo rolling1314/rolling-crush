@@ -372,6 +372,8 @@ export default function WorkspacePage() {
     
     try {
       const token = localStorage.getItem('jwt_token');
+      
+      // 直接创建session，配置会保存到session_model_configs表
       const response = await axios.post(`${API_URL}/sessions`, {
         project_id: projectId,
         title: newSessionTitle,
@@ -389,9 +391,9 @@ export default function WorkspacePage() {
       });
       loadSessions();
       setCurrentSessionId(response.data.id);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create session:', error);
-      alert('Failed to create session. Please try again.');
+      alert('Failed to create session: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -674,6 +676,7 @@ export default function WorkspacePage() {
               <ModelSelector 
                 onConfigChange={(config) => setModelConfig(config)}
                 initialConfig={modelConfig}
+                showAdvanced={false}
               />
             </div>
 

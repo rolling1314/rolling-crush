@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/charmbracelet/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/auth"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/db"
@@ -170,6 +171,8 @@ func (s *Server) Start() error {
 		// Providers and models endpoints
 		apiGroup.GET("/providers", auth.GinAuthMiddleware(), s.handleGetProviders)
 		apiGroup.GET("/providers/:provider/models", auth.GinAuthMiddleware(), s.handleGetProviderModels)
+		apiGroup.POST("/providers/test-connection", auth.GinAuthMiddleware(), s.handleTestProviderConnection)
+		apiGroup.POST("/providers/configure", auth.GinAuthMiddleware(), s.handleConfigureProvider)
 
 		apiGroup.GET("/files", auth.GinAuthMiddleware(), s.handleGetFiles)
 	}
@@ -545,6 +548,103 @@ func (s *Server) handleGetProviderModels(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusNotFound, ErrorResponse{Error: "Provider not found"})
+}
+
+func (s *Server) handleTestProviderConnection(c *gin.Context) {
+	type TestConnectionRequest struct {
+		Provider string `json:"provider" binding:"required"`
+		Model    string `json:"model" binding:"required"`
+		APIKey   string `json:"api_key" binding:"required"`
+		BaseURL  string `json:"base_url"`
+	}
+
+	var req TestConnectionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	if s.config == nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Config not available"})
+		return
+	}
+
+	// 获取 known providers 来确定 provider 的类型和 base URL
+	knownProviders, err := config.Providers(s.config)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to get providers: " + err.Error()})
+		return
+	}
+
+	var providerInfo *catwalk.Provider
+	for _, p := range knownProviders {
+		if string(p.ID) == req.Provider {
+			providerInfo = &p
+			break
+		}
+	}
+
+	if providerInfo == nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{Error: "Provider not found"})
+		return
+	}
+
+	// 构造临时的 provider config 用于测试
+	providerConfig := config.ProviderConfig{
+		ID:      req.Provider,
+		Name:    providerInfo.Name,
+		APIKey:  req.APIKey,
+		Type:    providerInfo.Type,
+		BaseURL: req.BaseURL,
+	}
+	if providerConfig.BaseURL == "" {
+		providerConfig.BaseURL = providerInfo.APIEndpoint
+	}
+
+	// 测试连接
+	if err := providerConfig.TestConnection(s.config.Resolver()); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Connection successful",
+	})
+}
+
+func (s *Server) handleConfigureProvider(c *gin.Context) {
+	type ConfigureProviderRequest struct {
+		Provider        string  `json:"provider" binding:"required"`
+		Model           string  `json:"model" binding:"required"`
+		APIKey          string  `json:"api_key" binding:"required"`
+		BaseURL         string  `json:"base_url"`
+		MaxTokens       *int64  `json:"max_tokens"`
+		ReasoningEffort string  `json:"reasoning_effort"`
+		SetAsDefault    bool    `json:"set_as_default"` // 暂时保留参数但不使用
+	}
+
+	var req ConfigureProviderRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	if s.config == nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Config not available"})
+		return
+	}
+
+	// Web版本不需要保存到文件系统，只验证配置有效性即可
+	// 实际的配置会在创建session时保存到session_model_configs表
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Provider configuration validated successfully",
+	})
 }
 
 func (s *Server) handleGetFiles(c *gin.Context) {

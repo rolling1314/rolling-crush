@@ -31,9 +31,10 @@ interface ModelConfig {
 interface ModelSelectorProps {
   onConfigChange: (config: ModelConfig) => void;
   initialConfig?: ModelConfig;
+  showAdvanced?: boolean; // 是否显示高级设置（base_url等）
 }
 
-export const ModelSelector = ({ onConfigChange, initialConfig }: ModelSelectorProps) => {
+export const ModelSelector = ({ onConfigChange, initialConfig, showAdvanced = false }: ModelSelectorProps) => {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [models, setModels] = useState<Model[]>([]);
   const [selectedProvider, setSelectedProvider] = useState(initialConfig?.provider || '');
@@ -43,6 +44,9 @@ export const ModelSelector = ({ onConfigChange, initialConfig }: ModelSelectorPr
     model: '',
     max_tokens: 4096,
   });
+  const [isValidating, setIsValidating] = useState(false);
+  const [validationStatus, setValidationStatus] = useState<'idle' | 'validating' | 'success' | 'error'>('idle');
+  const [validationMessage, setValidationMessage] = useState('');
 
   useEffect(() => {
     loadProviders();
@@ -102,6 +106,58 @@ export const ModelSelector = ({ onConfigChange, initialConfig }: ModelSelectorPr
     const newConfig = { ...config, [key]: value };
     setConfig(newConfig);
     onConfigChange(newConfig);
+    
+    // 如果修改了API Key，重置验证状态
+    if (key === 'api_key') {
+      setValidationStatus('idle');
+      setValidationMessage('');
+    }
+  };
+
+  const validateApiKey = async () => {
+    if (!config.api_key || !config.api_key.trim()) {
+      setValidationMessage('Please enter an API key');
+      return;
+    }
+
+    if (!selectedProvider || !selectedModel) {
+      setValidationMessage('Please select a provider and model');
+      return;
+    }
+
+    setIsValidating(true);
+    setValidationStatus('validating');
+    setValidationMessage('Validating API key...');
+
+    try {
+      const token = localStorage.getItem('jwt_token');
+      const response = await axios.post(
+        `${API_URL}/providers/test-connection`,
+        {
+          provider: selectedProvider,
+          model: selectedModel,
+          api_key: config.api_key,
+          base_url: config.base_url || undefined,
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+
+      if (response.data.success) {
+        setValidationStatus('success');
+        setValidationMessage('✓ API key is valid');
+      } else {
+        setValidationStatus('error');
+        setValidationMessage(response.data.error || 'Validation failed');
+      }
+    } catch (error: any) {
+      setValidationStatus('error');
+      const errorMessage = error.response?.data?.error || 'Failed to validate API key';
+      setValidationMessage('✗ ' + errorMessage);
+    } finally {
+      setIsValidating(false);
+    }
   };
 
   return (
@@ -113,7 +169,11 @@ export const ModelSelector = ({ onConfigChange, initialConfig }: ModelSelectorPr
         </label>
         <select
           value={selectedProvider}
-          onChange={(e) => setSelectedProvider(e.target.value)}
+          onChange={(e) => {
+            setSelectedProvider(e.target.value);
+            setValidationStatus('idle');
+            setValidationMessage('');
+          }}
           className="w-full px-3 py-2 bg-[#3c3c3c] border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
         >
           <option value="">Select a provider</option>
@@ -131,7 +191,11 @@ export const ModelSelector = ({ onConfigChange, initialConfig }: ModelSelectorPr
           </label>
           <select
             value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
+            onChange={(e) => {
+              setSelectedModel(e.target.value);
+              setValidationStatus('idle');
+              setValidationMessage('');
+            }}
             className="w-full px-3 py-2 bg-[#3c3c3c] border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
           >
             <option value="">Select a model</option>
@@ -148,21 +212,41 @@ export const ModelSelector = ({ onConfigChange, initialConfig }: ModelSelectorPr
           <label className="block text-sm font-medium text-gray-300 mb-2">
             API Key <span className="text-red-500">*</span>
           </label>
-          <input
-            type="password"
-            value={config.api_key || ''}
-            onChange={(e) => handleConfigUpdate('api_key', e.target.value)}
-            placeholder="Enter your API key..."
-            className="w-full px-3 py-2 bg-[#3c3c3c] border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            Required for most providers. Keep it secure.
-          </p>
+          <div className="space-y-2">
+            <input
+              type="password"
+              value={config.api_key || ''}
+              onChange={(e) => handleConfigUpdate('api_key', e.target.value)}
+              placeholder="Enter your API key..."
+              className="w-full px-3 py-2 bg-[#3c3c3c] border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+            />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={validateApiKey}
+                disabled={isValidating || !config.api_key}
+                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isValidating ? 'Validating...' : 'Test Connection'}
+              </button>
+              {validationMessage && (
+                <span className={`text-sm ${
+                  validationStatus === 'success' ? 'text-green-400' : 
+                  validationStatus === 'error' ? 'text-red-400' : 
+                  'text-gray-400'
+                }`}>
+                  {validationMessage}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500">
+              Required for most providers. Keep it secure.
+            </p>
+          </div>
         </div>
       )}
 
-      {/* Base URL (Optional) */}
-      {selectedProvider && selectedModel && (
+      {/* Base URL (仅在showAdvanced为true时显示) */}
+      {showAdvanced && selectedProvider && selectedModel && (
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">
             Base URL (Optional)
@@ -180,8 +264,8 @@ export const ModelSelector = ({ onConfigChange, initialConfig }: ModelSelectorPr
         </div>
       )}
 
-      {/* Advanced Settings */}
-      {selectedProvider && selectedModel && (
+      {/* Advanced Settings (仅在showAdvanced为true时显示) */}
+      {showAdvanced && selectedProvider && selectedModel && (
         <details className="mt-4">
           <summary className="cursor-pointer text-sm text-gray-400 hover:text-white">
             Advanced Settings
