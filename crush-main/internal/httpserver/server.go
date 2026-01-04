@@ -11,38 +11,38 @@ import (
 
 	"github.com/charmbracelet/crush/internal/auth"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/project"
 	"github.com/charmbracelet/crush/internal/session"
-	"github.com/charmbracelet/crush/internal/sessionconfig"
 	"github.com/charmbracelet/crush/internal/user"
 	"github.com/gin-gonic/gin"
 )
 
 type Server struct {
-	port                 string
-	engine               *gin.Engine
-	userService          user.Service
-	projectService       project.Service
-	sessionService       session.Service
-	messageService       message.Service
-	sessionConfigService sessionconfig.Service
-	config               *config.Config
+	port           string
+	engine         *gin.Engine
+	userService    user.Service
+	projectService project.Service
+	sessionService session.Service
+	messageService message.Service
+	db             *db.Queries
+	config         *config.Config
 }
 
-func New(port string, userService user.Service, projectService project.Service, sessionService session.Service, messageService message.Service, sessionConfigService sessionconfig.Service, cfg *config.Config) *Server {
+func New(port string, userService user.Service, projectService project.Service, sessionService session.Service, messageService message.Service, queries *db.Queries, cfg *config.Config) *Server {
 	gin.SetMode(gin.DebugMode)
 	engine := gin.Default()
 
 	return &Server{
-		port:                 port,
-		engine:               engine,
-		userService:          userService,
-		projectService:       projectService,
-		sessionService:       sessionService,
-		messageService:       messageService,
-		sessionConfigService: sessionConfigService,
-		config:               cfg,
+		port:           port,
+		engine:         engine,
+		userService:    userService,
+		projectService: projectService,
+		sessionService: sessionService,
+		messageService: messageService,
+		db:             queries,
+		config:         cfg,
 	}
 }
 
@@ -419,7 +419,7 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 
 	// Save model config to database
 	if req.ModelConfig != nil {
-		config := sessionconfig.Config{
+		config := db.SessionConfigParams{
 			Provider:        req.ModelConfig.Provider,
 			Model:           req.ModelConfig.Model,
 			BaseURL:         req.ModelConfig.BaseURL,
@@ -431,7 +431,7 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 			Think:           req.ModelConfig.Think,
 		}
 
-		if err := s.sessionConfigService.Save(c.Request.Context(), sess.ID, config); err != nil {
+		if err := s.db.CreateSessionModelConfig(c.Request.Context(), sess.ID, config); err != nil {
 			slog.Error("Failed to save session model config", "error", err, "session_id", sess.ID)
 			// Don't fail the request, just log the error
 		} else {

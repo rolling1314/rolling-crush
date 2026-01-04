@@ -33,7 +33,6 @@ import (
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/server"
 	"github.com/charmbracelet/crush/internal/session"
-	"github.com/charmbracelet/crush/internal/sessionconfig"
 	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/charmbracelet/crush/internal/term"
 	"github.com/charmbracelet/crush/internal/tui/components/anim"
@@ -83,7 +82,6 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 	files := history.NewService(q, conn)
 	users := user.NewService(q)
 	projects := project.NewService(q)
-	sessionConfigs := sessionconfig.NewService(q)
 	skipPermissionsRequests := cfg.Permissions != nil && cfg.Permissions.SkipRequests
 	allowedTools := []string{}
 	if cfg.Permissions != nil && cfg.Permissions.AllowedTools != nil {
@@ -108,7 +106,7 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 		tuiWG:           &sync.WaitGroup{},
 
 		WSServer:   server.New(),
-		HTTPServer: httpserver.New("8081", users, projects, sessions, messages, sessionConfigs, cfg),
+		HTTPServer: httpserver.New("8081", users, projects, sessions, messages, q, cfg),
 	}
 
 	// Register the handler for incoming WebSocket messages

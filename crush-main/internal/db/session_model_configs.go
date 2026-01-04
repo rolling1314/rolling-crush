@@ -1,4 +1,4 @@
-package sessionconfig
+package db
 
 import (
 	"context"
@@ -10,8 +10,17 @@ import (
 	"github.com/google/uuid"
 )
 
-// Config represents the model configuration stored as JSON
-type Config struct {
+// SessionModelConfig represents the model configuration stored as JSON
+type SessionModelConfig struct {
+	ID         string
+	SessionID  string
+	ConfigJSON []byte
+	CreatedAt  int64
+	UpdatedAt  int64
+}
+
+// SessionConfigParams is used to save/update session config
+type SessionConfigParams struct {
 	Provider        string   `json:"provider"`
 	Model           string   `json:"model"`
 	BaseURL         string   `json:"base_url,omitempty"`
@@ -23,37 +32,8 @@ type Config struct {
 	Think           bool     `json:"think,omitempty"`
 }
 
-type Service interface {
-	Save(ctx context.Context, sessionID string, config Config) error
-	Get(ctx context.Context, sessionID string) (*Config, error)
-	Delete(ctx context.Context, sessionID string) error
-}
-
-type service struct {
-	db DBTX
-}
-
-// DBTX is the database interface we need (matches db.DBTX)
-type DBTX interface {
-	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
-	QueryContext(context.Context, string, ...interface{}) (*sql.Rows, error)
-	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
-}
-
-// NewService creates a new session config service using raw SQL queries
-func NewService(q interface{}) Service {
-	// The querier (db.Queries) itself implements DBTX
-	if dbtx, ok := q.(DBTX); ok {
-		slog.Info("Session config service initialized with database connection")
-		return &service{db: dbtx}
-	}
-
-	// Fallback: if we can't get the DB, log a warning
-	slog.Warn("Could not extract database connection from querier, session config will not be saved")
-	return &noopService{}
-}
-
-func (s *service) Save(ctx context.Context, sessionID string, config Config) error {
+// CreateSessionModelConfig inserts a new session model config
+func (q *Queries) CreateSessionModelConfig(ctx context.Context, sessionID string, config SessionConfigParams) error {
 	configJSON, err := json.Marshal(config)
 	if err != nil {
 		return err
@@ -61,9 +41,9 @@ func (s *service) Save(ctx context.Context, sessionID string, config Config) err
 
 	now := time.Now().UnixMilli()
 
-	// First, try to check if the table exists
+	// First, check if the table exists
 	var tableExists bool
-	err = s.db.QueryRowContext(ctx, `
+	err = q.db.QueryRowContext(ctx, `
 		SELECT EXISTS (
 			SELECT FROM information_schema.tables 
 			WHERE table_schema = 'public' 
@@ -80,7 +60,7 @@ func (s *service) Save(ctx context.Context, sessionID string, config Config) err
 	}
 
 	// Try to update existing config
-	result, err := s.db.ExecContext(ctx, `
+	result, err := q.db.ExecContext(ctx, `
 		UPDATE session_model_configs
 		SET config_json = $1, updated_at = $2
 		WHERE session_id = $3
@@ -97,7 +77,7 @@ func (s *service) Save(ctx context.Context, sessionID string, config Config) err
 
 	// If no rows were updated, insert a new record
 	if rowsAffected == 0 {
-		_, err = s.db.ExecContext(ctx, `
+		_, err = q.db.ExecContext(ctx, `
 			INSERT INTO session_model_configs (id, session_id, config_json, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, $5)
 		`, uuid.New().String(), sessionID, configJSON, now, now)
@@ -120,9 +100,10 @@ func (s *service) Save(ctx context.Context, sessionID string, config Config) err
 	return nil
 }
 
-func (s *service) Get(ctx context.Context, sessionID string) (*Config, error) {
+// GetSessionModelConfig retrieves the config for a session
+func (q *Queries) GetSessionModelConfig(ctx context.Context, sessionID string) (*SessionConfigParams, error) {
 	var configJSON []byte
-	err := s.db.QueryRowContext(ctx, `
+	err := q.db.QueryRowContext(ctx, `
 		SELECT config_json FROM session_model_configs WHERE session_id = $1 LIMIT 1
 	`, sessionID).Scan(&configJSON)
 
@@ -133,7 +114,7 @@ func (s *service) Get(ctx context.Context, sessionID string) (*Config, error) {
 		return nil, err
 	}
 
-	var config Config
+	var config SessionConfigParams
 	if err := json.Unmarshal(configJSON, &config); err != nil {
 		return nil, err
 	}
@@ -141,8 +122,9 @@ func (s *service) Get(ctx context.Context, sessionID string) (*Config, error) {
 	return &config, nil
 }
 
-func (s *service) Delete(ctx context.Context, sessionID string) error {
-	_, err := s.db.ExecContext(ctx, `
+// DeleteSessionModelConfig deletes the config for a session
+func (q *Queries) DeleteSessionModelConfig(ctx context.Context, sessionID string) error {
+	_, err := q.db.ExecContext(ctx, `
 		DELETE FROM session_model_configs WHERE session_id = $1
 	`, sessionID)
 
@@ -151,21 +133,5 @@ func (s *service) Delete(ctx context.Context, sessionID string) error {
 	}
 
 	slog.Info("Deleted session model config from database", "session_id", sessionID)
-	return nil
-}
-
-// noopService is a fallback that does nothing
-type noopService struct{}
-
-func (n *noopService) Save(ctx context.Context, sessionID string, config Config) error {
-	slog.Warn("Session config not saved (no database connection)")
-	return nil
-}
-
-func (n *noopService) Get(ctx context.Context, sessionID string) (*Config, error) {
-	return nil, nil
-}
-
-func (n *noopService) Delete(ctx context.Context, sessionID string) error {
 	return nil
 }
