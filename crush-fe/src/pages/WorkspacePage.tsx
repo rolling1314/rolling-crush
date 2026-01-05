@@ -65,6 +65,9 @@ export default function WorkspacePage() {
   const [activeFileId, setActiveFileId] = useState<string | null>(null);
   const [files, setFiles] = useState<FileNode[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
+  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
+  const [expandedFoldersLoaded, setExpandedFoldersLoaded] = useState(false);
+  const [openFilesLoaded, setOpenFilesLoaded] = useState(false);
   
   // Pending permissions state
   const [pendingPermissions, setPendingPermissions] = useState<Map<string, PermissionRequest>>(new Map());
@@ -85,6 +88,69 @@ export default function WorkspacePage() {
       loadFiles(project.workspace_path);
     }
   }, [project]);
+
+  // Load open files from localStorage
+  useEffect(() => {
+    if (!project) return;
+    const storageKey = `open_files_${project.id}`;
+    const savedOpenFiles = localStorage.getItem(storageKey);
+    if (savedOpenFiles) {
+      try {
+        const { files, activeId } = JSON.parse(savedOpenFiles);
+        setOpenFiles(files);
+        if (activeId) {
+          setActiveFileId(activeId);
+        }
+      } catch (e) {
+        console.error('Failed to parse saved open files', e);
+      }
+    }
+    setOpenFilesLoaded(true);
+  }, [project]);
+
+  // Save open files to localStorage
+  useEffect(() => {
+    if (!project || !openFilesLoaded) return;
+    const storageKey = `open_files_${project.id}`;
+    localStorage.setItem(storageKey, JSON.stringify({
+      files: openFiles,
+      activeId: activeFileId
+    }));
+  }, [openFiles, activeFileId, project, openFilesLoaded]);
+
+  // Load expanded folders from localStorage
+  useEffect(() => {
+    if (!project) return;
+    const storageKey = `expanded_folders_${project.id}`;
+    const saved = localStorage.getItem(storageKey);
+    if (saved) {
+      try {
+        setExpandedFolderIds(new Set(JSON.parse(saved)));
+      } catch (e) {
+        console.error('Failed to parse saved expanded folders', e);
+      }
+    }
+    setExpandedFoldersLoaded(true);
+  }, [project]);
+
+  // Save expanded folders to localStorage
+  useEffect(() => {
+    if (!project || !expandedFoldersLoaded) return;
+    const storageKey = `expanded_folders_${project.id}`;
+    localStorage.setItem(storageKey, JSON.stringify(Array.from(expandedFolderIds)));
+  }, [expandedFolderIds, project, expandedFoldersLoaded]);
+
+  const handleToggleExpand = (id: string) => {
+    setExpandedFolderIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   // 当选择会话时加载消息历史
   useEffect(() => {
@@ -400,7 +466,7 @@ export default function WorkspacePage() {
     }
   };
 
-  const handleSendMessage = (content: string) => {
+  const handleSendMessage = (content: string, contextFiles: FileNode[] = []) => {
     if (!currentSessionId) {
       console.error('No session selected');
       return;
@@ -411,11 +477,33 @@ export default function WorkspacePage() {
       return;
     }
 
+    let messageContent = content;
+
+    // 如果有附带文件，将其内容追加到消息中
+    if (contextFiles.length > 0) {
+        const fileContexts = contextFiles.map(file => {
+            if (file.type === 'folder') {
+                return `Folder: ${file.path || file.name} (Context of this folder)`;
+            }
+
+            // 尝试从 openFiles 中查找以获取最新内容（如果是打开的）
+            const openFile = openFiles.find(f => f.id === file.id);
+            const fileContent = openFile?.content || file.content || '// Content not available';
+            
+            return `File: ${file.path || file.name}\n\`\`\`${file.name.split('.').pop() || ''}\n${fileContent}\n\`\`\``;
+        }).join('\n\n');
+
+        if (messageContent.trim()) {
+            messageContent += '\n\n';
+        }
+        messageContent += `Context Files:\n${fileContexts}`;
+    }
+
     // 添加用户消息到UI
     const userMessage: Message = {
       id: `temp-${Date.now()}`,
       role: 'user',
-      content,
+      content: messageContent,
       timestamp: Date.now(),
       isStreaming: false,
     };
@@ -424,7 +512,7 @@ export default function WorkspacePage() {
     // 通过 WebSocket 发送消息
     const messageData = {
       type: 'message',
-      content,
+      content: messageContent,
       sessionID: currentSessionId,
     };
     
@@ -533,13 +621,15 @@ export default function WorkspacePage() {
           <div className="flex items-center justify-center h-full text-gray-500 text-sm">
             Loading files...
           </div>
-        ) : (
-          <FileTree 
-            data={files} 
-            onSelectFile={handleFileSelect}
-            selectedFileId={activeFileId || undefined}
-          />
-        )}
+          ) : (
+            <FileTree 
+              data={files} 
+              onSelectFile={handleFileSelect}
+              selectedFileId={activeFileId || undefined}
+              expandedIds={expandedFolderIds}
+              onToggleExpand={handleToggleExpand}
+            />
+          )}
       </div>
 
       {/* 2. Center: Code Editor */}

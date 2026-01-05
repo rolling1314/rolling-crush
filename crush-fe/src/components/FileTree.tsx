@@ -7,34 +7,54 @@ interface FileTreeProps {
   data: FileNode[];
   onSelectFile: (file: FileNode) => void;
   selectedFileId?: string;
+  expandedIds?: Set<string>;
+  onToggleExpand?: (id: string) => void;
 }
 
 const FileTreeNode = ({ 
   node, 
   depth = 0, 
   onSelect, 
-  selectedId 
+  selectedId,
+  expandedIds,
+  onToggleExpand
 }: { 
   node: FileNode; 
   depth?: number; 
   onSelect: (node: FileNode) => void;
   selectedId?: string;
+  expandedIds?: Set<string>;
+  onToggleExpand?: (id: string) => void;
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  // Fallback to local state if no expandedIds provided (for backward compatibility)
+  const [localIsOpen, setLocalIsOpen] = useState(false);
+  
   const isFolder = node.type === 'folder';
+  const isOpen = expandedIds ? expandedIds.has(node.id) : localIsOpen;
 
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isFolder) {
-      setIsOpen(!isOpen);
+      if (onToggleExpand) {
+        onToggleExpand(node.id);
+      } else {
+        setLocalIsOpen(!localIsOpen);
+      }
     } else {
       onSelect(node);
     }
   };
 
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData('application/json', JSON.stringify(node));
+    e.dataTransfer.effectAllowed = 'copy';
+  };
+
   return (
     <div>
       <div
+        draggable
+        onDragStart={handleDragStart}
         className={cn(
           "flex items-center py-1 px-2 cursor-pointer hover:bg-white/10 text-sm select-none",
           selectedId === node.id && !isFolder && "bg-blue-600/20 text-blue-400"
@@ -67,6 +87,8 @@ const FileTreeNode = ({
               depth={depth + 1} 
               onSelect={onSelect}
               selectedId={selectedId}
+              expandedIds={expandedIds}
+              onToggleExpand={onToggleExpand}
             />
           ))}
         </div>
@@ -75,7 +97,13 @@ const FileTreeNode = ({
   );
 };
 
-export const FileTree = ({ data, onSelectFile, selectedFileId }: FileTreeProps) => {
+export const FileTree = ({ 
+  data, 
+  onSelectFile, 
+  selectedFileId,
+  expandedIds,
+  onToggleExpand
+}: FileTreeProps) => {
   if (!Array.isArray(data)) {
     console.warn('FileTree received non-array data:', data);
     return (
@@ -96,6 +124,8 @@ export const FileTree = ({ data, onSelectFile, selectedFileId }: FileTreeProps) 
           node={node} 
           onSelect={onSelectFile}
           selectedId={selectedFileId}
+          expandedIds={expandedIds}
+          onToggleExpand={onToggleExpand}
         />
       ))}
     </div>

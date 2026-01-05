@@ -1,16 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, User, Bot, History } from 'lucide-react';
+import { Send, User, Bot, History, X, File as FileIcon, Folder as FolderIcon } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { type Message, type PermissionRequest } from '../types';
+import { type Message, type PermissionRequest, type FileNode } from '../types';
 import { ToolCallDisplay } from './ToolCallDisplay';
 import { cn } from '../lib/utils';
 import 'highlight.js/styles/github-dark.css';
 
 interface ChatPanelProps {
   messages: Message[];
-  onSendMessage: (content: string) => void;
+  onSendMessage: (content: string, files?: FileNode[]) => void;
   pendingPermissions: Map<string, PermissionRequest>;
   onPermissionApprove: (toolCallId: string) => void;
   onPermissionDeny: (toolCallId: string) => void;
@@ -28,7 +28,9 @@ export const ChatPanel = ({
   sessionConfigComponent
 }: ChatPanelProps) => {
   const [input, setInput] = useState('');
+  const [attachedFiles, setAttachedFiles] = useState<FileNode[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputContainerRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -40,9 +42,10 @@ export const ChatPanel = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim()) return;
-    onSendMessage(input);
+    if (!input.trim() && attachedFiles.length === 0) return;
+    onSendMessage(input, attachedFiles);
     setInput('');
+    setAttachedFiles([]);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -50,6 +53,48 @@ export const ChatPanel = ({
       e.preventDefault();
       handleSubmit(e as any);
     }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (inputContainerRef.current) {
+        inputContainerRef.current.style.borderColor = '#3b82f6'; // blue-500
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (inputContainerRef.current) {
+        inputContainerRef.current.style.borderColor = '#4b5563'; // gray-600
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (inputContainerRef.current) {
+        inputContainerRef.current.style.borderColor = '#4b5563'; // gray-600
+    }
+
+    try {
+      const data = e.dataTransfer.getData('application/json');
+      if (data) {
+        const fileNode = JSON.parse(data) as FileNode;
+        // Allow both files and folders
+        setAttachedFiles(prev => {
+            if (prev.some(f => f.id === fileNode.id)) return prev;
+            return [...prev, fileNode];
+        });
+      }
+    } catch (err) {
+      console.error('Failed to parse dropped data', err);
+    }
+  };
+
+  const removeAttachedFile = (fileId: string) => {
+    setAttachedFiles(prev => prev.filter(f => f.id !== fileId));
   };
 
   return (
@@ -212,12 +257,35 @@ export const ChatPanel = ({
       </div>
 
       <div className="p-4 bg-[#252526]">
-        <div className="relative bg-[#3c3c3c] border border-gray-600 rounded-lg flex flex-col focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500">
+        <div 
+            ref={inputContainerRef}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className="relative bg-[#3c3c3c] border border-gray-600 rounded-lg flex flex-col focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 transition-colors"
+        >
+          {attachedFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2 p-2 border-b border-gray-600/50">
+                {attachedFiles.map(file => (
+                    <div key={file.id} className="flex items-center gap-1.5 px-2 py-1 bg-[#1e1e1e]/50 rounded text-xs text-blue-300 border border-blue-500/30">
+                        {file.type === 'folder' ? <FolderIcon size={12} /> : <FileIcon size={12} />}
+                        <span className="truncate max-w-[150px]">{file.name}</span>
+                        <button 
+                            onClick={() => removeAttachedFile(file.id)}
+                            className="hover:text-white ml-0.5"
+                        >
+                            <X size={12} />
+                        </button>
+                    </div>
+                ))}
+            </div>
+          )}
+          
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="问问关于代码的问题......"
+            placeholder={attachedFiles.length > 0 ? "Describe what to do with these files..." : "问问关于代码的问题......"}
             className="w-full bg-transparent border-none text-sm text-gray-200 placeholder-gray-500 p-3 min-h-[60px] max-h-[200px] resize-none focus:ring-0 focus:outline-none scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent"
             rows={2}
           />
@@ -229,7 +297,7 @@ export const ChatPanel = ({
             
             <button
               onClick={handleSubmit}
-              disabled={!input.trim()}
+              disabled={!input.trim() && attachedFiles.length === 0}
               className="p-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <Send size={16} />
