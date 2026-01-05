@@ -20,6 +20,11 @@ import (
 	"github.com/tidwall/sjson"
 )
 
+// DBWriter interface for writing config to database (used by Web mode)
+type DBWriter interface {
+	SaveConfigJSON(ctx context.Context, sessionID string, configJSON string) error
+}
+
 const (
 	appName              = "crush"
 	defaultDataDirectory = ".crush"
@@ -354,10 +359,25 @@ type Config struct {
 	resolver       VariableResolver
 	dataConfigDir  string             `json:"-"`
 	knownProviders []catwalk.Provider `json:"-"`
+
+	// For Web mode: store config to database instead of file
+	sessionID    string   `json:"-"`
+	dbWriter     DBWriter `json:"-"`
+	useDBStorage bool     `json:"-"`
+	configCache  string   `json:"-"` // 缓存当前配置JSON，避免每次从空开始
 }
 
 func (c *Config) WorkingDir() string {
 	return c.workingDir
+}
+
+// EnableDBStorage enables database storage mode for Web mode
+func (c *Config) EnableDBStorage(sessionID string, dbWriter DBWriter) {
+	c.sessionID = sessionID
+	c.dbWriter = dbWriter
+	c.useDBStorage = true
+	c.configCache = "{}" // 初始化为空JSON
+	slog.Info("Enabled database storage for config", "session_id", sessionID)
 }
 
 func (c *Config) EnabledProviders() []ProviderConfig {
@@ -449,12 +469,22 @@ func (c *Config) UpdatePreferredModel(modelType SelectedModelType, model Selecte
 
 func (c *Config) SetConfigField(key string, value any) error {
 	// read the data
-	data, err := os.ReadFile(c.dataConfigDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			data = []byte("{}")
-		} else {
-			return fmt.Errorf("failed to read config file: %w", err)
+	var data []byte
+	var err error
+
+	// 如果使用数据库存储，从内存缓存读取
+	if c.useDBStorage && c.dbWriter != nil && c.sessionID != "" {
+		// 从内存缓存读取，这样可以累积多次修改
+		data = []byte(c.configCache)
+	} else {
+		// 从文件读取
+		data, err = os.ReadFile(c.dataConfigDir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				data = []byte("{}")
+			} else {
+				return fmt.Errorf("failed to read config file: %w", err)
+			}
 		}
 	}
 
@@ -462,9 +492,25 @@ func (c *Config) SetConfigField(key string, value any) error {
 	if err != nil {
 		return fmt.Errorf("failed to set config field %s: %w", key, err)
 	}
-	if err := os.WriteFile(c.dataConfigDir, []byte(newValue), 0o600); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
+
+	// 根据模式写入不同的存储
+	if c.useDBStorage && c.dbWriter != nil && c.sessionID != "" {
+		// 更新内存缓存
+		c.configCache = newValue
+
+		// 写入数据库
+		ctx := context.Background()
+		if err := c.dbWriter.SaveConfigJSON(ctx, c.sessionID, newValue); err != nil {
+			return fmt.Errorf("failed to write config to database: %w", err)
+		}
+		slog.Info("Config saved to database", "session_id", c.sessionID, "key", key)
+	} else {
+		// 写入文件（TUI模式）
+		if err := os.WriteFile(c.dataConfigDir, []byte(newValue), 0o600); err != nil {
+			return fmt.Errorf("failed to write config file: %w", err)
+		}
 	}
+
 	return nil
 }
 

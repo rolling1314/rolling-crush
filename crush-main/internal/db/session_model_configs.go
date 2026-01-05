@@ -100,6 +100,60 @@ func (q *Queries) CreateSessionModelConfig(ctx context.Context, sessionID string
 	return nil
 }
 
+// SaveConfigJSON saves the complete TUI-format config JSON to the database
+// This method implements the config.DBWriter interface
+func (q *Queries) SaveConfigJSON(ctx context.Context, sessionID string, configJSON string) error {
+	now := time.Now().UnixMilli()
+
+	// First, check if the table exists
+	var tableExists bool
+	err := q.db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT FROM information_schema.tables 
+			WHERE table_schema = 'public' 
+			AND table_name = 'session_model_configs'
+		)
+	`).Scan(&tableExists)
+
+	if err != nil || !tableExists {
+		slog.Warn("session_model_configs table does not exist, config JSON not saved", "session_id", sessionID)
+		return nil // Don't fail, just skip
+	}
+
+	// Try to update existing config
+	result, err := q.db.ExecContext(ctx, `
+		UPDATE session_model_configs
+		SET config_json = $1, updated_at = $2
+		WHERE session_id = $3
+	`, []byte(configJSON), now, sessionID)
+
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	// If no rows were updated, insert a new record
+	if rowsAffected == 0 {
+		_, err = q.db.ExecContext(ctx, `
+			INSERT INTO session_model_configs (id, session_id, config_json, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5)
+		`, uuid.New().String(), sessionID, []byte(configJSON), now, now)
+
+		if err != nil {
+			return err
+		}
+		slog.Info("Created session config JSON in database", "session_id", sessionID)
+	} else {
+		slog.Info("Updated session config JSON in database", "session_id", sessionID)
+	}
+
+	return nil
+}
+
 // GetSessionModelConfig retrieves the config for a session
 func (q *Queries) GetSessionModelConfig(ctx context.Context, sessionID string) (*SessionConfigParams, error) {
 	var configJSON []byte

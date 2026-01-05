@@ -420,25 +420,63 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 		return
 	}
 
-	// Save model config to database
+	// Save model config using TUI's exact logic, writing to database instead of file
 	if req.ModelConfig != nil {
-		config := db.SessionConfigParams{
-			Provider:        req.ModelConfig.Provider,
-			Model:           req.ModelConfig.Model,
-			BaseURL:         req.ModelConfig.BaseURL,
-			APIKey:          req.ModelConfig.APIKey,
-			MaxTokens:       req.ModelConfig.MaxTokens,
-			Temperature:     req.ModelConfig.Temperature,
-			TopP:            req.ModelConfig.TopP,
-			ReasoningEffort: req.ModelConfig.ReasoningEffort,
-			Think:           req.ModelConfig.Think,
+		// 1. 创建一个临时Config实例，启用数据库存储模式
+		tempConfig := *s.config // 浅拷贝基础配置
+		tempConfig.EnableDBStorage(sess.ID, s.db)
+		
+		// 2. 按照TUI逻辑设置API Key（会自动写入数据库）
+		if req.ModelConfig.APIKey != "" {
+			if err := tempConfig.SetProviderAPIKey(req.ModelConfig.Provider, req.ModelConfig.APIKey); err != nil {
+				slog.Error("Failed to set provider API key", "error", err, "session_id", sess.ID)
+			} else {
+				slog.Info("Saved API key to database", "provider", req.ModelConfig.Provider, "session_id", sess.ID)
+			}
 		}
-
-		if err := s.db.CreateSessionModelConfig(c.Request.Context(), sess.ID, config); err != nil {
-			slog.Error("Failed to save session model config", "error", err, "session_id", sess.ID)
-			// Don't fail the request, just log the error
+		
+		// 3. 按照TUI逻辑更新preferred large model（会自动写入数据库）
+		largeModel := config.SelectedModel{
+			Model:           req.ModelConfig.Model,
+			Provider:        req.ModelConfig.Provider,
+			ReasoningEffort: req.ModelConfig.ReasoningEffort,
+		}
+		if req.ModelConfig.MaxTokens != nil {
+			largeModel.MaxTokens = *req.ModelConfig.MaxTokens
+		}
+		if err := tempConfig.UpdatePreferredModel(config.SelectedModelTypeLarge, largeModel); err != nil {
+			slog.Error("Failed to update preferred large model", "error", err, "session_id", sess.ID)
 		} else {
-			slog.Info("Saved model config for session", "session_id", sess.ID, "provider", config.Provider, "model", config.Model)
+			slog.Info("Saved large model to database", "model", req.ModelConfig.Model, "session_id", sess.ID)
+		}
+		
+		// 4. 按照TUI逻辑自动设置small model（会自动写入数据库）
+		knownProviders, err := config.Providers(&tempConfig)
+		if err == nil {
+			var providerInfo *catwalk.Provider
+			for _, p := range knownProviders {
+				if string(p.ID) == req.ModelConfig.Provider {
+					providerInfo = &p
+					break
+				}
+			}
+			
+			if providerInfo != nil && providerInfo.DefaultSmallModelID != "" {
+				smallModelInfo := tempConfig.GetModel(req.ModelConfig.Provider, providerInfo.DefaultSmallModelID)
+				if smallModelInfo != nil {
+					smallModel := config.SelectedModel{
+						Model:           smallModelInfo.ID,
+						Provider:        req.ModelConfig.Provider,
+						ReasoningEffort: smallModelInfo.DefaultReasoningEffort,
+						MaxTokens:       smallModelInfo.DefaultMaxTokens,
+					}
+					if err := tempConfig.UpdatePreferredModel(config.SelectedModelTypeSmall, smallModel); err != nil {
+						slog.Error("Failed to update preferred small model", "error", err, "session_id", sess.ID)
+					} else {
+						slog.Info("Saved small model to database", "model", smallModelInfo.ID, "session_id", sess.ID)
+					}
+				}
+			}
 		}
 	}
 
