@@ -204,10 +204,12 @@ const CodeContent: React.FC<{
   filePath,
   isNew = false
 }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
   const lines = content.split('\n');
-  const displayLines = lines.slice(0, maxLines);
-  const hiddenCount = lines.length - maxLines;
-  const maxLineNum = startLine + displayLines.length - 1;
+  const effectiveMaxLines = isExpanded ? lines.length : maxLines;
+  const displayLines = lines.slice(0, effectiveMaxLines);
+  const hiddenCount = lines.length - effectiveMaxLines;
+  const maxLineNum = startLine + lines.length - 1;
   const lineNumWidth = Math.max(String(maxLineNum).length, 2);
   const language = filePath ? getLanguageFromPath(filePath) : 'text';
 
@@ -225,29 +227,46 @@ const CodeContent: React.FC<{
             {shortenPath(filePath)}
           </span>
           <span className="text-gray-600 text-[10px] ml-auto">{language}</span>
+          <span className="text-gray-500 text-[10px]">{lines.length} lines</span>
         </div>
       )}
-      {/* Code content */}
-      <div className="bg-[#1e1e1e]">
-        {displayLines.map((line, idx) => (
-          <div key={idx} className="flex hover:bg-[#2a2a2a]">
-            <span 
-              className="text-gray-600 bg-[#1e1e1e] px-2 py-0.5 text-right select-none border-r border-gray-800"
-              style={{ minWidth: `${lineNumWidth + 1.5}ch` }}
-            >
-              {startLine + idx}
-            </span>
-            <span className="text-gray-300 px-3 py-0.5 flex-1 overflow-x-auto whitespace-pre">
-              {line || ' '}
-            </span>
-          </div>
-        ))}
-        {hiddenCount > 0 && (
-          <div className="text-gray-500 bg-[#252526] px-3 py-1.5 text-xs border-t border-gray-700/50">
-            … ({hiddenCount} more lines)
-          </div>
-        )}
+      {/* Code content - horizontal scroll for entire block */}
+      <div className={cn(
+        "bg-[#1e1e1e] overflow-x-auto",
+        isExpanded && "max-h-[400px] overflow-y-auto"
+      )}>
+        <div className="min-w-max">
+          {displayLines.map((line, idx) => (
+            <div key={idx} className="flex hover:bg-[#2a2a2a]">
+              <span 
+                className="text-gray-600 bg-[#1e1e1e] px-2 py-0.5 text-right select-none border-r border-gray-800 sticky left-0"
+                style={{ minWidth: `${lineNumWidth + 1.5}ch` }}
+              >
+                {startLine + idx}
+              </span>
+              <pre className="text-gray-300 px-3 py-0.5 whitespace-pre m-0">
+                {line || ' '}
+              </pre>
+            </div>
+          ))}
+        </div>
       </div>
+      {/* Footer with expand/collapse */}
+      {lines.length > maxLines && (
+        <div 
+          className="flex items-center justify-between px-3 py-1.5 bg-[#252526] border-t border-gray-700/50 cursor-pointer hover:bg-[#2a2a2a] transition-colors"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          <span className="text-gray-500 text-xs">
+            {isExpanded ? `▲ Collapse` : `▼ Show all ${lines.length} lines`}
+          </span>
+          {!isExpanded && (
+            <span className="text-gray-600 text-xs">
+              … ({hiddenCount} more lines)
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -258,29 +277,48 @@ const PlainContent: React.FC<{ content: string; maxLines?: number; label?: strin
   maxLines = MAX_DISPLAY_LINES,
   label
 }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
   const lines = content.split('\n');
-  const displayLines = lines.slice(0, maxLines);
-  const hiddenCount = lines.length - maxLines;
+  const effectiveMaxLines = isExpanded ? lines.length : maxLines;
+  const displayLines = lines.slice(0, effectiveMaxLines);
+  const hiddenCount = lines.length - effectiveMaxLines;
 
   return (
     <div className="font-mono text-xs rounded overflow-hidden border border-gray-700/50">
       {label && (
         <div className="flex items-center gap-2 px-3 py-1.5 bg-[#2d2d30] border-b border-gray-700/50">
           <span className="text-gray-400 text-[10px] font-bold px-1.5 py-0.5 bg-gray-700/50 rounded">{label}</span>
+          <span className="text-gray-600 text-[10px] ml-auto">{lines.length} lines</span>
         </div>
       )}
-      <div className="bg-[#1e1e1e] p-2 text-gray-400">
-        {displayLines.map((line, idx) => (
-          <div key={idx} className="whitespace-pre-wrap break-all leading-relaxed">
-            {line || '\u00A0'}
-          </div>
-        ))}
-        {hiddenCount > 0 && (
-          <div className="text-gray-500 mt-1 pt-1 border-t border-gray-700/30">
-            … ({hiddenCount} more lines)
-          </div>
-        )}
+      <div className={cn(
+        "bg-[#1e1e1e] p-2 text-gray-400 overflow-x-auto",
+        isExpanded && "max-h-[400px] overflow-y-auto"
+      )}>
+        <div className="min-w-max">
+          {displayLines.map((line, idx) => (
+            <pre key={idx} className="whitespace-pre leading-relaxed m-0">
+              {line || '\u00A0'}
+            </pre>
+          ))}
+        </div>
       </div>
+      {/* Footer with expand/collapse */}
+      {lines.length > maxLines && (
+        <div 
+          className="flex items-center justify-between px-3 py-1.5 bg-[#252526] border-t border-gray-700/50 cursor-pointer hover:bg-[#2a2a2a] transition-colors"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          <span className="text-gray-500 text-xs">
+            {isExpanded ? `▲ Collapse` : `▼ Show all ${lines.length} lines`}
+          </span>
+          {!isExpanded && (
+            <span className="text-gray-600 text-xs">
+              … ({hiddenCount} more lines)
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -291,7 +329,9 @@ const DiffContent: React.FC<{ oldContent: string; newContent: string; fileName?:
   newContent,
   fileName
 }) => {
-  const diff = useMemo(() => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  
+  const fullDiff = useMemo(() => {
     const oldLines = oldContent.split('\n');
     const newLines = newContent.split('\n');
     
@@ -335,12 +375,14 @@ const DiffContent: React.FC<{ oldContent: string; newContent: string; fileName?:
       }
     }
     
-    return result.slice(0, MAX_DISPLAY_LINES * 2); // Allow more lines for diff
+    return result;
   }, [oldContent, newContent]);
 
-  const additions = diff.filter(d => d.type === 'insert').length;
-  const deletions = diff.filter(d => d.type === 'delete').length;
-  const totalChanges = additions + deletions;
+  const maxDiffLines = MAX_DISPLAY_LINES * 2;
+  const diff = isExpanded ? fullDiff : fullDiff.slice(0, maxDiffLines);
+  const hiddenCount = fullDiff.length - maxDiffLines;
+  const additions = fullDiff.filter(d => d.type === 'insert').length;
+  const deletions = fullDiff.filter(d => d.type === 'delete').length;
 
   return (
     <div className="font-mono text-xs rounded overflow-hidden border border-gray-700/50">
@@ -357,45 +399,61 @@ const DiffContent: React.FC<{ oldContent: string; newContent: string; fileName?:
           <span className="text-red-400">-{deletions}</span>
         </div>
       </div>
-      {/* Diff content */}
-      <div className="bg-[#1e1e1e]">
-        {diff.map((line, idx) => (
-          <div 
-            key={idx} 
-            className={cn(
-              "flex",
-              line.type === 'insert' && "bg-[#1e3a1e]",
-              line.type === 'delete' && "bg-[#3a1e1e]"
-            )}
-          >
-            <span 
+      {/* Diff content - horizontal scroll for entire block */}
+      <div className={cn(
+        "bg-[#1e1e1e] overflow-x-auto",
+        isExpanded && "max-h-[400px] overflow-y-auto"
+      )}>
+        <div className="min-w-max">
+          {diff.map((line, idx) => (
+            <div 
+              key={idx} 
               className={cn(
-                "px-2 py-0.5 text-right select-none min-w-[3ch] border-r border-gray-800",
-                line.type === 'insert' && "text-emerald-500 bg-[#1a2e1a]",
-                line.type === 'delete' && "text-red-500 bg-[#2e1a1a]",
-                line.type === 'equal' && "text-gray-600 bg-[#1e1e1e]"
+                "flex",
+                line.type === 'insert' && "bg-[#1e3a1e]",
+                line.type === 'delete' && "bg-[#3a1e1e]"
               )}
             >
-              {line.type === 'insert' ? '+' : line.type === 'delete' ? '-' : ' '}
-            </span>
-            <span 
-              className={cn(
-                "px-3 py-0.5 flex-1 whitespace-pre overflow-x-auto",
-                line.type === 'insert' && "text-emerald-300",
-                line.type === 'delete' && "text-red-300",
-                line.type === 'equal' && "text-gray-400"
-              )}
-            >
-              {line.content || ' '}
-            </span>
-          </div>
-        ))}
-        {totalChanges > MAX_DISPLAY_LINES * 2 && (
-          <div className="text-gray-500 bg-[#252526] px-3 py-1.5 text-xs border-t border-gray-700/50">
-            … (more changes)
-          </div>
-        )}
+              <span 
+                className={cn(
+                  "px-2 py-0.5 text-right select-none min-w-[3ch] border-r border-gray-800 sticky left-0",
+                  line.type === 'insert' && "text-emerald-500 bg-[#1a2e1a]",
+                  line.type === 'delete' && "text-red-500 bg-[#2e1a1a]",
+                  line.type === 'equal' && "text-gray-600 bg-[#1e1e1e]"
+                )}
+              >
+                {line.type === 'insert' ? '+' : line.type === 'delete' ? '-' : ' '}
+              </span>
+              <pre 
+                className={cn(
+                  "px-3 py-0.5 whitespace-pre m-0",
+                  line.type === 'insert' && "text-emerald-300",
+                  line.type === 'delete' && "text-red-300",
+                  line.type === 'equal' && "text-gray-400"
+                )}
+              >
+                {line.content || ' '}
+              </pre>
+            </div>
+          ))}
+        </div>
       </div>
+      {/* Footer with expand/collapse */}
+      {fullDiff.length > maxDiffLines && (
+        <div 
+          className="flex items-center justify-between px-3 py-1.5 bg-[#252526] border-t border-gray-700/50 cursor-pointer hover:bg-[#2a2a2a] transition-colors"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          <span className="text-gray-500 text-xs">
+            {isExpanded ? `▲ Collapse` : `▼ Show all ${fullDiff.length} changes`}
+          </span>
+          {!isExpanded && (
+            <span className="text-gray-600 text-xs">
+              … ({hiddenCount} more)
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -533,10 +591,10 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
                     <span className="text-gray-500 text-[10px]">background</span>
                   )}
                 </div>
-                <div className="bg-[#1e1e1e] p-2">
-                  <div className="flex items-start gap-2">
-                    <span className="text-emerald-400 select-none">$</span>
-                    <span className="text-gray-300 whitespace-pre-wrap break-all">{command}</span>
+                <div className="bg-[#1e1e1e] p-2 overflow-x-auto">
+                  <div className="flex items-start gap-2 min-w-max">
+                    <span className="text-emerald-400 select-none sticky left-0 bg-[#1e1e1e]">$</span>
+                    <pre className="text-gray-300 whitespace-pre m-0">{command}</pre>
                   </div>
                 </div>
               </div>

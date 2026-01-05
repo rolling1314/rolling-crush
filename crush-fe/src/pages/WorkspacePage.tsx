@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { X, Plus, MessageSquare, LogOut, ChevronRight, Trash2 } from 'lucide-react';
+import { X, Plus, MessageSquare, LogOut, ChevronRight, Trash2, GripVertical } from 'lucide-react';
 import axios from 'axios';
 import { ChatPanel } from '../components/ChatPanel';
 import { FileTree } from '../components/FileTree';
@@ -72,6 +72,14 @@ export default function WorkspacePage() {
   // Pending permissions state
   const [pendingPermissions, setPendingPermissions] = useState<Map<string, PermissionRequest>>(new Map());
   
+  // Resizable panel state
+  const [chatPanelWidth, setChatPanelWidth] = useState(() => {
+    const saved = localStorage.getItem('chat_panel_width');
+    return saved ? parseInt(saved, 10) : 400;
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeRef = useRef<HTMLDivElement>(null);
+  
   // WebSocket connection
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
@@ -139,6 +147,50 @@ export default function WorkspacePage() {
     const storageKey = `expanded_folders_${project.id}`;
     localStorage.setItem(storageKey, JSON.stringify(Array.from(expandedFolderIds)));
   }, [expandedFolderIds, project, expandedFoldersLoaded]);
+
+  // Panel resize handlers
+  const chatPanelWidthRef = useRef(chatPanelWidth);
+  chatPanelWidthRef.current = chatPanelWidth;
+  
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      
+      const containerWidth = window.innerWidth;
+      const newWidth = containerWidth - e.clientX;
+      
+      // Constrain width between 280px and 800px
+      const constrainedWidth = Math.min(Math.max(newWidth, 280), 800);
+      setChatPanelWidth(constrainedWidth);
+    };
+    
+    const handleMouseUp = () => {
+      if (isResizing) {
+        setIsResizing(false);
+        // Save using ref to get the latest value
+        localStorage.setItem('chat_panel_width', chatPanelWidthRef.current.toString());
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    };
+    
+    if (isResizing) {
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+    
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
 
   const handleToggleExpand = (id: string) => {
     setExpandedFolderIds(prev => {
@@ -647,7 +699,7 @@ export default function WorkspacePage() {
       </div>
 
       {/* 2. Center: Code Editor */}
-      <div className="flex-1 min-w-0 bg-[#1e1e1e] flex flex-col border-r border-gray-700">
+      <div className="flex-1 min-w-0 bg-[#1e1e1e] flex flex-col">
         {openFiles.length > 0 ? (
           <>
             <div className="flex items-center bg-[#252526] border-b border-gray-700 overflow-x-auto no-scrollbar">
@@ -690,8 +742,27 @@ export default function WorkspacePage() {
         )}
       </div>
 
+      {/* Resize Handle */}
+      <div
+        ref={resizeRef}
+        onMouseDown={handleResizeStart}
+        className={`w-1 shrink-0 cursor-col-resize group hover:w-1.5 transition-all relative ${
+          isResizing ? 'bg-emerald-500' : 'bg-gray-700 hover:bg-emerald-500/70'
+        }`}
+      >
+        {/* Grip indicator */}
+        <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-opacity ${
+          isResizing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+        }`}>
+          <GripVertical size={12} className="text-emerald-300" />
+        </div>
+      </div>
+
       {/* 3. Right: Chat & Session History */}
-      <div className="w-[400px] shrink-0 bg-[#252526] flex flex-col relative">
+      <div 
+        className="shrink-0 bg-[#252526] flex flex-col relative"
+        style={{ width: chatPanelWidth }}
+      >
         <div className="flex-1 overflow-hidden flex flex-col">
           <ChatPanel 
             messages={messages} 
