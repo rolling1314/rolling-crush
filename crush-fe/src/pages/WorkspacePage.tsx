@@ -216,9 +216,23 @@ export default function WorkspacePage() {
     console.log('WebSocket message received:', data);
     
     // 后端直接广播 message.Message 对象
-    // 检查是否是消息对象（有 ID, Role, Parts 等字段）
-    if (data.ID && data.Role && data.Parts) {
-      const convertedMsg = convertBackendMessageToFrontend(data);
+    // 支持大写和小写字段名（ID/id, Role/role, Parts/parts）
+    const msgId = data.ID || data.id;
+    const msgRole = data.Role || data.role;
+    const msgParts = data.Parts || data.parts;
+    
+    if (msgId && msgRole && msgParts) {
+      // 标准化数据格式
+      const normalizedData = {
+        ...data,
+        ID: msgId,
+        Role: msgRole,
+        Parts: msgParts,
+        CreatedAt: data.CreatedAt || data.created_at || Date.now()
+      };
+      
+      const convertedMsg = convertBackendMessageToFrontend(normalizedData);
+      console.log('Converted message:', convertedMsg);
       
       setMessages(prev => {
         // 检查消息是否已存在

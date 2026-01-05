@@ -273,23 +273,25 @@ export const ChatPanel = ({
                 />
               )}
               
-              {/* Tool Calls */}
+              {/* Tool Calls - filter out invalid ones */}
               {msg.toolCalls && msg.toolCalls.length > 0 && (
                 <div className="space-y-2">
-                  {msg.toolCalls.map((toolCall) => {
-                    const result = msg.toolResults?.find(r => r.tool_call_id === toolCall.id);
-                    const needsPermission = pendingPermissions.has(toolCall.id);
-                    return (
-                      <ToolCallDisplay
-                        key={toolCall.id}
-                        toolCall={toolCall}
-                        result={result}
-                        needsPermission={needsPermission}
-                        onApprove={onPermissionApprove}
-                        onDeny={onPermissionDeny}
-                      />
-                    );
-                  })}
+                  {msg.toolCalls
+                    .filter(tc => tc && tc.id && tc.name) // Only render valid tool calls
+                    .map((toolCall) => {
+                      const result = msg.toolResults?.find(r => r.tool_call_id === toolCall.id);
+                      const needsPermission = pendingPermissions.has(toolCall.id);
+                      return (
+                        <ToolCallDisplay
+                          key={toolCall.id}
+                          toolCall={toolCall}
+                          result={result}
+                          needsPermission={needsPermission}
+                          onApprove={onPermissionApprove}
+                          onDeny={onPermissionDeny}
+                        />
+                      );
+                    })}
                 </div>
               )}
               
