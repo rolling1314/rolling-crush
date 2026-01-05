@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Send, User, Bot, History, X, File as FileIcon, Folder as FolderIcon } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Send, User, Bot, History, X, File as FileIcon, Folder as FolderIcon, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -17,6 +17,137 @@ interface ChatPanelProps {
   onToggleHistory?: () => void;
   sessionConfigComponent?: React.ReactNode;
 }
+
+const ThinkingProcess = ({ reasoning, isStreaming, hasContent }: { reasoning: string, isStreaming: boolean, hasContent: boolean }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  // We consider it "actively thinking" if the message is streaming AND there is no content yet.
+  // Once content starts arriving, the thinking phase is effectively over from a UX perspective.
+  const isThinking = isStreaming && !hasContent;
+  
+  return (
+    <div className="mb-3">
+        <button 
+            onClick={() => setIsOpen(!isOpen)}
+            className={cn(
+                "group flex items-center gap-3 px-3 py-2 rounded-lg transition-all w-full text-left border select-none",
+                isThinking 
+                    ? "bg-purple-500/10 border-purple-500/20 cursor-wait" 
+                    : "bg-[#2d2d2d] border-transparent hover:bg-[#363636]"
+            )}
+        >
+            {/* Breathing light effect / Icon */}
+            <div className="relative flex items-center justify-center w-5 h-5">
+                {isThinking ? (
+                    <>
+                        <div className="absolute inset-0 bg-purple-500 rounded-full animate-ping opacity-20 duration-1000" />
+                        <div className="w-2.5 h-2.5 bg-purple-400 rounded-full shadow-[0_0_10px_rgba(168,85,247,0.8)] animate-pulse" />
+                    </>
+                ) : (
+                    <Sparkles size={14} className="text-purple-400/70" />
+                )}
+            </div>
+            
+            <div className="flex flex-col">
+                <span className={cn(
+                    "text-xs font-medium transition-colors",
+                    isThinking ? "text-purple-300" : "text-gray-400 group-hover:text-purple-300"
+                )}>
+                    {isThinking ? "Thinking..." : "Thinking Process"}
+                </span>
+            </div>
+            
+            <div className="ml-auto text-gray-500 group-hover:text-gray-300 transition-colors">
+                {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </div>
+        </button>
+        
+        {isOpen && (
+            <div className="mt-2 ml-1 pl-3 border-l-2 border-purple-500/20 overflow-hidden animate-in fade-in slide-in-from-top-1">
+               <div className="text-xs font-mono text-gray-400 whitespace-pre-wrap leading-relaxed opacity-90 py-1">
+                 {reasoning}
+               </div>
+            </div>
+        )}
+    </div>
+  );
+};
+
+const UserMessageRenderer = ({ content }: { content: string }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  
+  const { text, files } = useMemo(() => {
+    const contextMarker = '\n\nContext Files:\n';
+    const splitIndex = content.lastIndexOf(contextMarker);
+    
+    if (splitIndex === -1) {
+      return { text: content, files: [] };
+    }
+    
+    const text = content.substring(0, splitIndex);
+    const fileContext = content.substring(splitIndex + contextMarker.length);
+    const files: { type: 'file' | 'folder', path: string }[] = [];
+    
+    const entries = fileContext.split('\n\n');
+    entries.forEach(entry => {
+        if (entry.startsWith('Folder: ')) {
+            const firstLine = entry.split('\n')[0];
+            const path = firstLine.substring(8).replace(' (Context of this folder)', '');
+            files.push({ type: 'folder', path });
+        } else if (entry.startsWith('File: ')) {
+            const firstLine = entry.split('\n')[0];
+            const path = firstLine.substring(6);
+            files.push({ type: 'file', path });
+        }
+    });
+    
+    return { text, files };
+  }, [content]);
+
+  if (files.length === 0) {
+    return <span className="whitespace-pre-wrap">{text}</span>;
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="whitespace-pre-wrap">{text}</span>
+      
+      <div className="bg-blue-900/20 border border-blue-700/30 rounded-md overflow-hidden">
+        <button 
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex items-center gap-2 w-full px-3 py-2 text-xs text-blue-300 hover:bg-blue-800/30 transition-colors text-left"
+        >
+          {isExpanded ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0" />}
+          <span className="font-medium shrink-0">Context:</span>
+          {!isExpanded ? (
+             <div className="flex gap-2 overflow-hidden items-center flex-1">
+                {files.slice(0, 3).map((f, i) => (
+                    <span key={i} className="flex items-center gap-1 bg-blue-900/40 px-1.5 py-0.5 rounded border border-blue-700/30 truncate max-w-[150px]">
+                        {f.type === 'folder' ? <FolderIcon size={10} /> : <FileIcon size={10} />}
+                        <span className="truncate">{f.path.split('/').pop()}</span>
+                    </span>
+                ))}
+                {files.length > 3 && <span className="shrink-0 opacity-70">+{files.length - 3} more</span>}
+             </div>
+          ) : (
+             <span>{files.length} items included</span>
+          )}
+        </button>
+        
+        {isExpanded && (
+          <div className="px-3 py-2 bg-black/20 text-xs text-blue-200/80 space-y-1 border-t border-blue-700/30 max-h-[200px] overflow-y-auto">
+            {files.map((file, idx) => (
+              <div key={idx} className="flex items-center gap-2 font-mono">
+                {file.type === 'folder' ? <FolderIcon size={12} className="shrink-0" /> : <FileIcon size={12} className="shrink-0" />}
+                <span className="truncate" title={file.path}>{file.path}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export const ChatPanel = ({ 
   messages, 
@@ -127,18 +258,14 @@ export const ChatPanel = ({
             )}>
               {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
             </div>
-            <div className="flex flex-col gap-2 flex-1">
-              {/* Reasoning content (if present) */}
+            <div className="flex flex-col gap-2 flex-1 min-w-0">
+              {/* Reasoning content (Collapsible) */}
               {msg.reasoning && (
-                <div className="p-3 rounded-md text-xs bg-purple-900/20 text-purple-200 border border-purple-700/30 reasoning-box">
-                  <div className="font-semibold mb-2 flex items-center gap-2">
-                    <span className="text-purple-400">💭</span>
-                    <span>Thinking Process</span>
-                  </div>
-                  <div className="whitespace-pre-wrap font-mono text-purple-100/80 leading-relaxed streaming-content">
-                    {msg.reasoning}
-                  </div>
-                </div>
+                <ThinkingProcess 
+                    reasoning={msg.reasoning}
+                    isStreaming={!!msg.isStreaming}
+                    hasContent={!!msg.content}
+                />
               )}
               
               {/* Tool Calls */}
@@ -147,13 +274,6 @@ export const ChatPanel = ({
                   {msg.toolCalls.map((toolCall) => {
                     const result = msg.toolResults?.find(r => r.tool_call_id === toolCall.id);
                     const needsPermission = pendingPermissions.has(toolCall.id);
-                    console.log('Rendering ToolCall:', {
-                      id: toolCall.id,
-                      name: toolCall.name,
-                      needsPermission,
-                      pendingPermissionsSize: pendingPermissions.size,
-                      pendingKeys: Array.from(pendingPermissions.keys())
-                    });
                     return (
                       <ToolCallDisplay
                         key={toolCall.id}
@@ -243,7 +363,7 @@ export const ChatPanel = ({
                       {msg.content}
                     </ReactMarkdown>
                   ) : (
-                    <span className="whitespace-pre-wrap">{msg.content}</span>
+                    <UserMessageRenderer content={msg.content} />
                   )}
                   {msg.isStreaming && (
                     <span className="inline-block w-1.5 h-4 ml-1 bg-green-500 animate-pulse align-middle"></span>
@@ -308,4 +428,3 @@ export const ChatPanel = ({
     </div>
   );
 };
-
