@@ -12,6 +12,7 @@ interface SessionConfig {
 
 interface SessionConfigPanelProps {
   sessionId: string;
+  compact?: boolean;
 }
 
 interface SessionModelConfig {
@@ -26,7 +27,7 @@ interface SessionModelConfig {
   think?: boolean;
 }
 
-export function SessionConfigPanel({ sessionId }: SessionConfigPanelProps) {
+export function SessionConfigPanel({ sessionId, compact = false }: SessionConfigPanelProps) {
   const [config, setConfig] = useState<SessionConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -62,6 +63,9 @@ export function SessionConfigPanel({ sessionId }: SessionConfigPanelProps) {
   };
 
   if (loading) {
+    if (compact) {
+      return <div className="text-xs text-gray-500">Loading config...</div>;
+    }
     return (
       <div className="bg-gray-800 rounded-lg border border-gray-700">
         <div className="flex items-center gap-2 p-3">
@@ -73,6 +77,9 @@ export function SessionConfigPanel({ sessionId }: SessionConfigPanelProps) {
   }
 
   if (error) {
+    if (compact) {
+        return <div className="text-xs text-red-500">Config Error</div>;
+    }
     return (
       <div className="bg-gray-800 rounded-lg border border-gray-700">
         <div className="flex items-center gap-2 p-3">
@@ -84,6 +91,30 @@ export function SessionConfigPanel({ sessionId }: SessionConfigPanelProps) {
   }
 
   if (!config || !config.provider) {
+    if (compact) {
+        return (
+            <div className="flex items-center gap-2">
+                 <button 
+                    onClick={() => setIsEditing(true)}
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs transition-colors"
+                 >
+                    <Settings className="w-3.5 h-3.5" />
+                    <span>Configure</span>
+                 </button>
+                 {isEditing && (
+                    <EditConfigModal
+                      sessionId={sessionId}
+                      currentConfig={{ provider: '', model: '', api_key: '' }} 
+                      onClose={() => setIsEditing(false)}
+                      onSave={() => {
+                        setIsEditing(false);
+                        loadConfig();
+                      }}
+                    />
+                 )}
+            </div>
+        );
+    }
     return (
       <div className="bg-gray-800 rounded-lg border border-gray-700">
         <div className="flex items-center gap-2 p-3">
@@ -94,67 +125,63 @@ export function SessionConfigPanel({ sessionId }: SessionConfigPanelProps) {
     );
   }
 
-  return (
-    <div className="bg-gray-800 rounded-lg border border-gray-700">
-      {/* Header - 可点击折叠/展开 */}
-      <div 
-        className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-700/50 transition-colors"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <div className="flex items-center gap-2">
-          <Settings className="w-4 h-4 text-blue-400" />
-          <h3 className="text-sm font-medium text-white">Session Configuration</h3>
-          {isExpanded ? (
-            <ChevronDown className="w-4 h-4 text-gray-400" />
-          ) : (
-            <ChevronRight className="w-4 h-4 text-gray-400" />
-          )}
+  if (compact) {
+    return (
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/5 text-xs text-gray-300 select-none">
+           <Cpu className="w-3.5 h-3.5 text-blue-400" />
+           <span>{config.model}</span>
         </div>
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsEditing(true);
-          }}
-          className="p-1.5 hover:bg-gray-600 rounded transition-colors"
-          title="Edit configuration"
+          onClick={() => setIsEditing(true)}
+          className="p-1 text-gray-500 hover:text-white transition-colors rounded-md hover:bg-white/10"
+          title="Session Settings"
         >
-          <Edit2 className="w-3.5 h-3.5 text-gray-400 hover:text-white" />
+          <Settings className="w-4 h-4" />
         </button>
+
+        {isEditing && (
+          <EditConfigModal
+            sessionId={sessionId}
+            currentConfig={config}
+            onClose={() => setIsEditing(false)}
+            onSave={() => {
+              setIsEditing(false);
+              loadConfig();
+            }}
+          />
+        )}
       </div>
+    );
+  }
 
-      {/* 展开时显示的内容 */}
-      {isExpanded && (
-        <div className="px-3 pb-3 space-y-2 border-t border-gray-700 pt-3">
-          <div className="flex items-start gap-2">
-            <div className="p-1.5 bg-gray-700 rounded">
-              <Cpu className="w-3.5 h-3.5 text-blue-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-xs text-gray-400 mb-0.5">Provider & Model</div>
-              <div className="text-sm text-white font-medium truncate">
-                {config.provider} / {config.model}
-              </div>
-            </div>
+  return (
+    <div className="mt-2">
+      {/* Configuration Bar */}
+      <div 
+        className="flex items-center justify-between px-4 py-3 bg-[#2d2d2d] rounded-lg cursor-pointer hover:bg-[#3d3d3d] transition-colors border border-gray-700"
+        onClick={() => setIsEditing(true)}
+      >
+        <div className="flex items-center gap-3">
+          <div className="p-1.5 bg-blue-500/10 rounded-md">
+            <Settings className="w-4 h-4 text-blue-400" />
           </div>
-
-          <div className="flex items-start gap-2">
-            <div className="p-1.5 bg-gray-700 rounded">
-              <Key className="w-3.5 h-3.5 text-green-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-xs text-gray-400 mb-0.5">API Key</div>
-              <div className="text-sm text-white font-mono truncate">
-                {config.api_key || '****'}
-              </div>
-            </div>
+          <div className="flex flex-col">
+            <span className="text-sm font-medium text-gray-200">会话配置</span>
+            <span className="text-xs text-gray-500">
+              {config?.provider && config?.model ? `${config.provider} / ${config.model}` : 'Configure model'}
+            </span>
           </div>
         </div>
-      )}
+        <div className="flex items-center gap-2">
+          <ChevronRight className="w-4 h-4 text-gray-500" />
+        </div>
+      </div>
 
       {isEditing && (
         <EditConfigModal
           sessionId={sessionId}
-          currentConfig={config}
+          currentConfig={config!}
           onClose={() => setIsEditing(false)}
           onSave={() => {
             setIsEditing(false);

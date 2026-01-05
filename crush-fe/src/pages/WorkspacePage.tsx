@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { X, Plus, MessageSquare, LogOut, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
+import { X, Plus, MessageSquare, LogOut, ChevronRight, Trash2 } from 'lucide-react';
 import axios from 'axios';
 import { ChatPanel } from '../components/ChatPanel';
 import { FileTree } from '../components/FileTree';
@@ -49,9 +49,9 @@ export default function WorkspacePage() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
   const [newSessionTitle, setNewSessionTitle] = useState('');
-  const [sessionsCollapsed, setSessionsCollapsed] = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showSessionHistory, setShowSessionHistory] = useState(false);
   
   // Model selection state
   const [modelConfig, setModelConfig] = useState<SessionModelConfig>({
@@ -527,56 +527,103 @@ export default function WorkspacePage() {
 
   return (
     <div className="flex h-screen w-screen bg-[#1e1e1e] overflow-hidden">
-      {/* 最左侧：会话列表（可折叠） */}
-      <div className={`${sessionsCollapsed ? 'w-12' : 'w-64'} bg-[#252526] border-r border-gray-700 flex flex-col transition-all duration-300`}>
-        {sessionsCollapsed ? (
-          // 折叠状态
-          <div className="flex flex-col h-full">
-            <button
-              onClick={() => setSessionsCollapsed(false)}
-              className="p-3 hover:bg-gray-700 border-b border-gray-700"
-              title="Expand Sessions"
-            >
-              <ChevronRight size={18} className="text-gray-400" />
-            </button>
-            <div className="flex-1"></div>
-            <button
-              onClick={handleLogout}
-              className="p-3 hover:bg-gray-700 border-t border-gray-700"
-              title="Logout"
-            >
-              <LogOut size={18} className="text-gray-400" />
-            </button>
+      {/* 1. Left: File Tree */}
+      <div className="w-[250px] shrink-0 border-r border-gray-700 bg-[#1e1e1e] flex flex-col">
+        {loadingFiles ? (
+          <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+            Loading files...
           </div>
         ) : (
-          // 展开状态
+          <FileTree 
+            data={files} 
+            onSelectFile={handleFileSelect}
+            selectedFileId={activeFileId || undefined}
+          />
+        )}
+      </div>
+
+      {/* 2. Center: Code Editor */}
+      <div className="flex-1 min-w-0 bg-[#1e1e1e] flex flex-col border-r border-gray-700">
+        {openFiles.length > 0 ? (
           <>
-            <div className="p-4 border-b border-gray-700">
-              <button
-                onClick={() => navigate('/projects')}
-                className="text-gray-400 hover:text-white text-sm mb-3"
-              >
-                ← Back to Projects
-              </button>
-              <div className="flex items-center justify-between">
-                <h2 className="text-white font-semibold">Sessions</h2>
-                <div className="flex gap-1">
+            <div className="flex items-center bg-[#252526] border-b border-gray-700 overflow-x-auto no-scrollbar">
+              {openFiles.map(file => (
+                <div
+                  key={file.id}
+                  onClick={() => setActiveFileId(file.id)}
+                  className={`flex items-center gap-2 px-3 py-2 text-sm border-r border-gray-700 cursor-pointer ${
+                    activeFileId === file.id 
+                      ? 'bg-[#1e1e1e] text-white' 
+                      : 'bg-[#2d2d2d] text-gray-400 hover:bg-[#2d2d2d]/80'
+                  }`}
+                >
+                  <span className="truncate">{file.name}</span>
                   <button
-                    onClick={() => setShowNewSessionModal(true)}
-                    className="p-1 hover:bg-gray-700 rounded"
-                    title="New Session"
+                    onClick={(e) => handleCloseTab(e, file.id)}
+                    className="p-0.5 rounded hover:bg-white/20"
                   >
-                    <Plus size={18} className="text-gray-400" />
-                  </button>
-                  <button
-                    onClick={() => setSessionsCollapsed(true)}
-                    className="p-1 hover:bg-gray-700 rounded"
-                    title="Collapse"
-                  >
-                    <ChevronDown size={18} className="text-gray-400" />
+                    <X size={12} />
                   </button>
                 </div>
+              ))}
+            </div>
+
+            <div className="flex-1 overflow-hidden">
+              {activeFile && (
+                <CodeEditor 
+                  key={activeFile.id}
+                  code={activeFile.content || '// No content'} 
+                  onChange={() => {}}
+                  readOnly={false}
+                />
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="h-full flex items-center justify-center text-gray-500">
+            Select a file to view
+          </div>
+        )}
+      </div>
+
+      {/* 3. Right: Chat & Session History */}
+      <div className="w-[400px] shrink-0 bg-[#252526] flex flex-col relative">
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <ChatPanel 
+            messages={messages} 
+            onSendMessage={handleSendMessage}
+            pendingPermissions={pendingPermissions}
+            onPermissionApprove={(toolCallId) => handlePermissionResponse(toolCallId, true)}
+            onPermissionDeny={(toolCallId) => handlePermissionResponse(toolCallId, false)}
+            onToggleHistory={() => setShowSessionHistory(!showSessionHistory)}
+            sessionConfigComponent={
+              currentSessionId ? (
+                <SessionConfigPanel sessionId={currentSessionId} compact={true} />
+              ) : null
+            }
+          />
+        </div>
+        
+        {/* Session List Overlay */}
+        {showSessionHistory && (
+          <div className="absolute inset-0 bg-[#252526] z-20 flex flex-col border-l border-gray-700 shadow-xl">
+             <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-[#2d2d2d]">
+              <div className="flex items-center gap-2">
+                 <button 
+                   onClick={() => setShowSessionHistory(false)}
+                   className="text-gray-400 hover:text-white"
+                 >
+                   <ChevronRight size={18} />
+                 </button>
+                 <h2 className="text-white font-semibold">Sessions</h2>
               </div>
+              <button
+                onClick={() => setShowNewSessionModal(true)}
+                className="p-1 hover:bg-gray-700 rounded"
+                title="New Session"
+              >
+                <Plus size={18} className="text-gray-400" />
+              </button>
             </div>
 
             <div className="flex-1 overflow-y-auto">
@@ -590,7 +637,10 @@ export default function WorkspacePage() {
                   <div className="flex items-start gap-2">
                     <div 
                       className="flex items-start gap-2 flex-1 min-w-0 cursor-pointer"
-                      onClick={() => setCurrentSessionId(session.id)}
+                      onClick={() => {
+                        setCurrentSessionId(session.id);
+                        setShowSessionHistory(false); // Auto close on select? Or keep open? Maybe keep open.
+                      }}
                     >
                       <MessageSquare size={16} className="text-gray-400 mt-1 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
@@ -619,8 +669,14 @@ export default function WorkspacePage() {
               )}
             </div>
 
-            {/* 退出登录按钮 */}
-            <div className="p-3 border-t border-gray-700">
+            {/* Navigation and Logout in Session Overlay */}
+            <div className="p-3 border-t border-gray-700 space-y-2">
+              <button
+                onClick={() => navigate('/projects')}
+                className="w-full flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+              >
+                <span className="text-sm">← Back to Projects</span>
+              </button>
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
@@ -629,86 +685,8 @@ export default function WorkspacePage() {
                 <span className="text-sm">Logout</span>
               </button>
             </div>
-          </>
-        )}
-      </div>
-
-      {/* 左侧：AI 助手和会话配置 */}
-      <div className="w-[350px] shrink-0 border-r border-gray-700 flex flex-col">
-        <div className="flex-1 overflow-hidden">
-          <ChatPanel 
-            messages={messages} 
-            onSendMessage={handleSendMessage}
-            pendingPermissions={pendingPermissions}
-            onPermissionApprove={(toolCallId) => handlePermissionResponse(toolCallId, true)}
-            onPermissionDeny={(toolCallId) => handlePermissionResponse(toolCallId, false)}
-          />
-        </div>
-        {currentSessionId && (
-          <div className="border-t border-gray-700 p-4 bg-[#1e1e1e] max-h-[400px] overflow-y-auto">
-            <SessionConfigPanel sessionId={currentSessionId} />
           </div>
         )}
-      </div>
-
-      {/* 右侧：文件树和编辑器 */}
-      <div className="flex-1 flex min-w-0">
-        <div className="w-[250px] shrink-0 border-r border-gray-700 bg-[#1e1e1e]">
-          {loadingFiles ? (
-            <div className="flex items-center justify-center h-full text-gray-500 text-sm">
-              Loading files...
-            </div>
-          ) : (
-            <FileTree 
-              data={files} 
-              onSelectFile={handleFileSelect}
-              selectedFileId={activeFileId || undefined}
-            />
-          )}
-        </div>
-
-        <div className="flex-1 min-w-0 bg-[#1e1e1e] flex flex-col">
-          {openFiles.length > 0 ? (
-            <>
-              <div className="flex items-center bg-[#252526] border-b border-gray-700 overflow-x-auto no-scrollbar">
-                {openFiles.map(file => (
-                  <div
-                    key={file.id}
-                    onClick={() => setActiveFileId(file.id)}
-                    className={`flex items-center gap-2 px-3 py-2 text-sm border-r border-gray-700 cursor-pointer ${
-                      activeFileId === file.id 
-                        ? 'bg-[#1e1e1e] text-white' 
-                        : 'bg-[#2d2d2d] text-gray-400 hover:bg-[#2d2d2d]/80'
-                    }`}
-                  >
-                    <span className="truncate">{file.name}</span>
-                    <button
-                      onClick={(e) => handleCloseTab(e, file.id)}
-                      className="p-0.5 rounded hover:bg-white/20"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex-1 overflow-hidden">
-                {activeFile && (
-                  <CodeEditor 
-                    key={activeFile.id}
-                    code={activeFile.content || '// No content'} 
-                    onChange={() => {}}
-                    readOnly={false}
-                  />
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="h-full flex items-center justify-center text-gray-500">
-              Select a file to view
-            </div>
-          )}
-        </div>
       </div>
 
       {/* 新建会话模态框 */}
@@ -795,4 +773,3 @@ export default function WorkspacePage() {
     </div>
   );
 }
-

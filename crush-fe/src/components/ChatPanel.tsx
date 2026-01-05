@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, User, Bot } from 'lucide-react';
+import { Send, User, Bot, History } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -14,6 +14,8 @@ interface ChatPanelProps {
   pendingPermissions: Map<string, PermissionRequest>;
   onPermissionApprove: (toolCallId: string) => void;
   onPermissionDeny: (toolCallId: string) => void;
+  onToggleHistory?: () => void;
+  sessionConfigComponent?: React.ReactNode;
 }
 
 export const ChatPanel = ({ 
@@ -21,7 +23,9 @@ export const ChatPanel = ({
   onSendMessage,
   pendingPermissions,
   onPermissionApprove,
-  onPermissionDeny 
+  onPermissionDeny,
+  onToggleHistory,
+  sessionConfigComponent
 }: ChatPanelProps) => {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -41,10 +45,26 @@ export const ChatPanel = ({
     setInput('');
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e as any);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#1e1e1e]">
-      <div className="p-4 border-b border-gray-700 bg-[#252526]">
+      <div className="p-4 border-b border-gray-700 bg-[#252526] flex justify-between items-center">
         <h2 className="text-sm font-semibold text-gray-200">AI Assistant</h2>
+        {onToggleHistory && (
+          <button 
+            onClick={onToggleHistory}
+            className="p-1 hover:bg-gray-700 rounded text-gray-400 hover:text-white transition-colors"
+            title="Session History"
+          >
+            <History size={18} />
+          </button>
+        )}
       </div>
       
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -191,23 +211,31 @@ export const ChatPanel = ({
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4 border-t border-gray-700 bg-[#252526]">
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <input
-            type="text"
+      <div className="p-4 bg-[#252526]">
+        <div className="relative bg-[#3c3c3c] border border-gray-600 rounded-lg flex flex-col focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500">
+          <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask something about the code..."
-            className="flex-1 bg-[#3c3c3c] border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 placeholder-gray-500"
+            onKeyDown={handleKeyDown}
+            placeholder="问问关于代码的问题......"
+            className="w-full bg-transparent border-none text-sm text-gray-200 placeholder-gray-500 p-3 min-h-[60px] max-h-[200px] resize-none focus:ring-0 focus:outline-none scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent"
+            rows={2}
           />
-          <button
-            type="submit"
-            disabled={!input.trim()}
-            className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <Send size={18} />
-          </button>
-        </form>
+          
+          <div className="flex justify-between items-center px-2 pb-2">
+            <div className="flex items-center">
+               {sessionConfigComponent}
+            </div>
+            
+            <button
+              onClick={handleSubmit}
+              disabled={!input.trim()}
+              className="p-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <Send size={16} />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
