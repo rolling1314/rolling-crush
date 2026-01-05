@@ -57,6 +57,7 @@ type App struct {
 	LSPClients *csync.Map[string, *lsp.Client]
 
 	config *config.Config
+	db     *db.Queries // Add DB queries for session config loading
 
 	serviceEventsWG *sync.WaitGroup
 	eventsCtx       context.Context
@@ -100,6 +101,7 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 		globalCtx: ctx,
 
 		config: cfg,
+		db:     q, // Store DB queries for session config loading
 
 		events:          make(chan tea.Msg, 100),
 		serviceEventsWG: &sync.WaitGroup{},
@@ -111,6 +113,8 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 
 	// Register the handler for incoming WebSocket messages
 	app.WSServer.SetMessageHandler(app.HandleClientMessage)
+	fmt.Println("=== WebSocket message handler registered ===")
+	fmt.Println("Handler function:", app.HandleClientMessage != nil)
 
 	app.setupEvents()
 
@@ -129,18 +133,25 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 	app.cleanupFuncs = append(app.cleanupFuncs, conn.Close, mcp.Close)
 
 	// TODO: remove the concept of agent config, most likely.
-	if !cfg.IsConfigured() {
-		slog.Warn("No agent configuration found")
-		return app, nil
+	// Try to initialize agent if config is available
+	// In Web mode, agent may be initialized later when session config is loaded
+	if cfg.IsConfigured() {
+		if err := app.InitCoderAgent(ctx); err != nil {
+			slog.Warn("Failed to initialize coder agent, will retry later", "error", err)
+			// Don't fail the app, agent can be initialized later
+		}
+	} else {
+		slog.Warn("No agent configuration found, agent will be initialized when session config is loaded")
 	}
-	if err := app.InitCoderAgent(ctx); err != nil {
-		return nil, fmt.Errorf("failed to initialize coder agent: %w", err)
-	}
+	
 	return app, nil
 }
 
 // HandleClientMessage processes messages from the WebSocket client
 func (app *App) HandleClientMessage(rawMsg []byte) {
+	fmt.Println("=== HandleClientMessage called ===")
+	fmt.Println("Raw message:", string(rawMsg))
+	
 	type ClientMsg struct {
 		Type       string `json:"type"`
 		Content    string `json:"content"`
@@ -156,6 +167,8 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 		slog.Error("Failed to unmarshal client message", "error", err)
 		return
 	}
+
+	fmt.Println("Parsed message type:", msg.Type, "content:", msg.Content, "sessionID:", msg.SessionID)
 
 	// Handle permission responses
 	if msg.Type == "permission_response" {
@@ -186,8 +199,12 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 
 	// Use existing session or create new one
 	sessionID := msg.SessionID
+	fmt.Println("Processing message, sessionID from message:", sessionID)
+	
 	if sessionID == "" {
+		fmt.Println("No sessionID in message, checking currentSessionID:", app.currentSessionID)
 		if app.currentSessionID == "" {
+			fmt.Println("Creating new session...")
 			// Create a default session if none exists
 			sess, err := app.Sessions.Create(context.Background(), "", "Web Session")
 			if err != nil {
@@ -195,6 +212,7 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 				return
 			}
 			app.currentSessionID = sess.ID
+			fmt.Println("Created session with ID:", sess.ID)
 			// Don't auto-approve - let frontend handle permissions
 			// app.Permissions.AutoApproveSession(sess.ID)
 		}
@@ -203,15 +221,36 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 		app.currentSessionID = sessionID
 	}
 
+	fmt.Println("Final sessionID:", sessionID)
 	slog.Info("Received message from client", "content", msg.Content, "sessionID", sessionID)
 
+	// Ensure AgentCoordinator is initialized
+	if app.AgentCoordinator == nil {
+		fmt.Println("AgentCoordinator is nil, attempting to initialize...")
+		slog.Warn("AgentCoordinator not initialized, attempting to initialize now")
+		if err := app.InitCoderAgent(context.Background()); err != nil {
+			fmt.Println("Failed to initialize AgentCoordinator:", err)
+			slog.Error("Failed to initialize AgentCoordinator", "error", err)
+			return
+		}
+		fmt.Println("AgentCoordinator initialized successfully")
+	} else {
+		fmt.Println("AgentCoordinator already initialized")
+	}
+
+	fmt.Println("About to call AgentCoordinator.Run in goroutine")
 	// Run the agent asynchronously
 	go func() {
+		fmt.Println("Inside goroutine, calling AgentCoordinator.Run")
 		_, err := app.AgentCoordinator.Run(context.Background(), sessionID, msg.Content)
 		if err != nil {
+			fmt.Println("Agent run error:", err)
 			slog.Error("Agent run error", "error", err)
+		} else {
+			fmt.Println("Agent run completed successfully")
 		}
 	}()
+	fmt.Println("Goroutine started, HandleClientMessage returning")
 }
 
 // Config returns the application configuration.
@@ -413,11 +452,47 @@ func setupSubscriber[T any](
 }
 
 func (app *App) InitCoderAgent(ctx context.Context) error {
-	coderAgentCfg := app.config.Agents[config.AgentCoder]
-	if coderAgentCfg.ID == "" {
-		return fmt.Errorf("coder agent configuration is missing")
+	fmt.Println("=== InitCoderAgent called ===")
+	
+	// Ensure agent configuration exists (for Web mode)
+	if app.config.Agents == nil {
+		app.config.Agents = make(map[string]config.Agent)
 	}
+	
+	coderAgentCfg, ok := app.config.Agents[config.AgentCoder]
+	if !ok || coderAgentCfg.ID == "" {
+		fmt.Println("No coder agent config found, creating default config")
+		// Create a default coder agent config for Web mode
+		coderAgentCfg = config.Agent{
+			ID:           config.AgentCoder,
+			Name:         "Coder",
+			Model:        config.SelectedModelTypeLarge,
+			AllowedTools: []string{
+				"agent",
+				"agentic_fetch",
+				"bash",
+				"job_output",
+				"job_kill",
+				"download",
+				"edit",
+				"multi_edit",
+				"fetch",
+				"glob",
+				"grep",
+				"ls",
+				"sourcegraph",
+				"view",
+				"write",
+				"diagnostics",
+				"references",
+			},
+		}
+		app.config.Agents[config.AgentCoder] = coderAgentCfg
+		fmt.Println("Default coder agent config created")
+	}
+	
 	var err error
+	fmt.Println("Creating coordinator with dbReader:", app.db != nil)
 	app.AgentCoordinator, err = agent.NewCoordinator(
 		ctx,
 		app.config,
@@ -426,11 +501,14 @@ func (app *App) InitCoderAgent(ctx context.Context) error {
 		app.Permissions,
 		app.History,
 		app.LSPClients,
+		app.db, // Pass DB queries as DBReader for session config loading
 	)
 	if err != nil {
+		fmt.Println("Failed to create coordinator:", err)
 		slog.Error("Failed to create coder agent", "err", err)
 		return err
 	}
+	fmt.Println("Coordinator created successfully")
 	return nil
 }
 

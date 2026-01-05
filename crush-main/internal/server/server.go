@@ -82,7 +82,9 @@ func (s *Server) HandleConnections(w http.ResponseWriter, r *http.Request) {
 
 		for {
 			_, msg, err := ws.ReadMessage()
-			fmt.Println(msg)
+			fmt.Println("=== WebSocket message received ===")
+			fmt.Println("Message bytes:", msg)
+			fmt.Println("Message string:", string(msg))
 			if err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 					slog.Error("WebSocket read error", "error", err)
@@ -91,8 +93,13 @@ func (s *Server) HandleConnections(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Handle incoming message via callback
+			fmt.Println("Handler exists:", s.handler != nil)
 			if s.handler != nil {
+				fmt.Println("Calling handler with message")
 				s.handler(msg)
+				fmt.Println("Handler returned")
+			} else {
+				fmt.Println("WARNING: No handler set!")
 			}
 		}
 	}()

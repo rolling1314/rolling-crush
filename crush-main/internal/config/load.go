@@ -104,6 +104,95 @@ func Load(workingDir, dataDir string, debug bool) (*Config, error) {
 	return cfg, nil
 }
 
+// LoadWithSessionConfig loads the base config and merges session-specific config from database
+// This is used by Web mode to load per-session configuration
+func LoadWithSessionConfig(ctx context.Context, workingDir, dataDir string, debug bool, sessionID string, dbReader DBReader) (*Config, error) {
+	// 1. Load base config (same as Load)
+	cfg, err := Load(workingDir, dataDir, debug)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Load session config from database
+	sessionConfigJSON, err := dbReader.GetSessionConfigJSON(ctx, sessionID)
+	if err != nil {
+		slog.Error("Failed to load session config from database", "session_id", sessionID, "error", err)
+		return cfg, nil // Return base config on error
+	}
+
+	slog.Info("Loaded session config JSON from database", "session_id", sessionID, "json_length", len(sessionConfigJSON), "json_content", sessionConfigJSON)
+
+	if sessionConfigJSON == "" || sessionConfigJSON == "{}" {
+		slog.Debug("No session config found, using base config", "session_id", sessionID)
+		return cfg, nil
+	}
+
+	// 3. Parse and merge session config into base config
+	var sessionConfig Config
+	if err := json.Unmarshal([]byte(sessionConfigJSON), &sessionConfig); err != nil {
+		slog.Error("Failed to parse session config JSON", "session_id", sessionID, "error", err)
+		return cfg, nil // Return base config on error
+	}
+
+	slog.Info("Unmarshaled session config", "session_id", sessionID,
+		"has_providers", sessionConfig.Providers != nil,
+		"has_models", sessionConfig.Models != nil,
+		"models_count", len(sessionConfig.Models))
+
+	if sessionConfig.Providers != nil {
+		providerCount := 0
+		for providerID, providerConfig := range sessionConfig.Providers.Seq2() {
+			providerCount++
+			slog.Info("Provider in session config", "provider_id", providerID, "has_api_key", providerConfig.APIKey != "")
+		}
+		slog.Info("Session config providers count", "count", providerCount)
+	}
+
+	// 4. Merge session config into base config (session config takes precedence)
+	// Merge providers
+	if sessionConfig.Providers != nil {
+		for providerID, providerConfig := range sessionConfig.Providers.Seq2() {
+			slog.Info("Merging provider from session config", "provider_id", providerID, "has_api_key", providerConfig.APIKey != "")
+			cfg.Providers.Set(providerID, providerConfig)
+		}
+	}
+
+	// Merge models
+	if sessionConfig.Models != nil {
+		if cfg.Models == nil {
+			cfg.Models = make(map[SelectedModelType]SelectedModel)
+		}
+		for k, v := range sessionConfig.Models {
+			cfg.Models[k] = v
+		}
+	}
+
+	// Merge recent models
+	if sessionConfig.RecentModels != nil {
+		if cfg.RecentModels == nil {
+			cfg.RecentModels = make(map[SelectedModelType][]SelectedModel)
+		}
+		for k, v := range sessionConfig.RecentModels {
+			cfg.RecentModels[k] = v
+		}
+	}
+
+	// Re-configure with merged config
+	env := env.New()
+	valueResolver := NewShellVariableResolver(env)
+	cfg.resolver = valueResolver
+	if err := cfg.configureProviders(env, valueResolver, cfg.knownProviders); err != nil {
+		slog.Error("Failed to re-configure providers after session merge", "error", err)
+	}
+
+	if err := cfg.configureSelectedModels(cfg.knownProviders); err != nil {
+		slog.Error("Failed to re-configure selected models after session merge", "error", err)
+	}
+
+	slog.Info("Loaded session config from database", "session_id", sessionID)
+	return cfg, nil
+}
+
 func PushPopCrushEnv() func() {
 	found := []string{}
 	for _, ev := range os.Environ() {

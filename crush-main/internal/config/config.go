@@ -25,6 +25,11 @@ type DBWriter interface {
 	SaveConfigJSON(ctx context.Context, sessionID string, configJSON string) error
 }
 
+// DBReader interface for reading config from database (used by Web mode)
+type DBReader interface {
+	GetSessionConfigJSON(ctx context.Context, sessionID string) (string, error)
+}
+
 const (
 	appName              = "crush"
 	defaultDataDirectory = ".crush"
@@ -476,6 +481,7 @@ func (c *Config) SetConfigField(key string, value any) error {
 	if c.useDBStorage && c.dbWriter != nil && c.sessionID != "" {
 		// 从内存缓存读取，这样可以累积多次修改
 		data = []byte(c.configCache)
+		slog.Info("SetConfigField reading from cache", "session_id", c.sessionID, "key", key, "cache_content", c.configCache)
 	} else {
 		// 从文件读取
 		data, err = os.ReadFile(c.dataConfigDir)
@@ -497,6 +503,7 @@ func (c *Config) SetConfigField(key string, value any) error {
 	if c.useDBStorage && c.dbWriter != nil && c.sessionID != "" {
 		// 更新内存缓存
 		c.configCache = newValue
+		slog.Info("SetConfigField saving to database", "session_id", c.sessionID, "key", key, "new_value", newValue)
 
 		// 写入数据库
 		ctx := context.Background()

@@ -154,6 +154,40 @@ func (q *Queries) SaveConfigJSON(ctx context.Context, sessionID string, configJS
 	return nil
 }
 
+// GetSessionConfigJSON retrieves the complete TUI-format config JSON from database
+// This method implements the config.DBReader interface
+func (q *Queries) GetSessionConfigJSON(ctx context.Context, sessionID string) (string, error) {
+	// First, check if the table exists
+	var tableExists bool
+	err := q.db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT FROM information_schema.tables 
+			WHERE table_schema = 'public' 
+			AND table_name = 'session_model_configs'
+		)
+	`).Scan(&tableExists)
+
+	if err != nil || !tableExists {
+		slog.Warn("session_model_configs table does not exist", "session_id", sessionID)
+		return "{}", nil // Return empty JSON if table doesn't exist
+	}
+
+	var configJSON []byte
+	err = q.db.QueryRowContext(ctx, `
+		SELECT config_json FROM session_model_configs WHERE session_id = $1 LIMIT 1
+	`, sessionID).Scan(&configJSON)
+
+	if err == sql.ErrNoRows {
+		slog.Debug("No config found for session, returning empty", "session_id", sessionID)
+		return "{}", nil // Return empty JSON if no config found
+	}
+	if err != nil {
+		return "", err
+	}
+
+	return string(configJSON), nil
+}
+
 // GetSessionModelConfig retrieves the config for a session
 func (q *Queries) GetSessionModelConfig(ctx context.Context, sessionID string) (*SessionConfigParams, error) {
 	var configJSON []byte

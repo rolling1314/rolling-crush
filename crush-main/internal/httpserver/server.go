@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"database/sql"
+	"fmt"
 	"io/ioutil"
 	"log/slog"
 	"net/http"
@@ -421,10 +422,17 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 	}
 
 	// Save model config using TUI's exact logic, writing to database instead of file
+	fmt.Println("=== handleCreateSession: About to save model config ===")
+	fmt.Println("req.ModelConfig:", req.ModelConfig)
+	
 	if req.ModelConfig != nil {
+		fmt.Println("ModelConfig is not nil, proceeding with config save")
+		fmt.Println("Provider:", req.ModelConfig.Provider, "Model:", req.ModelConfig.Model)
+		
 		// 1. 创建一个临时Config实例，启用数据库存储模式
 		tempConfig := *s.config // 浅拷贝基础配置
 		tempConfig.EnableDBStorage(sess.ID, s.db)
+		fmt.Println("Enabled DB storage for session:", sess.ID)
 		
 		// 2. 按照TUI逻辑设置API Key（会自动写入数据库）
 		if req.ModelConfig.APIKey != "" {

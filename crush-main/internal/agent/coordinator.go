@@ -61,6 +61,7 @@ type coordinator struct {
 	permissions permission.Service
 	history     history.Service
 	lspClients  *csync.Map[string, *lsp.Client]
+	dbReader    config.DBReader // For loading session-specific config from DB
 
 	currentAgent SessionAgent
 	agents       map[string]SessionAgent
@@ -76,6 +77,7 @@ func NewCoordinator(
 	permissions permission.Service,
 	history history.Service,
 	lspClients *csync.Map[string, *lsp.Client],
+	dbReader config.DBReader, // Add dbReader parameter
 ) (Coordinator, error) {
 	c := &coordinator{
 		cfg:         cfg,
@@ -84,6 +86,7 @@ func NewCoordinator(
 		permissions: permissions,
 		history:     history,
 		lspClients:  lspClients,
+		dbReader:    dbReader,
 		agents:      make(map[string]SessionAgent),
 	}
 
@@ -109,11 +112,64 @@ func NewCoordinator(
 
 // Run implements Coordinator.
 func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, attachments ...message.Attachment) (*fantasy.AgentResult, error) {
+	fmt.Println("=== Run method called ===", "sessionID:", sessionID)
+
 	if err := c.readyWg.Wait(); err != nil {
+		fmt.Println("readyWg.Wait failed:", err)
 		return nil, err
 	}
+	fmt.Println("readyWg.Wait passed")
 
-	model := c.currentAgent.Model()
+	// Check if currentAgent exists
+	if c.currentAgent == nil {
+		fmt.Println("ERROR: currentAgent is nil!")
+		return nil, errors.New("agent not initialized")
+	}
+	fmt.Println("currentAgent exists")
+
+	// Load session-specific config from database if dbReader is available
+	sessionCfg := c.cfg
+	if c.dbReader != nil {
+		fmt.Println("dbReader available, loading session config")
+		var err error
+		sessionCfg, err = config.LoadWithSessionConfig(
+			ctx,
+			c.cfg.WorkingDir(),
+			c.cfg.Options.DataDirectory,
+			c.cfg.Options.Debug,
+			sessionID,
+			c.dbReader,
+		)
+		if err != nil {
+			fmt.Println("Failed to load session config:", err)
+			slog.Error("Failed to load session config, using base config", "session_id", sessionID, "error", err)
+			sessionCfg = c.cfg // Fallback to base config
+		} else {
+			fmt.Println("Session config loaded successfully")
+		}
+	} else {
+		fmt.Println("dbReader is nil, using base config")
+	}
+
+	fmt.Println("About to build agent models with session config")
+	// Build agent models using session config
+	large, small, err := c.buildAgentModelsWithConfig(ctx, sessionCfg)
+	fmt.Println(sessionCfg)
+	fmt.Println("hello")
+	if err != nil {
+		fmt.Println("buildAgentModelsWithConfig failed:", err)
+		// Fallback to current agent's models
+		slog.Error("Failed to build session models, using default", "session_id", sessionID, "error", err)
+		large = c.currentAgent.Model()
+		// Try to build small model from base config
+		small, _, _ = c.buildAgentModelsWithConfig(ctx, c.cfg)
+	} else {
+		fmt.Println("Models built successfully, updating agent")
+		// Update current agent's models for this session
+		c.currentAgent.SetModels(large, small)
+	}
+
+	model := large
 	maxTokens := model.CatwalkCfg.DefaultMaxTokens
 	if model.ModelCfg.MaxTokens != 0 {
 		maxTokens = model.ModelCfg.MaxTokens
@@ -123,7 +179,7 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		attachments = nil
 	}
 
-	providerCfg, ok := c.cfg.Providers.Get(model.ModelCfg.Provider)
+	providerCfg, ok := sessionCfg.Providers.Get(model.ModelCfg.Provider)
 	if !ok {
 		return nil, errors.New("model provider not configured")
 	}
@@ -276,20 +332,33 @@ func mergeCallOptions(model Model, cfg config.ProviderConfig) (fantasy.ProviderO
 
 func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, agent config.Agent) (SessionAgent, error) {
 	large, small, err := c.buildAgentModels(ctx)
+
+	// Build system prompt - use a default provider if models aren't configured yet
+	var systemPrompt string
+	var systemPromptPrefix string
 	if err != nil {
-		return nil, err
+		// In Web mode, models may not be configured yet (loaded per-session)
+		slog.Warn("Failed to build initial agent models, will load from session config", "error", err)
+		// Use default anthropic provider for prompt building
+		systemPrompt, err = prompt.Build(ctx, "anthropic", "claude-sonnet-4-5-20250929", *c.cfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build system prompt: %w", err)
+		}
+		systemPromptPrefix = "" // Will be set when session model is loaded
+	} else {
+		systemPrompt, err = prompt.Build(ctx, large.Model.Provider(), large.Model.Model(), *c.cfg)
+		if err != nil {
+			return nil, err
+		}
+		largeProviderCfg, _ := c.cfg.Providers.Get(large.ModelCfg.Provider)
+		systemPromptPrefix = largeProviderCfg.SystemPromptPrefix
 	}
 
-	systemPrompt, err := prompt.Build(ctx, large.Model.Provider(), large.Model.Model(), *c.cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	largeProviderCfg, _ := c.cfg.Providers.Get(large.ModelCfg.Provider)
+	// Create agent with system prompt (models may be empty initially)
 	result := NewSessionAgent(SessionAgentOptions{
 		large,
 		small,
-		largeProviderCfg.SystemPromptPrefix,
+		systemPromptPrefix,
 		systemPrompt,
 		c.cfg.Options.DisableAutoSummarize,
 		c.permissions.SkipRequests(),
@@ -297,12 +366,15 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 		c.messages,
 		nil,
 	})
+
+	// Build tools asynchronously (tools don't depend on models)
 	c.readyWg.Go(func() error {
 		tools, err := c.buildTools(ctx, agent)
 		if err != nil {
 			return err
 		}
 		result.SetTools(tools)
+		slog.Info("Agent tools initialized", "tool_count", len(tools))
 		return nil
 	})
 
@@ -314,17 +386,21 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent) ([]fan
 	if slices.Contains(agent.AllowedTools, AgentToolName) {
 		agentTool, err := c.agentTool(ctx)
 		if err != nil {
-			return nil, err
+			// Agent tool is optional - if task agent is not configured, skip it
+			slog.Warn("Skipping agent tool - task agent not configured", "error", err)
+		} else {
+			allTools = append(allTools, agentTool)
 		}
-		allTools = append(allTools, agentTool)
 	}
 
 	if slices.Contains(agent.AllowedTools, tools.AgenticFetchToolName) {
 		agenticFetchTool, err := c.agenticFetchTool(ctx, nil)
 		if err != nil {
-			return nil, err
+			// Agentic fetch is optional
+			slog.Warn("Skipping agentic fetch tool", "error", err)
+		} else {
+			allTools = append(allTools, agenticFetchTool)
 		}
-		allTools = append(allTools, agenticFetchTool)
 	}
 
 	// Get the model name for the agent
@@ -392,31 +468,36 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent) ([]fan
 
 // TODO: when we support multiple agents we need to change this so that we pass in the agent specific model config
 func (c *coordinator) buildAgentModels(ctx context.Context) (Model, Model, error) {
-	largeModelCfg, ok := c.cfg.Models[config.SelectedModelTypeLarge]
+	return c.buildAgentModelsWithConfig(ctx, c.cfg)
+}
+
+// buildAgentModelsWithConfig builds agent models using a specific config (for session-specific configs)
+func (c *coordinator) buildAgentModelsWithConfig(ctx context.Context, cfg *config.Config) (Model, Model, error) {
+	largeModelCfg, ok := cfg.Models[config.SelectedModelTypeLarge]
 	if !ok {
 		return Model{}, Model{}, errors.New("large model not selected")
 	}
-	smallModelCfg, ok := c.cfg.Models[config.SelectedModelTypeSmall]
+	smallModelCfg, ok := cfg.Models[config.SelectedModelTypeSmall]
 	if !ok {
 		return Model{}, Model{}, errors.New("small model not selected")
 	}
 
-	largeProviderCfg, ok := c.cfg.Providers.Get(largeModelCfg.Provider)
+	largeProviderCfg, ok := cfg.Providers.Get(largeModelCfg.Provider)
 	if !ok {
 		return Model{}, Model{}, errors.New("large model provider not configured")
 	}
 
-	largeProvider, err := c.buildProvider(largeProviderCfg, largeModelCfg)
+	largeProvider, err := c.buildProviderWithConfig(largeProviderCfg, largeModelCfg, cfg)
 	if err != nil {
 		return Model{}, Model{}, err
 	}
 
-	smallProviderCfg, ok := c.cfg.Providers.Get(smallModelCfg.Provider)
+	smallProviderCfg, ok := cfg.Providers.Get(smallModelCfg.Provider)
 	if !ok {
-		return Model{}, Model{}, errors.New("large model provider not configured")
+		return Model{}, Model{}, errors.New("small model provider not configured")
 	}
 
-	smallProvider, err := c.buildProvider(smallProviderCfg, largeModelCfg)
+	smallProvider, err := c.buildProviderWithConfig(smallProviderCfg, smallModelCfg, cfg)
 	if err != nil {
 		return Model{}, Model{}, err
 	}
@@ -440,7 +521,7 @@ func (c *coordinator) buildAgentModels(ctx context.Context) (Model, Model, error
 	}
 
 	if smallCatwalkModel == nil {
-		return Model{}, Model{}, errors.New("snall model not found in provider config")
+		return Model{}, Model{}, errors.New("small model not found in provider config")
 	}
 
 	largeModelID := largeModelCfg.Model
@@ -647,6 +728,10 @@ func (c *coordinator) isAnthropicThinking(model config.SelectedModel) bool {
 }
 
 func (c *coordinator) buildProvider(providerCfg config.ProviderConfig, model config.SelectedModel) (fantasy.Provider, error) {
+	return c.buildProviderWithConfig(providerCfg, model, c.cfg)
+}
+
+func (c *coordinator) buildProviderWithConfig(providerCfg config.ProviderConfig, model config.SelectedModel, cfg *config.Config) (fantasy.Provider, error) {
 	headers := maps.Clone(providerCfg.ExtraHeaders)
 	if headers == nil {
 		headers = make(map[string]string)
@@ -661,8 +746,8 @@ func (c *coordinator) buildProvider(providerCfg config.ProviderConfig, model con
 		}
 	}
 
-	apiKey, _ := c.cfg.Resolve(providerCfg.APIKey)
-	baseURL, _ := c.cfg.Resolve(providerCfg.BaseURL)
+	apiKey, _ := cfg.Resolve(providerCfg.APIKey)
+	baseURL, _ := cfg.Resolve(providerCfg.BaseURL)
 
 	switch providerCfg.Type {
 	case openai.Name:
