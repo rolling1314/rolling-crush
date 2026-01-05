@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { X, Plus, MessageSquare, LogOut, ChevronDown, ChevronRight } from 'lucide-react';
+import { X, Plus, MessageSquare, LogOut, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
 import axios from 'axios';
 import { ChatPanel } from '../components/ChatPanel';
 import { FileTree } from '../components/FileTree';
 import { CodeEditor } from '../components/CodeEditor';
 import { ModelSelector } from '../components/ModelSelector';
+import { SessionConfigPanel } from '../components/SessionConfigPanel';
 import { type FileNode, type Message, type PermissionRequest, type ToolCall, type ToolResult } from '../types';
 
 const API_URL = 'http://localhost:8081/api';
@@ -49,6 +50,8 @@ export default function WorkspacePage() {
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
   const [newSessionTitle, setNewSessionTitle] = useState('');
   const [sessionsCollapsed, setSessionsCollapsed] = useState(false);
+  const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
   // Model selection state
   const [modelConfig, setModelConfig] = useState<SessionModelConfig>({
@@ -479,6 +482,42 @@ export default function WorkspacePage() {
     });
   };
 
+  const handleDeleteSession = async (sessionId: string) => {
+    try {
+      const token = localStorage.getItem('jwt_token');
+      await axios.delete(`${API_URL}/sessions/${sessionId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      // Remove session from list
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+      
+      // If deleted session was current, clear current session
+      if (currentSessionId === sessionId) {
+        setCurrentSessionId(null);
+        setMessages([]);
+      }
+      
+      console.log('Session deleted successfully');
+    } catch (error) {
+      console.error('Failed to delete session:', error);
+      alert('Failed to delete session');
+    }
+  };
+
+  const confirmDeleteSession = (sessionId: string) => {
+    setSessionToDelete(sessionId);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteConfirmed = async () => {
+    if (sessionToDelete) {
+      await handleDeleteSession(sessionToDelete);
+      setSessionToDelete(null);
+      setShowDeleteConfirm(false);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('jwt_token');
     localStorage.removeItem('username');
@@ -544,17 +583,31 @@ export default function WorkspacePage() {
               {sessions.map(session => (
                 <div
                   key={session.id}
-                  onClick={() => setCurrentSessionId(session.id)}
-                  className={`p-3 cursor-pointer border-b border-gray-700 hover:bg-gray-700 ${
+                  className={`group p-3 border-b border-gray-700 ${
                     currentSessionId === session.id ? 'bg-gray-700' : ''
                   }`}
                 >
                   <div className="flex items-start gap-2">
-                    <MessageSquare size={16} className="text-gray-400 mt-1 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-white text-sm truncate">{session.title}</div>
-                      <div className="text-gray-500 text-xs">{session.message_count} messages</div>
+                    <div 
+                      className="flex items-start gap-2 flex-1 min-w-0 cursor-pointer"
+                      onClick={() => setCurrentSessionId(session.id)}
+                    >
+                      <MessageSquare size={16} className="text-gray-400 mt-1 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-white text-sm truncate">{session.title}</div>
+                        <div className="text-gray-500 text-xs">{session.message_count} messages</div>
+                      </div>
                     </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        confirmDeleteSession(session.id);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-600/20 rounded transition-all"
+                      title="Delete session"
+                    >
+                      <Trash2 size={14} className="text-red-400 hover:text-red-300" />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -580,15 +633,22 @@ export default function WorkspacePage() {
         )}
       </div>
 
-      {/* 左侧：AI 助手 */}
+      {/* 左侧：AI 助手和会话配置 */}
       <div className="w-[350px] shrink-0 border-r border-gray-700 flex flex-col">
-        <ChatPanel 
-          messages={messages} 
-          onSendMessage={handleSendMessage}
-          pendingPermissions={pendingPermissions}
-          onPermissionApprove={(toolCallId) => handlePermissionResponse(toolCallId, true)}
-          onPermissionDeny={(toolCallId) => handlePermissionResponse(toolCallId, false)}
-        />
+        <div className="flex-1 overflow-hidden">
+          <ChatPanel 
+            messages={messages} 
+            onSendMessage={handleSendMessage}
+            pendingPermissions={pendingPermissions}
+            onPermissionApprove={(toolCallId) => handlePermissionResponse(toolCallId, true)}
+            onPermissionDeny={(toolCallId) => handlePermissionResponse(toolCallId, false)}
+          />
+        </div>
+        {currentSessionId && (
+          <div className="border-t border-gray-700 p-4 bg-[#1e1e1e] max-h-[400px] overflow-y-auto">
+            <SessionConfigPanel sessionId={currentSessionId} />
+          </div>
+        )}
       </div>
 
       {/* 右侧：文件树和编辑器 */}
@@ -696,6 +756,37 @@ export default function WorkspacePage() {
                 className="flex-1 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 删除确认对话框 */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-[#252526] p-6 rounded-lg w-[400px] border border-gray-700">
+            <h2 className="text-xl font-bold text-white mb-4">Delete Session</h2>
+            
+            <p className="text-gray-300 mb-6">
+              Are you sure you want to delete this session? This action cannot be undone.
+            </p>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setSessionToDelete(null);
+                }}
+                className="flex-1 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirmed}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+              >
+                Delete
               </button>
             </div>
           </div>

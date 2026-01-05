@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log/slog"
@@ -167,6 +168,9 @@ func (s *Server) Start() error {
 		{
 			sessionGroup.POST("", s.handleCreateSession)
 			sessionGroup.GET("/:id/messages", s.handleGetSessionMessages)
+			sessionGroup.GET("/:id/config", s.handleGetSessionConfig)
+			sessionGroup.PUT("/:id/config", s.handleUpdateSessionConfig)
+			sessionGroup.DELETE("/:id", s.handleDeleteSession)
 		}
 
 		// Providers and models endpoints
@@ -793,4 +797,211 @@ func shouldIgnoreFile(name string) bool {
 	}
 
 	return false
+}
+
+// SessionConfigResponse represents the model configuration for a session
+type SessionConfigResponse struct {
+	Provider        string   `json:"provider"`
+	Model           string   `json:"model"`
+	APIKey          string   `json:"api_key"`          // Masked for security
+	BaseURL         string   `json:"base_url,omitempty"`
+	MaxTokens       *int64   `json:"max_tokens,omitempty"`
+	Temperature     *float64 `json:"temperature,omitempty"`
+	TopP            *float64 `json:"top_p,omitempty"`
+	ReasoningEffort string   `json:"reasoning_effort,omitempty"`
+}
+
+// UpdateSessionConfigRequest represents the request to update session model configuration
+type UpdateSessionConfigRequest struct {
+	Provider        string   `json:"provider" binding:"required"`
+	Model           string   `json:"model" binding:"required"`
+	APIKey          string   `json:"api_key"` // Optional - only update if provided
+	BaseURL         string   `json:"base_url"`
+	MaxTokens       *int64   `json:"max_tokens"`
+	Temperature     *float64 `json:"temperature"`
+	TopP            *float64 `json:"top_p"`
+	ReasoningEffort string   `json:"reasoning_effort"`
+}
+
+// handleGetSessionConfig returns the model configuration for a session
+func (s *Server) handleGetSessionConfig(c *gin.Context) {
+	sessionID := c.Param("id")
+	if sessionID == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "session_id is required"})
+		return
+	}
+
+	// Get session config JSON from database
+	configJSON, err := s.db.GetSessionConfigJSON(c.Request.Context(), sessionID)
+	if err != nil {
+		slog.Error("Failed to get session config", "session_id", sessionID, "error", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to get session config"})
+		return
+	}
+
+	// If no config found, return empty response
+	if configJSON == "" || configJSON == "{}" {
+		c.JSON(http.StatusOK, SessionConfigResponse{})
+		return
+	}
+
+	// Parse the JSON to extract model config
+	var configData map[string]interface{}
+	if err := json.Unmarshal([]byte(configJSON), &configData); err != nil {
+		slog.Error("Failed to parse session config JSON", "error", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to parse config"})
+		return
+	}
+
+	response := SessionConfigResponse{}
+
+	// Extract large model config
+	if models, ok := configData["models"].(map[string]interface{}); ok {
+		if largeModel, ok := models["large"].(map[string]interface{}); ok {
+			if provider, ok := largeModel["provider"].(string); ok {
+				response.Provider = provider
+			}
+			if model, ok := largeModel["model"].(string); ok {
+				response.Model = model
+			}
+			if maxTokens, ok := largeModel["max_tokens"].(float64); ok {
+				tokens := int64(maxTokens)
+				response.MaxTokens = &tokens
+			}
+			if reasoningEffort, ok := largeModel["reasoning_effort"].(string); ok {
+				response.ReasoningEffort = reasoningEffort
+			}
+		}
+	}
+
+	// Extract provider API key (masked)
+	if providers, ok := configData["providers"].(map[string]interface{}); ok {
+		if providerConfig, ok := providers[response.Provider].(map[string]interface{}); ok {
+			if apiKey, ok := providerConfig["api_key"].(string); ok {
+				// Mask the API key for security (show only last 4 characters)
+				if len(apiKey) > 4 {
+					response.APIKey = "****" + apiKey[len(apiKey)-4:]
+				} else {
+					response.APIKey = "****"
+				}
+			}
+			if baseURL, ok := providerConfig["base_url"].(string); ok {
+				response.BaseURL = baseURL
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// handleUpdateSessionConfig updates the model configuration for a session
+func (s *Server) handleUpdateSessionConfig(c *gin.Context) {
+	sessionID := c.Param("id")
+	if sessionID == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "session_id is required"})
+		return
+	}
+
+	var req UpdateSessionConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	// Create a temporary Config instance and enable DB storage
+	tempConfig := *s.config // Shallow copy of base config
+	tempConfig.EnableDBStorage(sessionID, s.db)
+
+	// Set API Key using TUI logic
+	if req.APIKey != "" {
+		if err := tempConfig.SetProviderAPIKey(req.Provider, req.APIKey); err != nil {
+			slog.Error("Failed to set provider API key", "error", err, "session_id", sessionID)
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to set API key"})
+			return
+		}
+		slog.Info("Updated API key in database", "provider", req.Provider, "session_id", sessionID)
+	}
+
+	// Update preferred large model using TUI logic
+	largeModel := config.SelectedModel{
+		Model:           req.Model,
+		Provider:        req.Provider,
+		ReasoningEffort: req.ReasoningEffort,
+	}
+	if req.MaxTokens != nil {
+		largeModel.MaxTokens = *req.MaxTokens
+	}
+	if err := tempConfig.UpdatePreferredModel(config.SelectedModelTypeLarge, largeModel); err != nil {
+		slog.Error("Failed to update preferred large model", "error", err, "session_id", sessionID)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to update model"})
+		return
+	}
+	slog.Info("Updated large model in database", "model", req.Model, "session_id", sessionID)
+
+	// Auto-set small model using TUI logic
+	knownProviders, err := config.Providers(&tempConfig)
+	if err == nil {
+		var providerInfo *catwalk.Provider
+		for _, p := range knownProviders {
+			if string(p.ID) == req.Provider {
+				providerInfo = &p
+				break
+			}
+		}
+
+		if providerInfo != nil && providerInfo.DefaultSmallModelID != "" {
+			smallModelInfo := tempConfig.GetModel(req.Provider, providerInfo.DefaultSmallModelID)
+			if smallModelInfo != nil {
+				smallModel := config.SelectedModel{
+					Model:           smallModelInfo.ID,
+					Provider:        req.Provider,
+					ReasoningEffort: smallModelInfo.DefaultReasoningEffort,
+					MaxTokens:       smallModelInfo.DefaultMaxTokens,
+				}
+				if err := tempConfig.UpdatePreferredModel(config.SelectedModelTypeSmall, smallModel); err != nil {
+					slog.Error("Failed to update preferred small model", "error", err, "session_id", sessionID)
+				} else {
+					slog.Info("Updated small model in database", "model", smallModelInfo.ID, "session_id", sessionID)
+				}
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Session configuration updated successfully"})
+}
+
+// handleDeleteSession deletes a session and all associated data
+func (s *Server) handleDeleteSession(c *gin.Context) {
+	sessionID := c.Param("id")
+	if sessionID == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "session_id is required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Delete session messages
+	if err := s.db.DeleteSessionMessages(ctx, sessionID); err != nil {
+		slog.Error("Failed to delete session messages", "session_id", sessionID, "error", err)
+	}
+
+	// Delete session files
+	if err := s.db.DeleteSessionFiles(ctx, sessionID); err != nil {
+		slog.Error("Failed to delete session files", "session_id", sessionID, "error", err)
+	}
+
+	// Delete session model config
+	if err := s.db.DeleteSessionModelConfig(ctx, sessionID); err != nil {
+		slog.Error("Failed to delete session model config", "session_id", sessionID, "error", err)
+	}
+
+	// Delete session
+	if err := s.db.DeleteSession(ctx, sessionID); err != nil {
+		slog.Error("Failed to delete session", "session_id", sessionID, "error", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to delete session"})
+		return
+	}
+
+	slog.Info("Session deleted successfully", "session_id", sessionID)
+	c.JSON(http.StatusOK, gin.H{"message": "Session deleted successfully"})
 }
