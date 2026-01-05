@@ -26,25 +26,25 @@ const ThinkingProcess = ({ reasoning, isStreaming, hasContent }: { reasoning: st
   const isThinking = isStreaming && !hasContent;
   
   return (
-    <div className="mb-3">
+    <div className="border-b border-white/10 mb-2 pb-2">
         <button 
             onClick={() => setIsOpen(!isOpen)}
             className={cn(
-                "group flex items-center gap-3 px-3 py-2 rounded-lg transition-all w-full text-left border select-none",
+                "group flex items-center gap-3 px-2 py-1 rounded transition-all w-full text-left select-none",
                 isThinking 
-                    ? "bg-purple-500/10 border-purple-500/20 cursor-wait" 
-                    : "bg-[#2d2d2d] border-transparent hover:bg-[#363636]"
+                    ? "cursor-wait" 
+                    : "hover:bg-white/5"
             )}
         >
             {/* Breathing light effect / Icon */}
-            <div className="relative flex items-center justify-center w-5 h-5">
+            <div className="relative flex items-center justify-center w-4 h-4">
                 {isThinking ? (
                     <>
                         <div className="absolute inset-0 bg-purple-500 rounded-full animate-ping opacity-20 duration-1000" />
-                        <div className="w-2.5 h-2.5 bg-purple-400 rounded-full shadow-[0_0_10px_rgba(168,85,247,0.8)] animate-pulse" />
+                        <div className="w-2 h-2 bg-purple-400 rounded-full shadow-[0_0_10px_rgba(168,85,247,0.8)] animate-pulse" />
                     </>
                 ) : (
-                    <Sparkles size={14} className="text-purple-400/70" />
+                    <Sparkles size={12} className="text-purple-400/70" />
                 )}
             </div>
             
@@ -258,7 +258,12 @@ export const ChatPanel = ({
             )}>
               {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
             </div>
-            <div className="flex flex-col gap-2 flex-1 min-w-0">
+            <div className={cn(
+              "flex flex-col gap-2 flex-1 min-w-0 p-3 rounded-lg text-sm leading-relaxed",
+              msg.role === 'user' 
+                ? "bg-blue-600/10 text-blue-100 border border-blue-600/20" 
+                : "bg-gray-700/50 text-gray-200 border border-gray-600/30"
+            )}>
               {/* Reasoning content (Collapsible) */}
               {msg.reasoning && (
                 <ThinkingProcess 
@@ -291,10 +296,7 @@ export const ChatPanel = ({
               {/* Main content */}
               {msg.content && (
                 <div className={cn(
-                  "p-3 rounded-lg text-sm leading-relaxed prose prose-invert prose-sm max-w-none streaming-content",
-                  msg.role === 'user' 
-                    ? "bg-blue-600/10 text-blue-100 border border-blue-600/20" 
-                    : "bg-gray-700/50 text-gray-200 border border-gray-600/30",
+                  "prose prose-invert prose-sm max-w-none streaming-content",
                   msg.isStreaming && "streaming-cursor"
                 )}>
                   {msg.role === 'assistant' || msg.role === 'tool' ? (
