@@ -453,11 +453,13 @@ export default function WorkspacePage() {
       
       console.log('Loaded session messages:', response.data);
       
-      // 转换后端消息格式为前端格式
+      // 转换后端消息格式为前端格式 - 复用 convertBackendMessageToFrontend 逻辑
       const backendMessages = response.data || [];
       const convertedMessages: Message[] = backendMessages.map((msg: any) => {
         let textContent = '';
         let reasoning = '';
+        const toolCalls: ToolCall[] = [];
+        const toolResults: ToolResult[] = [];
         
         if (msg.Parts && Array.isArray(msg.Parts)) {
           msg.Parts.forEach((part: any) => {
@@ -467,6 +469,30 @@ export default function WorkspacePage() {
             }
             if (part.thinking) {
               reasoning = part.thinking;
+            }
+            // 解析 tool_call - 检查是否有 name 和 input 字段
+            if (part.name && part.input !== undefined && (part.id || part.ID)) {
+              const toolCall: ToolCall = {
+                id: part.id || part.ID,
+                name: part.name,
+                input: part.input,
+                finished: part.finished ?? true,
+                provider_executed: part.provider_executed ?? false
+              };
+              toolCalls.push(toolCall);
+              console.log('History: Found tool call:', toolCall.id, toolCall.name);
+            }
+            // 解析 tool_result - 检查是否有 tool_call_id 字段
+            if (part.content !== undefined && (part.tool_call_id || part.ToolCallID)) {
+              const toolResult: ToolResult = {
+                tool_call_id: part.tool_call_id || part.ToolCallID,
+                name: part.name || '',
+                content: part.content,
+                is_error: part.is_error ?? false,
+                metadata: part.metadata
+              };
+              toolResults.push(toolResult);
+              console.log('History: Found tool result for:', toolResult.tool_call_id);
             }
           });
         }
@@ -478,6 +504,8 @@ export default function WorkspacePage() {
           reasoning: reasoning || undefined,
           timestamp: msg.CreatedAt || msg.created_at || Date.now(),
           isStreaming: false,
+          toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+          toolResults: toolResults.length > 0 ? toolResults : undefined,
         };
       });
       
