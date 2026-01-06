@@ -72,6 +72,9 @@ export default function WorkspacePage() {
   // Pending permissions state
   const [pendingPermissions, setPendingPermissions] = useState<Map<string, PermissionRequest>>(new Map());
   
+  // Processing state - 是否正在处理请求
+  const [isProcessing, setIsProcessing] = useState(false);
+  
   // Resizable panel state
   const [chatPanelWidth, setChatPanelWidth] = useState(() => {
     const saved = localStorage.getItem('chat_panel_width');
@@ -300,6 +303,11 @@ export default function WorkspacePage() {
           return [...prev, convertedMsg];
         }
       });
+      
+      // 如果消息处理完成（不再流式传输），重置处理状态
+      if (!convertedMsg.isStreaming && convertedMsg.role === 'assistant') {
+        setIsProcessing(false);
+      }
     } else if (data.Type === 'permission_request' || data.type === 'permission_request') {
       // 处理权限请求
       console.log('=== Permission request received ===', data);
@@ -605,6 +613,31 @@ export default function WorkspacePage() {
     
     wsRef.current.send(JSON.stringify(messageData));
     console.log('Message sent via WebSocket:', messageData);
+    
+    // 设置处理中状态
+    setIsProcessing(true);
+  };
+
+  // 取消当前请求
+  const handleCancelRequest = () => {
+    if (!currentSessionId) {
+      console.error('No session to cancel');
+      return;
+    }
+
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      console.error('WebSocket not connected');
+      return;
+    }
+
+    const cancelData = {
+      type: 'cancel',
+      sessionID: currentSessionId,
+    };
+    
+    wsRef.current.send(JSON.stringify(cancelData));
+    console.log('Cancel request sent:', cancelData);
+    setIsProcessing(false);
   };
 
   const handlePermissionResponse = (toolCallId: string, granted: boolean) => {
@@ -797,6 +830,8 @@ export default function WorkspacePage() {
                 <SessionConfigPanel sessionId={currentSessionId} compact={true} />
               ) : null
             }
+            isProcessing={isProcessing}
+            onCancelRequest={handleCancelRequest}
           />
         </div>
         

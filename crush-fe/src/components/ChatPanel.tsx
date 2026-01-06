@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, User, Bot, History, X, File as FileIcon, Folder as FolderIcon, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
+import { Send, User, Bot, History, X, File as FileIcon, Folder as FolderIcon, ChevronDown, ChevronRight, Sparkles, Square } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -16,6 +16,8 @@ interface ChatPanelProps {
   onPermissionDeny: (toolCallId: string) => void;
   onToggleHistory?: () => void;
   sessionConfigComponent?: React.ReactNode;
+  isProcessing?: boolean;
+  onCancelRequest?: () => void;
 }
 
 const ThinkingProcess = ({ reasoning, isStreaming, hasContent }: { reasoning: string, isStreaming: boolean, hasContent: boolean }) => {
@@ -156,7 +158,9 @@ export const ChatPanel = ({
   onPermissionApprove,
   onPermissionDeny,
   onToggleHistory,
-  sessionConfigComponent
+  sessionConfigComponent,
+  isProcessing = false,
+  onCancelRequest
 }: ChatPanelProps) => {
   const [input, setInput] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<FileNode[]>([]);
@@ -429,13 +433,26 @@ export const ChatPanel = ({
                {sessionConfigComponent}
             </div>
             
-            <button
-              onClick={handleSubmit}
-              disabled={!input.trim() && attachedFiles.length === 0}
-              className="p-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <Send size={16} />
-            </button>
+            {isProcessing ? (
+              <button
+                onClick={onCancelRequest}
+                className="relative p-1.5 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors group"
+                title="取消请求"
+              >
+                {/* 呼吸灯效果 */}
+                <span className="absolute inset-0 rounded-md bg-red-500 animate-ping opacity-30" />
+                <span className="absolute inset-0 rounded-md bg-red-400 animate-pulse opacity-40" />
+                <Square size={16} className="relative z-10 fill-current" />
+              </button>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                disabled={!input.trim() && attachedFiles.length === 0}
+                className="p-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <Send size={16} />
+              </button>
+            )}
           </div>
         </div>
       </div>

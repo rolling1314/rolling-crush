@@ -217,6 +217,20 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 		return
 	}
 
+	// Handle cancel requests - 取消当前会话的 agent 请求
+	if msg.Type == "cancel" {
+		sessionID := msg.SessionID
+		if sessionID == "" {
+			sessionID = app.currentSessionID
+		}
+		if sessionID != "" && app.AgentCoordinator != nil {
+			fmt.Printf("[CANCEL] Cancelling agent request for session: %s\n", sessionID)
+			slog.Info("Cancelling agent request", "sessionID", sessionID)
+			app.AgentCoordinator.Cancel(sessionID)
+		}
+		return
+	}
+
 	// Use existing session or create new one
 	sessionID := msg.SessionID
 	fmt.Println("Processing message, sessionID from message:", sessionID)
