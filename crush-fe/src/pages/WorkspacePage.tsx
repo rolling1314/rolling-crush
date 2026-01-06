@@ -593,15 +593,8 @@ export default function WorkspacePage() {
         messageContent += `Context Files:\n${fileContexts}`;
     }
 
-    // 添加用户消息到UI
-    const userMessage: Message = {
-      id: `temp-${Date.now()}`,
-      role: 'user',
-      content: messageContent,
-      timestamp: Date.now(),
-      isStreaming: false,
-    };
-    setMessages(prev => [...prev, userMessage]);
+    // 不在前端预先添加用户消息，后端会广播回来
+    // 这样避免消息重复显示
 
     // 通过 WebSocket 发送消息
     const messageData = {

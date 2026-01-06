@@ -286,6 +286,9 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 			return a.messages.Update(genCtx, *currentAssistant)
 		},
 		OnReasoningDelta: func(id string, text string) error {
+			// DEBUG: 打印推理/思考流式输出
+			fmt.Printf("[REASONING] %s", text)
+
 			currentAssistant.AppendReasoningContent(text)
 			return a.messages.Update(genCtx, *currentAssistant)
 		},
@@ -317,10 +320,16 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 				text = strings.TrimPrefix(text, "\n")
 			}
 
+			// DEBUG: 打印流式文本输出
+			fmt.Printf("[STREAM TEXT] %s", text)
+
 			currentAssistant.AppendContent(text)
 			return a.messages.Update(genCtx, *currentAssistant)
 		},
 		OnToolInputStart: func(id string, toolName string) error {
+			// DEBUG: 打印工具调用开始
+			fmt.Printf("\n[TOOL START] id=%s, name=%s\n", id, toolName)
+
 			toolCall := message.ToolCall{
 				ID:               id,
 				Name:             toolName,
@@ -334,6 +343,9 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 			// TODO: implement
 		},
 		OnToolCall: func(tc fantasy.ToolCallContent) error {
+			// DEBUG: 打印工具调用完成 (含参数)
+			fmt.Printf("\n[TOOL CALL] id=%s, name=%s, input=%s\n", tc.ToolCallID, tc.ToolName, tc.Input)
+
 			toolCall := message.ToolCall{
 				ID:               tc.ToolCallID,
 				Name:             tc.ToolName,
@@ -362,6 +374,10 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 			case fantasy.ToolResultContentTypeMedia:
 				// TODO: handle this message type
 			}
+
+			// DEBUG: 打印工具调用结果
+			fmt.Printf("\n[TOOL RESULT] id=%s, name=%s, isError=%v, content=%s\n", result.ToolCallID, result.ToolName, isError, resultContent)
+
 			toolResult := message.ToolResult{
 				ToolCallID: result.ToolCallID,
 				Name:       result.ToolName,

@@ -22,11 +22,15 @@ var upgrader = websocket.Upgrader{
 // HandlerFunc defines the callback for processing incoming messages
 type HandlerFunc func(message []byte)
 
+// DisconnectFunc defines the callback for WebSocket disconnection
+type DisconnectFunc func()
+
 type Server struct {
-	clients   map[*websocket.Conn]bool
-	broadcast chan []byte
-	mutex     sync.Mutex
-	handler   HandlerFunc
+	clients          map[*websocket.Conn]bool
+	broadcast        chan []byte
+	mutex            sync.Mutex
+	handler          HandlerFunc
+	disconnectHandler DisconnectFunc
 }
 
 func New() *Server {
@@ -39,6 +43,11 @@ func New() *Server {
 // SetMessageHandler sets the callback for incoming messages
 func (s *Server) SetMessageHandler(handler HandlerFunc) {
 	s.handler = handler
+}
+
+// SetDisconnectHandler sets the callback for WebSocket disconnection
+func (s *Server) SetDisconnectHandler(handler DisconnectFunc) {
+	s.disconnectHandler = handler
 }
 
 func (s *Server) HandleConnections(w http.ResponseWriter, r *http.Request) {
@@ -78,6 +87,12 @@ func (s *Server) HandleConnections(w http.ResponseWriter, r *http.Request) {
 			s.mutex.Unlock()
 			ws.Close()
 			slog.Info("WebSocket connection closed")
+			
+			// Call disconnect handler to clean up agent state
+			if s.disconnectHandler != nil {
+				slog.Info("Calling disconnect handler to clean up agent state")
+				s.disconnectHandler()
+			}
 		}()
 
 		for {

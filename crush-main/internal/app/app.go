@@ -116,6 +116,9 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 	fmt.Println("=== WebSocket message handler registered ===")
 	fmt.Println("Handler function:", app.HandleClientMessage != nil)
 
+	// Register disconnect handler to clean up agent state when WebSocket disconnects
+	app.WSServer.SetDisconnectHandler(app.HandleClientDisconnect)
+
 	app.setupEvents()
 
 	// Initialize LSP clients in the background.
@@ -145,6 +148,23 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 	}
 	
 	return app, nil
+}
+
+// HandleClientDisconnect handles WebSocket disconnection by cleaning up agent state
+func (app *App) HandleClientDisconnect() {
+	fmt.Println("=== HandleClientDisconnect called ===")
+	slog.Info("WebSocket client disconnected, cleaning up agent state", "sessionID", app.currentSessionID)
+
+	// Cancel the current session's agent request to prevent stuck session
+	if app.AgentCoordinator != nil && app.currentSessionID != "" {
+		fmt.Printf("Cancelling agent request for session: %s\n", app.currentSessionID)
+		app.AgentCoordinator.Cancel(app.currentSessionID)
+		fmt.Println("Agent request cancelled for current session")
+	}
+
+	// Clear the current session ID so new connections start fresh
+	app.currentSessionID = ""
+	fmt.Println("Current session ID cleared")
 }
 
 // HandleClientMessage processes messages from the WebSocket client
@@ -515,6 +535,7 @@ func (app *App) InitCoderAgent(ctx context.Context) error {
 // Subscribe handles event processing and broadcasting.
 // Note: This was previously connected to the TUI (tea.Program), but now runs independently.
 func (app *App) Subscribe() {
+	fmt.Println("=== Subscribe() started - listening for events ===")
 	defer log.RecoverPanic("app.Subscribe", func() {
 		slog.Info("Subscription panic: attempting graceful shutdown")
 	})
@@ -540,8 +561,12 @@ func (app *App) Subscribe() {
 				return
 			}
 
+			// DEBUG: 打印收到的事件类型
+			fmt.Printf("[EVENT] Received event type: %T\n", msg)
+
 			// Broadcast messages to WebSocket
 			if event, ok := msg.(pubsub.Event[message.Message]); ok {
+				fmt.Printf("[BROADCAST] Broadcasting message: ID=%s, Role=%s, SessionID=%s\n", event.Payload.ID, event.Payload.Role, event.Payload.SessionID)
 				app.WSServer.Broadcast(event.Payload)
 			}
 
