@@ -308,6 +308,12 @@ export default function WorkspacePage() {
       if (!convertedMsg.isStreaming && convertedMsg.role === 'assistant') {
         setIsProcessing(false);
       }
+      
+      // 如果消息包含工具调用结果，刷新文件树（因为工具可能修改了文件）
+      if (convertedMsg.toolResults && convertedMsg.toolResults.length > 0 && project?.workspace_path) {
+        console.log('Tool result detected, refreshing file tree...');
+        loadFiles(project.workspace_path);
+      }
     } else if (data.Type === 'permission_request' || data.type === 'permission_request') {
       // 处理权限请求
       console.log('=== Permission request received ===', data);
