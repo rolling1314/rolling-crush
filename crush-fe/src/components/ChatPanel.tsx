@@ -244,7 +244,17 @@ export const ChatPanel = ({
       </div>
       
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((msg) => (
+        {messages
+          // 过滤空消息（没有内容、没有思考过程、没有有效工具调用的消息）
+          .filter((msg) => {
+            const hasContent = msg.content && msg.content.trim();
+            const hasReasoning = msg.reasoning && msg.reasoning.trim();
+            const hasToolCalls = msg.toolCalls && msg.toolCalls.some(tc => tc && tc.id && tc.name);
+            const isStreaming = msg.isStreaming;
+            // 保留有任何内容的消息，或正在流式传输的消息
+            return hasContent || hasReasoning || hasToolCalls || isStreaming;
+          })
+          .map((msg) => (
           <div
             key={msg.id}
             className={cn(
