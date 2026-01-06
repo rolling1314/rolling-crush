@@ -18,6 +18,7 @@ interface ChatPanelProps {
   sessionConfigComponent?: React.ReactNode;
   isProcessing?: boolean;
   onCancelRequest?: () => void;
+  onFileClick?: (filePath: string) => void;
 }
 
 const ThinkingProcess = ({ reasoning, isStreaming, hasContent }: { reasoning: string, isStreaming: boolean, hasContent: boolean }) => {
@@ -160,7 +161,8 @@ export const ChatPanel = ({
   onToggleHistory,
   sessionConfigComponent,
   isProcessing = false,
-  onCancelRequest
+  onCancelRequest,
+  onFileClick
 }: ChatPanelProps) => {
   const [input, setInput] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<FileNode[]>([]);
@@ -303,6 +305,7 @@ export const ChatPanel = ({
                           needsPermission={needsPermission}
                           onApprove={onPermissionApprove}
                           onDeny={onPermissionDeny}
+                          onFileClick={onFileClick}
                         />
                       );
                     })}

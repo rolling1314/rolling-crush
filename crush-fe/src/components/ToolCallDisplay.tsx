@@ -8,6 +8,7 @@ interface ToolCallDisplayProps {
   onApprove?: (toolCallId: string) => void;
   onDeny?: (toolCallId: string) => void;
   needsPermission?: boolean;
+  onFileClick?: (filePath: string) => void;
 }
 
 // TUI-style icons
@@ -188,6 +189,19 @@ const shortenPath = (path: string, maxLen: number = 40): string => {
     result = newResult;
   }
   return result;
+};
+
+// Get just the filename from a path
+const getFileName = (path: string): string => {
+  if (!path) return '';
+  const parts = path.split('/');
+  return parts[parts.length - 1] || path;
+};
+
+// Check if the param looks like a file path
+const isFilePath = (param: string, toolName: string): boolean => {
+  const fileTools = ['view', 'edit', 'multi_edit', 'write'];
+  return fileTools.includes(toolName) && param.includes('/');
 };
 
 // Code content with line numbers (TUI style)
@@ -463,7 +477,8 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
   result,
   onApprove,
   onDeny,
-  needsPermission = false
+  needsPermission = false,
+  onFileClick
 }) => {
   const [isBodyExpanded, setIsBodyExpanded] = useState(true);
   
@@ -772,7 +787,20 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
 
         {mainParam && (
           <span className="text-gray-500 text-xs truncate flex-1">
-            {mainParam}
+            {isFilePath(mainParam, toolCall.name) ? (
+              <span 
+                className="text-blue-400 hover:text-blue-300 hover:underline cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFileClick?.(mainParam);
+                }}
+                title={mainParam}
+              >
+                {getFileName(mainParam)}
+              </span>
+            ) : (
+              mainParam
+            )}
             {extraParamsStr && (
               <span className="text-gray-600 ml-1">
                 ({extraParamsStr})

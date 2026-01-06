@@ -690,6 +690,67 @@ export default function WorkspacePage() {
     });
   };
 
+  // Helper function to find a file node and collect parent folder IDs
+  // Matches by relative path (node.path) or by checking if the absolute path ends with the relative path
+  const findFileAndParents = (nodes: FileNode[], targetPath: string, workspacePath: string, parentIds: string[] = []): { found: boolean; parentIds: string[]; fileNode?: FileNode } => {
+    // Convert absolute path to relative path for matching
+    let relativePath = targetPath;
+    if (workspacePath && targetPath.startsWith(workspacePath)) {
+      relativePath = targetPath.slice(workspacePath.length);
+      if (!relativePath.startsWith('/')) {
+        relativePath = '/' + relativePath;
+      }
+    }
+    
+    for (const node of nodes) {
+      // Match by relative path or check if paths match
+      const nodePathNormalized = node.path?.startsWith('/') ? node.path : '/' + node.path;
+      const targetNormalized = relativePath.startsWith('/') ? relativePath : '/' + relativePath;
+      
+      if (nodePathNormalized === targetNormalized || node.path === targetPath || targetPath.endsWith(nodePathNormalized)) {
+        return { found: true, parentIds, fileNode: node };
+      }
+      
+      if (node.type === 'folder' && node.children) {
+        const result = findFileAndParents(node.children, targetPath, workspacePath, [...parentIds, node.id]);
+        if (result.found) {
+          return result;
+        }
+      }
+    }
+    return { found: false, parentIds: [] };
+  };
+
+  // Handle clicking a file path from tool call display - simulates clicking on file tree
+  const handleFileClickFromTool = (filePath: string) => {
+    console.log('File clicked from tool:', filePath);
+    console.log('Project workspace:', project?.workspace_path);
+    
+    // Find the file in the existing file tree
+    const searchResult = findFileAndParents(files, filePath, project?.workspace_path || '');
+    console.log('Search result:', searchResult);
+    
+    if (searchResult.found && searchResult.fileNode) {
+      // Expand all parent folders at once
+      if (searchResult.parentIds.length > 0) {
+        setExpandedFolderIds(prev => {
+          const next = new Set(prev);
+          searchResult.parentIds.forEach(id => next.add(id));
+          return next;
+        });
+        console.log('Expanded folders:', searchResult.parentIds);
+      }
+      
+      // Simulate clicking on the file - use handleFileSelect
+      if (searchResult.fileNode.type === 'file') {
+        handleFileSelect(searchResult.fileNode);
+        console.log('Selected file:', searchResult.fileNode.name);
+      }
+    } else {
+      console.warn('File not found in file tree:', filePath);
+    }
+  };
+
   const handleDeleteSession = async (sessionId: string) => {
     try {
       const token = localStorage.getItem('jwt_token');
@@ -832,6 +893,7 @@ export default function WorkspacePage() {
             }
             isProcessing={isProcessing}
             onCancelRequest={handleCancelRequest}
+            onFileClick={handleFileClickFromTool}
           />
         </div>
         
