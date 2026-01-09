@@ -20,6 +20,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
+	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/log"
 	"github.com/charmbracelet/crush/internal/lsp"
@@ -62,6 +63,7 @@ type coordinator struct {
 	history     history.Service
 	lspClients  *csync.Map[string, *lsp.Client]
 	dbReader    config.DBReader // For loading session-specific config from DB
+	dbQuerier   db.Querier      // For querying session and project info
 
 	currentAgent SessionAgent
 	agents       map[string]SessionAgent
@@ -79,6 +81,14 @@ func NewCoordinator(
 	lspClients *csync.Map[string, *lsp.Client],
 	dbReader config.DBReader, // Add dbReader parameter
 ) (Coordinator, error) {
+	// dbReader also implements db.Querier (it's the same db.Queries instance)
+	var dbQuerier db.Querier
+	if dbReader != nil {
+		if q, ok := dbReader.(db.Querier); ok {
+			dbQuerier = q
+		}
+	}
+	
 	c := &coordinator{
 		cfg:         cfg,
 		sessions:    sessions,
@@ -87,6 +97,7 @@ func NewCoordinator(
 		history:     history,
 		lspClients:  lspClients,
 		dbReader:    dbReader,
+		dbQuerier:   dbQuerier,
 		agents:      make(map[string]SessionAgent),
 	}
 
@@ -127,6 +138,26 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 	}
 	fmt.Println("currentAgent exists")
 
+	// Query workdir_path from session -> project
+	workingDir := c.cfg.WorkingDir() // Default to config working dir
+	if c.dbQuerier != nil {
+		fmt.Println("dbQuerier available, querying session and project")
+		dbSession, err := c.dbQuerier.GetSessionByID(ctx, sessionID)
+		if err != nil {
+			slog.Warn("Failed to get session for workdir lookup", "session_id", sessionID, "error", err)
+		} else if dbSession.ProjectID.Valid && dbSession.ProjectID.String != "" {
+			fmt.Println("Session has projectID:", dbSession.ProjectID.String)
+			project, err := c.dbQuerier.GetProjectByID(ctx, dbSession.ProjectID.String)
+			if err != nil {
+				slog.Warn("Failed to get project for workdir lookup", "project_id", dbSession.ProjectID.String, "error", err)
+			} else if project.WorkdirPath.Valid && project.WorkdirPath.String != "" {
+				workingDir = project.WorkdirPath.String
+				fmt.Println("Using project workdir:", workingDir)
+				slog.Info("Using project-specific working directory", "session_id", sessionID, "project_id", project.ID, "workdir", workingDir)
+			}
+		}
+	}
+
 	// Load session-specific config from database if dbReader is available
 	sessionCfg := c.cfg
 	if c.dbReader != nil {
@@ -134,7 +165,7 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		var err error
 		sessionCfg, err = config.LoadWithSessionConfig(
 			ctx,
-			c.cfg.WorkingDir(),
+			workingDir, // Use the queried workingDir instead of c.cfg.WorkingDir()
 			c.cfg.Options.DataDirectory,
 			c.cfg.Options.Debug,
 			sessionID,
@@ -167,6 +198,20 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		fmt.Println("Models built successfully, updating agent")
 		// Update current agent's models for this session
 		c.currentAgent.SetModels(large, small)
+	}
+
+	// Rebuild tools with session-specific working directory
+	// Use global agent config, not session-specific
+	agentCfg, ok := c.cfg.Agents[config.AgentCoder]
+	if !ok {
+		return nil, errors.New("coder agent not configured")
+	}
+	sessionTools, err := c.buildTools(ctx, agentCfg, workingDir)
+	if err != nil {
+		slog.Error("Failed to build session-specific tools, using default", "session_id", sessionID, "error", err)
+	} else {
+		fmt.Println("Rebuilt tools with workingDir:", workingDir)
+		c.currentAgent.SetTools(sessionTools)
 	}
 
 	model := large
@@ -369,7 +414,7 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 
 	// Build tools asynchronously (tools don't depend on models)
 	c.readyWg.Go(func() error {
-		tools, err := c.buildTools(ctx, agent)
+		tools, err := c.buildTools(ctx, agent, c.cfg.WorkingDir())
 		if err != nil {
 			return err
 		}
@@ -381,7 +426,7 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 	return result, nil
 }
 
-func (c *coordinator) buildTools(ctx context.Context, agent config.Agent) ([]fantasy.AgentTool, error) {
+func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, workingDir string) ([]fantasy.AgentTool, error) {
 	var allTools []fantasy.AgentTool
 	if slices.Contains(agent.AllowedTools, AgentToolName) {
 		agentTool, err := c.agentTool(ctx)
@@ -412,19 +457,19 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent) ([]fan
 	}
 
 	allTools = append(allTools,
-		tools.NewBashTool(c.permissions, c.cfg.WorkingDir(), c.cfg.Options.Attribution, modelName),
+		tools.NewBashTool(c.permissions, workingDir, c.cfg.Options.Attribution, modelName),
 		tools.NewJobOutputTool(),
 		tools.NewJobKillTool(),
-		tools.NewDownloadTool(c.permissions, c.cfg.WorkingDir(), nil),
-		tools.NewEditTool(c.lspClients, c.permissions, c.history, c.cfg.WorkingDir()),
-		tools.NewMultiEditTool(c.lspClients, c.permissions, c.history, c.cfg.WorkingDir()),
-		tools.NewFetchTool(c.permissions, c.cfg.WorkingDir(), nil),
-		tools.NewGlobTool(c.cfg.WorkingDir()),
-		tools.NewGrepTool(c.cfg.WorkingDir()),
-		tools.NewLsTool(c.permissions, c.cfg.WorkingDir(), c.cfg.Tools.Ls),
+		tools.NewDownloadTool(c.permissions, workingDir, nil),
+		tools.NewEditTool(c.lspClients, c.permissions, c.history, workingDir),
+		tools.NewMultiEditTool(c.lspClients, c.permissions, c.history, workingDir),
+		tools.NewFetchTool(c.permissions, workingDir, nil),
+		tools.NewGlobTool(workingDir),
+		tools.NewGrepTool(workingDir),
+		tools.NewLsTool(c.permissions, workingDir, c.cfg.Tools.Ls),
 		tools.NewSourcegraphTool(nil),
-		tools.NewViewTool(c.lspClients, c.permissions, c.cfg.WorkingDir()),
-		tools.NewWriteTool(c.lspClients, c.permissions, c.history, c.cfg.WorkingDir()),
+		tools.NewViewTool(c.lspClients, c.permissions, workingDir),
+		tools.NewWriteTool(c.lspClients, c.permissions, c.history, workingDir),
 	)
 
 	if len(c.cfg.LSP) > 0 {
@@ -438,7 +483,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent) ([]fan
 		}
 	}
 
-	for _, tool := range tools.GetMCPTools(c.permissions, c.cfg.WorkingDir()) {
+	for _, tool := range tools.GetMCPTools(c.permissions, workingDir) {
 		if agent.AllowedMCP == nil {
 			// No MCP restrictions
 			filteredTools = append(filteredTools, tool)
@@ -819,7 +864,7 @@ func (c *coordinator) UpdateModels(ctx context.Context) error {
 		return errors.New("coder agent not configured")
 	}
 
-	tools, err := c.buildTools(ctx, agentCfg)
+	tools, err := c.buildTools(ctx, agentCfg, c.cfg.WorkingDir())
 	if err != nil {
 		return err
 	}
