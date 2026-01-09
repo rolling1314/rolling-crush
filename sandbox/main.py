@@ -6,6 +6,9 @@
     curl -fsSL https://get.docker.com | sh
     systemctl start docker
     systemctl enable docker
+
+安装 PostgreSQL 客户端:
+    pip install psycopg2-binary
 """
 
 from __future__ import annotations
@@ -17,40 +20,169 @@ import tarfile
 import io
 import json
 import time
-from typing import Optional, Dict
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from typing import Optional, Dict, Tuple
 from flask import Flask, request, jsonify
 from threading import Lock
+
+
+class DatabaseManager:
+    """PostgreSQL 数据库管理器 - 查询会话和项目信息"""
+    
+    def __init__(self):
+        """初始化数据库连接，使用与 Go 代码相同的环境变量"""
+        self.host = os.getenv("POSTGRES_HOST", "localhost")
+        self.port = os.getenv("POSTGRES_PORT", "5432")
+        self.user = os.getenv("POSTGRES_USER", "crush")
+        self.password = os.getenv("POSTGRES_PASSWORD", "123456")
+        self.database = os.getenv("POSTGRES_DB", "crush")
+        self.sslmode = os.getenv("POSTGRES_SSLMODE", "disable")
+        self.conn = None
+        self._connect()
+    
+    def _connect(self):
+        """建立数据库连接"""
+        try:
+            self.conn = psycopg2.connect(
+                host=self.host,
+                port=self.port,
+                user=self.user,
+                password=self.password,
+                database=self.database,
+                sslmode=self.sslmode
+            )
+            print(f"✅ 数据库连接成功: {self.user}@{self.host}:{self.port}/{self.database}")
+        except Exception as e:
+            print(f"⚠️ 数据库连接失败: {e}")
+            print(f"   将以独立模式运行（不连接数据库）")
+            self.conn = None
+    
+    def get_project_by_session(self, session_id: str) -> Optional[Dict]:
+        """根据会话ID查询项目信息
+        
+        返回:
+            {
+                'id': 项目ID,
+                'name': 项目名称,
+                'container_name': 容器名称,
+                'workdir_path': 工作目录路径,
+                'host': 主机地址,
+                'port': 端口,
+                'workspace_path': 工作空间路径
+            }
+        """
+        if not self.conn:
+            return None
+        
+        try:
+            with self.conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                # 联合查询 sessions 和 projects 表
+                cursor.execute("""
+                    SELECT 
+                        p.id,
+                        p.name,
+                        p.container_name,
+                        p.workdir_path,
+                        p.host,
+                        p.port,
+                        p.workspace_path
+                    FROM sessions s
+                    JOIN projects p ON s.project_id = p.id
+                    WHERE s.id = %s
+                    LIMIT 1
+                """, (session_id,))
+                
+                result = cursor.fetchone()
+                if result:
+                    return dict(result)
+                return None
+        except Exception as e:
+            print(f"⚠️ 查询数据库失败: {e}")
+            # 尝试重新连接
+            try:
+                self.conn.close()
+            except:
+                pass
+            self._connect()
+            return None
+    
+    def close(self):
+        """关闭数据库连接"""
+        if self.conn:
+            try:
+                self.conn.close()
+                print("📊 数据库连接已关闭")
+            except:
+                pass
 
 
 class SessionManager:
     """会话容器管理器 - 维护会话ID到沙箱容器的映射"""
     
-    def __init__(self):
+    def __init__(self, db_manager: Optional[DatabaseManager] = None):
         self.sessions: Dict[str, Sandbox] = {}
         self.lock = Lock()
+        self.db = db_manager
     
     def get_or_create(self, session_id: str, **sandbox_kwargs) -> Sandbox:
-        """获取或创建会话对应的沙箱容器"""
+        """获取会话对应的容器（仅连接现有容器，不创建新容器）
+        
+        工作流程：
+        1. 从数据库查询会话对应的项目信息
+        2. 如果项目有 container_name，连接到该容器
+        3. 如果没有容器信息，抛出异常
+        """
         with self.lock:
             if session_id not in self.sessions:
-                print(f"🆕 创建新沙箱容器 (会话: {session_id})", flush=True)
+                # 必须从数据库查询项目信息
+                if not self.db:
+                    raise RuntimeError("数据库未连接，无法查询容器信息")
+                
+                project_info = self.db.get_project_by_session(session_id)
+                
+                if not project_info:
+                    raise ValueError(f"会话 {session_id} 不存在或未关联项目")
+                
+                if not project_info.get('container_name'):
+                    raise ValueError(
+                        f"项目 '{project_info.get('name', 'Unknown')}' 尚未配置容器。"
+                        f"请先在项目设置中配置 container_name"
+                    )
+                
+                # 连接到现有容器
+                container_name = project_info['container_name']
+                workdir = project_info.get('workdir_path') or '/sandbox'
+                
+                print(f"🔗 连接到项目容器 (会话: {session_id})", flush=True)
+                print(f"   项目: {project_info.get('name', 'Unknown')}", flush=True)
+                print(f"   容器: {container_name}", flush=True)
+                print(f"   工作目录: {workdir}", flush=True)
+                
                 sandbox = Sandbox(**sandbox_kwargs)
-                sandbox.start()
+                sandbox.attach_to_existing(container_name, workdir)
                 self.sessions[session_id] = sandbox
             else:
-                # 容器已存在，检查是否还在运行
+                # 容器已在缓存中，检查状态
                 sandbox = self.sessions[session_id]
                 if sandbox.container:
                     try:
                         sandbox.container.reload()
                         if sandbox.container.status != 'running':
-                            print(f"⚠️ 容器已停止，重新启动 (会话: {session_id})", flush=True)
-                            sandbox.start()
+                            print(f"⚠️ 容器已停止，正在重启 (会话: {session_id})", flush=True)
+                            sandbox.container.start()
+                            sandbox.container.reload()
+                    except docker.errors.NotFound:
+                        # 容器被删除了，重新查询数据库
+                        print(f"⚠️ 容器不存在，重新连接 (会话: {session_id})", flush=True)
+                        del self.sessions[session_id]
+                        return self.get_or_create(session_id, **sandbox_kwargs)
                     except Exception as e:
-                        print(f"⚠️ 容器检查失败，重新创建 (会话: {session_id}): {e}", flush=True)
-                        sandbox = Sandbox(**sandbox_kwargs)
-                        sandbox.start()
-                        self.sessions[session_id] = sandbox
+                        print(f"⚠️ 容器检查失败: {e}", flush=True)
+                        # 重新连接
+                        del self.sessions[session_id]
+                        return self.get_or_create(session_id, **sandbox_kwargs)
+            
             return self.sessions[session_id]
     
     def get(self, session_id: str) -> Optional[Sandbox]:
@@ -177,6 +309,47 @@ class Sandbox:
         # 创建工作目录
         self.container.exec_run("mkdir -p /sandbox")
         print(f"✅ 沙箱已启动 (容器ID: {self.container.short_id})")
+    
+    def attach_to_existing(self, container_name: str, workdir: str = "/sandbox"):
+        """连接到现有的容器（容器必须存在）
+        
+        Args:
+            container_name: 容器名称或ID
+            workdir: 工作目录路径
+            
+        Raises:
+            docker.errors.NotFound: 容器不存在
+            RuntimeError: 连接失败
+        """
+        try:
+            # 尝试通过名称获取容器
+            self.container = self.client.containers.get(container_name)
+            
+            # 检查容器状态
+            self.container.reload()
+            if self.container.status != 'running':
+                print(f"⚠️ 容器 {container_name} 未运行，正在启动...", flush=True)
+                self.container.start()
+                # 等待容器启动
+                import time
+                time.sleep(1)
+                self.container.reload()
+            
+            # 确保工作目录存在
+            result = self.container.exec_run(f"mkdir -p {workdir}")
+            if result.exit_code != 0:
+                print(f"⚠️ 创建工作目录失败: {result.output.decode()}", flush=True)
+            
+            print(f"✅ 已连接到容器: {container_name}", flush=True)
+            print(f"   状态: {self.container.status}", flush=True)
+            print(f"   工作目录: {workdir}", flush=True)
+            
+        except docker.errors.NotFound:
+            raise docker.errors.NotFound(
+                f"容器 '{container_name}' 不存在。请确保容器正在运行，或检查数据库中的 container_name 配置。"
+            )
+        except Exception as e:
+            raise RuntimeError(f"连接容器 '{container_name}' 失败: {e}")
         
     def stop(self):
         """停止并删除容器"""
@@ -244,16 +417,19 @@ class Sandbox:
     def write_file(self, path: str, content: str):
         """
         在沙箱中写入文件
-        
+
         Args:
-            path: 文件路径 (相对于 /sandbox)
+            path: 文件路径（绝对路径或相对路径）
             content: 文件内容
         """
         if not self.container:
             raise RuntimeError("沙箱未启动")
-            
-        # 确保路径在 /sandbox 下
-        full_path = f"/sandbox/{path.lstrip('/')}"
+
+        # 标准化路径：如果是绝对路径就直接使用，否则添加 /sandbox 前缀
+        if path.startswith('/'):
+            full_path = path
+        else:
+            full_path = f"/sandbox/{path}"
         
         # 创建 tar 归档并上传
         data = content.encode("utf-8")
@@ -270,17 +446,21 @@ class Sandbox:
     def read_file(self, path: str) -> str:
         """
         读取沙箱中的文件
-        
+
         Args:
-            path: 文件路径 (相对于 /sandbox)
-            
+            path: 文件路径（绝对路径或相对路径）
+
         Returns:
             文件内容
         """
         if not self.container:
             raise RuntimeError("沙箱未启动")
-            
-        full_path = f"/sandbox/{path.lstrip('/')}"
+
+        # 标准化路径：如果是绝对路径就直接使用，否则添加 /sandbox 前缀
+        if path.startswith('/'):
+            full_path = path
+        else:
+            full_path = f"/sandbox/{path}"
         result = self.container.exec_run(["cat", full_path])
         
         if result.exit_code != 0:
@@ -309,96 +489,29 @@ class Sandbox:
         return [f for f in files if f]
 
 
-def main():
-    """使用示例"""
-    
-    # 测试模式：完成后立即销毁容器
-    with Sandbox(memory_limit="256m", cpu_limit=0.5, destroy_delay=0) as sandbox:
-        
-        # 1. 执行 Python 代码
-        print("\n📌 执行系统信息查询:")
-        result = sandbox.run_code("""
-import platform
-import sys
-print(f"系统: {platform.system()} {platform.release()}")
-print(f"Python: {sys.version}")
-""")
-        print(result["stdout"])
-        
-        # 2. 数学计算
-        print("📌 执行数学计算:")
-        result = sandbox.run_code("""
-result = sum(range(1, 101))
-print(f"1到100的和: {result}")
-
-import math
-print(f"圆周率: {math.pi:.10f}")
-""")
-        print(result["stdout"])
-        
-        # 3. 文件操作
-        print("📌 文件操作:")
-        sandbox.write_file("hello.txt", "你好，这是沙箱中的文件！\nHello Sandbox!")
-        content = sandbox.read_file("hello.txt")
-        print(f"文件内容:\n{content}")
-        
-        # 4. 列出文件
-        files = sandbox.list_files()
-        print(f"文件列表: {files}")
-        
-        # 5. 执行 Bash 命令
-        print("\n📌 执行 Bash 命令:")
-        result = sandbox.run_code("echo '当前目录:' && pwd && ls -la", language="bash")
-        print(result["stdout"])
-        
-        # 6. 错误处理演示
-        print("📌 错误处理:")
-        result = sandbox.run_code("print(1/0)")
-        if result["stderr"]:
-            print(f"捕获错误: {result['stderr'][:100]}...")
+# ============================================================
+# Flask 后端服务 API
+# ============================================================
 
 
-def interactive_mode():
-    """交互式沙箱模式"""
-    
-    with Sandbox() as sandbox:
-        print("\n🎮 交互式沙箱 (输入 'exit' 退出, 'bash:' 前缀执行bash命令)")
-        print("-" * 50)
-        
-        while True:
-            try:
-                code = input("\n>>> ")
-                
-                if code.lower() == "exit":
-                    break
-                if not code.strip():
-                    continue
-                
-                # 判断是否是 bash 命令
-                if code.startswith("bash:"):
-                    result = sandbox.run_code(code[5:].strip(), language="bash")
-                else:
-                    result = sandbox.run_code(code)
-                
-                if result["stdout"]:
-                    print(result["stdout"], end="")
-                if result["stderr"]:
-                    print(f"❌ {result['stderr']}", end="")
-                    
-            except KeyboardInterrupt:
-                print("\n中断...")
-                break
-
-
-# Flask应用和API
 app = Flask(__name__)
-session_manager = SessionManager()
+
+# 全局变量 - 延迟初始化
+db_manager = None
+session_manager = None
+
+def init_managers():
+    """初始化数据库和会话管理器（仅在服务器模式下调用）"""
+    global db_manager, session_manager
+    db_manager = DatabaseManager()
+    session_manager = SessionManager(db_manager=db_manager)
 
 
 @app.route('/health', methods=['GET'])
 def health():
     """健康检查"""
-    return jsonify({"status": "ok", "active_sessions": len(session_manager.sessions)})
+    active_sessions = len(session_manager.sessions) if session_manager else 0
+    return jsonify({"status": "ok", "active_sessions": active_sessions})
 
 
 @app.route('/sessions', methods=['GET'])
@@ -475,9 +588,24 @@ def execute_code():
             "stderr": result["stderr"],
             "exit_code": result["exit_code"]
         })
+    except ValueError as e:
+        # 业务逻辑错误（会话不存在、容器未配置等）
+        print(f"❌ [/execute] 业务错误: {str(e)}", flush=True)
+        return jsonify({"error": str(e)}), 400
+    except docker.errors.NotFound as e:
+        # 容器不存在
+        print(f"❌ [/execute] 容器不存在: {str(e)}", flush=True)
+        return jsonify({"error": f"容器不存在: {str(e)}"}), 404
+    except RuntimeError as e:
+        # 运行时错误（数据库未连接等）
+        print(f"❌ [/execute] 运行时错误: {str(e)}", flush=True)
+        return jsonify({"error": str(e)}), 503
     except Exception as e:
-        print(f"❌ [/execute] 异常: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        # 未知错误
+        print(f"❌ [/execute] 未知异常: {str(e)}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"内部错误: {str(e)}"}), 500
 
 
 @app.route('/file/read', methods=['POST'])
@@ -727,8 +855,19 @@ def run_server(host='0.0.0.0', port=8888, auto_cleanup=False):
         port: 监听端口
         auto_cleanup: 服务器停止时是否自动清理容器（默认False，保持容器运行）
     """
+    # 初始化管理器
+    init_managers()
+    
     print(f"🚀 沙箱服务启动在 http://{host}:{port}", flush=True)
-    print(f"📝 API端点:", flush=True)
+    
+    # 打印数据库连接状态
+    if db_manager and db_manager.conn:
+        print(f"📊 数据库: 已连接 ({db_manager.user}@{db_manager.host}:{db_manager.port}/{db_manager.database})", flush=True)
+        print(f"   智能模式: 自动查询项目容器信息", flush=True)
+    else:
+        print(f"📊 数据库: 未连接，运行在独立模式", flush=True)
+    
+    print(f"\n📝 API端点:", flush=True)
     print(f"   - POST /execute         执行命令", flush=True)
     print(f"   - POST /file/read       读取文件", flush=True)
     print(f"   - POST /file/write      写入文件", flush=True)
@@ -752,25 +891,15 @@ def run_server(host='0.0.0.0', port=8888, auto_cleanup=False):
             print("\n⏸️ 服务停止，容器保持运行")
             print(f"   当前活跃会话: {len(session_manager.sessions)}")
             print(f"   💡 容器将继续运行，重启服务后可继续使用")
+        
+        # 关闭数据库连接
+        if db_manager:
+            db_manager.close()
 
 
 if __name__ == "__main__":
-    import sys
-    
-    if len(sys.argv) > 1 and sys.argv[1] == "server":
-        # 运行服务器模式
-        print("=" * 60, flush=True)
-        print("🌐 启动沙箱服务器模式", flush=True)
-        print("=" * 60, flush=True)
-        run_server()
-    else:
-        # 运行测试模式
-        print("=" * 60, flush=True)
-        print("🧪 运行测试模式（不是服务器）", flush=True)
-        print("💡 如需启动服务器，请运行: python main.py server", flush=True)
-        print("=" * 60, flush=True)
-        main()
-        
-        # 交互模式
-        # interactive_mode()
+    print("=" * 60, flush=True)
+    print("🚀 启动沙箱服务", flush=True)
+    print("=" * 60, flush=True)
+    run_server()
 
