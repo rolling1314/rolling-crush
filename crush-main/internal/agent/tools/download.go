@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -120,6 +119,34 @@ func NewDownloadTool(permissions permission.Service, workingDir string, client *
 				return fantasy.NewTextErrorResponse(fmt.Sprintf("File too large: %d bytes (max %d bytes)", resp.ContentLength, maxSize)), nil
 			}
 
+			// ============== 路由到沙箱服务 ==============
+			// Read data with size limit
+			limitedReader := io.LimitReader(resp.Body, maxSize)
+			content, err := io.ReadAll(limitedReader)
+			if err != nil {
+				return fantasy.ToolResponse{}, fmt.Errorf("failed to read response: %w", err)
+			}
+			
+			bytesWritten := int64(len(content))
+			
+			// Check if we hit the size limit
+			if bytesWritten == maxSize {
+				return fantasy.NewTextErrorResponse(fmt.Sprintf("File too large: exceeded %d bytes limit", maxSize)), nil
+			}
+			
+			// Write to sandbox
+			sandboxClient := GetDefaultSandboxClient()
+			_, err = sandboxClient.WriteFile(ctx, FileWriteRequest{
+				SessionID: sessionID,
+				FilePath:  filePath,
+				Content:   string(content),
+			})
+			if err != nil {
+				return fantasy.ToolResponse{}, fmt.Errorf("failed to write file to sandbox: %w", err)
+			}
+			
+			// ============== 原本地文件下载代码（已注释） ==============
+			/*
 			// Create parent directories if they don't exist
 			if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
 				return fantasy.ToolResponse{}, fmt.Errorf("failed to create parent directories: %w", err)
@@ -145,6 +172,7 @@ func NewDownloadTool(permissions permission.Service, workingDir string, client *
 				os.Remove(filePath)
 				return fantasy.NewTextErrorResponse(fmt.Sprintf("File too large: exceeded %d bytes limit", maxSize)), nil
 			}
+			*/
 
 			contentType := resp.Header.Get("Content-Type")
 			responseMsg := fmt.Sprintf("Successfully downloaded %d bytes to %s", bytesWritten, relPath)

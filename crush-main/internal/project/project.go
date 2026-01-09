@@ -16,6 +16,8 @@ type Project struct {
 	Host          string
 	Port          int32
 	WorkspacePath string
+	ContainerName sql.NullString
+	WorkdirPath   sql.NullString
 	CreatedAt     int64
 	UpdatedAt     int64
 }
@@ -46,6 +48,8 @@ func (s *service) Create(ctx context.Context, userID, name, description, host, w
 		Host:          host,
 		Port:          port,
 		WorkspacePath: workspacePath,
+		ContainerName: sql.NullString{Valid: false},
+		WorkdirPath:   sql.NullString{Valid: false},
 	})
 	if err != nil {
 		return Project{}, err
@@ -82,6 +86,8 @@ func (s *service) Update(ctx context.Context, project Project) (Project, error) 
 		Host:          project.Host,
 		Port:          project.Port,
 		WorkspacePath: project.WorkspacePath,
+		ContainerName: project.ContainerName,
+		WorkdirPath:   project.WorkdirPath,
 	})
 	if err != nil {
 		return Project{}, err
@@ -106,6 +112,8 @@ func (s *service) fromDBItem(item db.Project) Project {
 		Host:          item.Host,
 		Port:          item.Port,
 		WorkspacePath: item.WorkspacePath,
+		ContainerName: item.ContainerName,
+		WorkdirPath:   item.WorkdirPath,
 		CreatedAt:     item.CreatedAt,
 		UpdatedAt:     item.UpdatedAt,
 	}

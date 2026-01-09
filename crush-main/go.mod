@@ -196,4 +196,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-//replace charm.land/fantasy => /Users/apple/Downloads/fantasy/fantasy@v0.3.2
+replace charm.land/fantasy => /Users/apple/Downloads/fantasy/fantasy@v0.3.2

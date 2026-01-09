@@ -7,10 +7,12 @@ INSERT INTO projects (
     host,
     port,
     workspace_path,
+    container_name,
+    workdir_path,
     created_at,
     updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7,
+    $1, $2, $3, $4, $5, $6, $7, $8, $9,
     EXTRACT(EPOCH FROM NOW()) * 1000,
     EXTRACT(EPOCH FROM NOW()) * 1000
 )
@@ -35,6 +37,8 @@ SET
     host = $4,
     port = $5,
     workspace_path = $6,
+    container_name = $7,
+    workdir_path = $8,
     updated_at = EXTRACT(EPOCH FROM NOW()) * 1000
 WHERE id = $1
 RETURNING *;

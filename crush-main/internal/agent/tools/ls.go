@@ -96,6 +96,46 @@ func NewLsTool(permissions permission.Service, workingDir string, lsConfig confi
 				}
 			}
 
+			sessionID := GetSessionFromContext(ctx)
+			if sessionID == "" {
+				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for listing directory")
+			}
+
+			// ============== 路由到沙箱服务 ==============
+			sandboxClient := GetDefaultSandboxClient()
+			
+			resp, err := sandboxClient.ListFiles(ctx, FileListRequest{
+				SessionID: sessionID,
+				Path:      searchPath,
+			})
+			
+			if err != nil {
+				return fantasy.NewTextErrorResponse(fmt.Sprintf("Error listing directory from sandbox: %v", err)), nil
+			}
+			
+			// 格式化输出
+			var output strings.Builder
+			if len(resp.Files) == 0 {
+				output.WriteString("Directory is empty\n")
+			} else {
+				output.WriteString(fmt.Sprintf("- %s/\n", filepath.ToSlash(searchPath)))
+				for _, file := range resp.Files {
+					output.WriteString(fmt.Sprintf("  - %s\n", file))
+				}
+			}
+			
+			metadata := LSResponseMetadata{
+				NumberOfFiles: len(resp.Files),
+				Truncated:     false,
+			}
+
+			return fantasy.WithResponseMetadata(
+				fantasy.NewTextResponse(output.String()),
+				metadata,
+			), nil
+			
+			// ============== 原本地目录列表代码（已注释） ==============
+			/*
 			output, metadata, err := ListDirectoryTree(searchPath, params, lsConfig)
 			if err != nil {
 				return fantasy.NewTextErrorResponse(err.Error()), err
@@ -105,6 +145,7 @@ func NewLsTool(permissions permission.Service, workingDir string, lsConfig confi
 				fantasy.NewTextResponse(output),
 				metadata,
 			), nil
+			*/
 		})
 }
 

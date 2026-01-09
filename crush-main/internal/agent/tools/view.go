@@ -62,7 +62,75 @@ func NewViewTool(lspClients *csync.Map[string, *lsp.Client], permissions permiss
 
 			// Handle relative paths
 			filePath := filepathext.SmartJoin(workingDir, params.FilePath)
+			
+			sessionID := GetSessionFromContext(ctx)
+			if sessionID == "" {
+				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for reading file")
+			}
 
+			// Set default limit if not provided
+			if params.Limit <= 0 {
+				params.Limit = DefaultReadLimit
+			}
+
+			// ============== 路由到沙箱服务 ==============
+			sandboxClient := GetDefaultSandboxClient()
+			
+			resp, err := sandboxClient.ReadFile(ctx, FileReadRequest{
+				SessionID: sessionID,
+				FilePath:  filePath,
+			})
+			
+			if err != nil {
+				return fantasy.NewTextErrorResponse(fmt.Sprintf("Error reading file from sandbox: %v", err)), nil
+			}
+			
+			content := resp.Content
+			
+			// Apply offset and limit to content
+			lines := strings.Split(content, "\n")
+			totalLines := len(lines)
+			
+			if params.Offset >= totalLines {
+				return fantasy.NewTextErrorResponse("Offset is beyond file end"), nil
+			}
+			
+			endLine := params.Offset + params.Limit
+			if endLine > totalLines {
+				endLine = totalLines
+			}
+			
+			lines = lines[params.Offset:endLine]
+			content = strings.Join(lines, "\n")
+			
+			// Check if valid UTF-8
+			isValidUt8 := utf8.ValidString(content)
+			if !isValidUt8 {
+				return fantasy.NewTextErrorResponse("File content is not valid UTF-8"), nil
+			}
+			
+			notifyLSPs(ctx, lspClients, filePath)
+			output := "<file>\n"
+			// Format the output with line numbers
+			output += addLineNumbers(content, params.Offset+1)
+
+			// Add a note if the content was truncated
+			if totalLines > endLine {
+				output += fmt.Sprintf("\n\n(File has more lines. Use 'offset' parameter to read beyond line %d)", endLine)
+			}
+			output += "\n</file>\n"
+			output += getDiagnostics(filePath, lspClients)
+			recordFileRead(filePath)
+			return fantasy.WithResponseMetadata(
+				fantasy.NewTextResponse(output),
+				ViewResponseMetadata{
+					FilePath: filePath,
+					Content:  content,
+				},
+			), nil
+			
+			// ============== 原本地文件读取代码（已注释） ==============
+			/*
 			// Check if file is outside working directory and request permission if needed
 			absWorkingDir, err := filepath.Abs(workingDir)
 			if err != nil {
@@ -77,11 +145,6 @@ func NewViewTool(lspClients *csync.Map[string, *lsp.Client], permissions permiss
 			relPath, err := filepath.Rel(absWorkingDir, absFilePath)
 			if err != nil || strings.HasPrefix(relPath, "..") {
 				// File is outside working directory, request permission
-				sessionID := GetSessionFromContext(ctx)
-				if sessionID == "" {
-					return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for accessing files outside working directory")
-				}
-
 				granted := permissions.Request(
 					permission.CreatePermissionRequest{
 						SessionID:   sessionID,
@@ -142,11 +205,6 @@ func NewViewTool(lspClients *csync.Map[string, *lsp.Client], permissions permiss
 					fileInfo.Size(), MaxReadSize)), nil
 			}
 
-			// Set default limit if not provided
-			if params.Limit <= 0 {
-				params.Limit = DefaultReadLimit
-			}
-
 			// Check if it's an image file
 			isImage, imageType := isImageFile(filePath)
 			// TODO: handle images
@@ -184,6 +242,7 @@ func NewViewTool(lspClients *csync.Map[string, *lsp.Client], permissions permiss
 					Content:  content,
 				},
 			), nil
+			*/
 		})
 }
 

@@ -19,14 +19,16 @@ INSERT INTO projects (
     host,
     port,
     workspace_path,
+    container_name,
+    workdir_path,
     created_at,
     updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7,
+    $1, $2, $3, $4, $5, $6, $7, $8, $9,
     EXTRACT(EPOCH FROM NOW()) * 1000,
     EXTRACT(EPOCH FROM NOW()) * 1000
 )
-RETURNING id, user_id, name, description, host, port, workspace_path, created_at, updated_at
+RETURNING id, user_id, name, description, host, port, workspace_path, container_name, workdir_path, created_at, updated_at
 `
 
 type CreateProjectParams struct {
@@ -37,6 +39,8 @@ type CreateProjectParams struct {
 	Host          string         `json:"host"`
 	Port          int32          `json:"port"`
 	WorkspacePath string         `json:"workspace_path"`
+	ContainerName sql.NullString `json:"container_name"`
+	WorkdirPath   sql.NullString `json:"workdir_path"`
 }
 
 func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
@@ -48,6 +52,8 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		arg.Host,
 		arg.Port,
 		arg.WorkspacePath,
+		arg.ContainerName,
+		arg.WorkdirPath,
 	)
 	var i Project
 	err := row.Scan(
@@ -58,6 +64,8 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.Host,
 		&i.Port,
 		&i.WorkspacePath,
+		&i.ContainerName,
+		&i.WorkdirPath,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -75,7 +83,7 @@ func (q *Queries) DeleteProject(ctx context.Context, id string) error {
 }
 
 const getProjectByID = `-- name: GetProjectByID :one
-SELECT id, user_id, name, description, host, port, workspace_path, created_at, updated_at
+SELECT id, user_id, name, description, host, port, workspace_path, container_name, workdir_path, created_at, updated_at
 FROM projects
 WHERE id = $1 LIMIT 1
 `
@@ -91,6 +99,8 @@ func (q *Queries) GetProjectByID(ctx context.Context, id string) (Project, error
 		&i.Host,
 		&i.Port,
 		&i.WorkspacePath,
+		&i.ContainerName,
+		&i.WorkdirPath,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -141,7 +151,7 @@ func (q *Queries) GetProjectSessions(ctx context.Context, projectID sql.NullStri
 }
 
 const listProjectsByUser = `-- name: ListProjectsByUser :many
-SELECT id, user_id, name, description, host, port, workspace_path, created_at, updated_at
+SELECT id, user_id, name, description, host, port, workspace_path, container_name, workdir_path, created_at, updated_at
 FROM projects
 WHERE user_id = $1
 ORDER BY updated_at DESC
@@ -164,6 +174,8 @@ func (q *Queries) ListProjectsByUser(ctx context.Context, userID string) ([]Proj
 			&i.Host,
 			&i.Port,
 			&i.WorkspacePath,
+			&i.ContainerName,
+			&i.WorkdirPath,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -188,9 +200,11 @@ SET
     host = $4,
     port = $5,
     workspace_path = $6,
+    container_name = $7,
+    workdir_path = $8,
     updated_at = EXTRACT(EPOCH FROM NOW()) * 1000
 WHERE id = $1
-RETURNING id, user_id, name, description, host, port, workspace_path, created_at, updated_at
+RETURNING id, user_id, name, description, host, port, workspace_path, container_name, workdir_path, created_at, updated_at
 `
 
 type UpdateProjectParams struct {
@@ -200,6 +214,8 @@ type UpdateProjectParams struct {
 	Host          string         `json:"host"`
 	Port          int32          `json:"port"`
 	WorkspacePath string         `json:"workspace_path"`
+	ContainerName sql.NullString `json:"container_name"`
+	WorkdirPath   sql.NullString `json:"workdir_path"`
 }
 
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
@@ -210,6 +226,8 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		arg.Host,
 		arg.Port,
 		arg.WorkspacePath,
+		arg.ContainerName,
+		arg.WorkdirPath,
 	)
 	var i Project
 	err := row.Scan(
@@ -220,6 +238,8 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.Host,
 		&i.Port,
 		&i.WorkspacePath,
+		&i.ContainerName,
+		&i.WorkdirPath,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

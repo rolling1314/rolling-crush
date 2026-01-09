@@ -75,22 +75,26 @@ type UserInfo struct {
 }
 
 type ProjectRequest struct {
-	Name          string `json:"name" binding:"required"`
-	Description   string `json:"description"`
-	Host          string `json:"host" binding:"required"`
-	Port          int32  `json:"port" binding:"required"`
-	WorkspacePath string `json:"workspace_path" binding:"required"`
+	Name          string  `json:"name" binding:"required"`
+	Description   string  `json:"description"`
+	Host          string  `json:"host" binding:"required"`
+	Port          int32   `json:"port" binding:"required"`
+	WorkspacePath string  `json:"workspace_path" binding:"required"`
+	ContainerName *string `json:"container_name,omitempty"`
+	WorkdirPath   *string `json:"workdir_path,omitempty"`
 }
 
 type ProjectResponse struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	Description   string `json:"description"`
-	Host          string `json:"host"`
-	Port          int32  `json:"port"`
-	WorkspacePath string `json:"workspace_path"`
-	CreatedAt     int64  `json:"created_at"`
-	UpdatedAt     int64  `json:"updated_at"`
+	ID            string  `json:"id"`
+	Name          string  `json:"name"`
+	Description   string  `json:"description"`
+	Host          string  `json:"host"`
+	Port          int32   `json:"port"`
+	WorkspacePath string  `json:"workspace_path"`
+	ContainerName *string `json:"container_name,omitempty"`
+	WorkdirPath   *string `json:"workdir_path,omitempty"`
+	CreatedAt     int64   `json:"created_at"`
+	UpdatedAt     int64   `json:"updated_at"`
 }
 
 type SessionResponse struct {
@@ -125,6 +129,22 @@ type CreateSessionRequest struct {
 
 type ErrorResponse struct {
 	Error string `json:"error"`
+}
+
+// Helper function to convert sql.NullString to *string
+func nullStringToPtr(ns sql.NullString) *string {
+	if !ns.Valid {
+		return nil
+	}
+	return &ns.String
+}
+
+// Helper function to convert *string to sql.NullString
+func ptrToNullString(s *string) sql.NullString {
+	if s == nil {
+		return sql.NullString{Valid: false}
+	}
+	return sql.NullString{String: *s, Valid: true}
 }
 
 type FileNode struct {
@@ -293,6 +313,8 @@ func (s *Server) handleCreateProject(c *gin.Context) {
 		Host:          proj.Host,
 		Port:          proj.Port,
 		WorkspacePath: proj.WorkspacePath,
+		ContainerName: nullStringToPtr(proj.ContainerName),
+		WorkdirPath:   nullStringToPtr(proj.WorkdirPath),
 		CreatedAt:     proj.CreatedAt,
 		UpdatedAt:     proj.UpdatedAt,
 	})
@@ -315,6 +337,8 @@ func (s *Server) handleListProjects(c *gin.Context) {
 			Host:          proj.Host,
 			Port:          proj.Port,
 			WorkspacePath: proj.WorkspacePath,
+			ContainerName: nullStringToPtr(proj.ContainerName),
+			WorkdirPath:   nullStringToPtr(proj.WorkdirPath),
 			CreatedAt:     proj.CreatedAt,
 			UpdatedAt:     proj.UpdatedAt,
 		}
@@ -338,6 +362,8 @@ func (s *Server) handleGetProject(c *gin.Context) {
 		Host:          proj.Host,
 		Port:          proj.Port,
 		WorkspacePath: proj.WorkspacePath,
+		ContainerName: nullStringToPtr(proj.ContainerName),
+		WorkdirPath:   nullStringToPtr(proj.WorkdirPath),
 		CreatedAt:     proj.CreatedAt,
 		UpdatedAt:     proj.UpdatedAt,
 	})
@@ -358,6 +384,8 @@ func (s *Server) handleUpdateProject(c *gin.Context) {
 		Host:          req.Host,
 		Port:          req.Port,
 		WorkspacePath: req.WorkspacePath,
+		ContainerName: ptrToNullString(req.ContainerName),
+		WorkdirPath:   ptrToNullString(req.WorkdirPath),
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
@@ -371,6 +399,8 @@ func (s *Server) handleUpdateProject(c *gin.Context) {
 		Host:          proj.Host,
 		Port:          proj.Port,
 		WorkspacePath: proj.WorkspacePath,
+		ContainerName: nullStringToPtr(proj.ContainerName),
+		WorkdirPath:   nullStringToPtr(proj.WorkdirPath),
 		CreatedAt:     proj.CreatedAt,
 		UpdatedAt:     proj.UpdatedAt,
 	})

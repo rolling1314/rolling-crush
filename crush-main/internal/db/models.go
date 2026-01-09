@@ -39,6 +39,8 @@ type Project struct {
 	Host          string         `json:"host"`
 	Port          int32          `json:"port"`
 	WorkspacePath string         `json:"workspace_path"`
+	ContainerName sql.NullString `json:"container_name"`
+	WorkdirPath   sql.NullString `json:"workdir_path"`
 	CreatedAt     int64          `json:"created_at"`
 	UpdatedAt     int64          `json:"updated_at"`
 }

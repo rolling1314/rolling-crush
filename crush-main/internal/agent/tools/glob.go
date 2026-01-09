@@ -43,7 +43,46 @@ func NewGlobTool(workingDir string) fantasy.AgentTool {
 			if searchPath == "" {
 				searchPath = workingDir
 			}
+			
+			sessionID := GetSessionFromContext(ctx)
+			if sessionID == "" {
+				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for finding files")
+			}
 
+			// ============== 路由到沙箱服务 ==============
+			sandboxClient := GetDefaultSandboxClient()
+			
+			resp, err := sandboxClient.Glob(ctx, GlobRequest{
+				SessionID: sessionID,
+				Pattern:   params.Pattern,
+				Path:      searchPath,
+			})
+			
+			if err != nil {
+				return fantasy.ToolResponse{}, fmt.Errorf("error finding files from sandbox: %w", err)
+			}
+
+			output := strings.TrimSpace(resp.Stdout)
+			if output == "" {
+				output = "No files found"
+			}
+			
+			// 统计文件数
+			fileCount := 0
+			if output != "No files found" {
+				fileCount = strings.Count(output, "\n") + 1
+			}
+
+			return fantasy.WithResponseMetadata(
+				fantasy.NewTextResponse(output),
+				GlobResponseMetadata{
+					NumberOfFiles: fileCount,
+					Truncated:     false,
+				},
+			), nil
+			
+			// ============== 原本地文件查找代码（已注释） ==============
+			/*
 			files, truncated, err := globFiles(ctx, params.Pattern, searchPath, 100)
 			if err != nil {
 				return fantasy.ToolResponse{}, fmt.Errorf("error finding files: %w", err)
@@ -67,6 +106,7 @@ func NewGlobTool(workingDir string) fantasy.AgentTool {
 					Truncated:     truncated,
 				},
 			), nil
+			*/
 		})
 }
 

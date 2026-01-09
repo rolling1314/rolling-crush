@@ -5,10 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
-	"time"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/csync"
@@ -103,24 +100,31 @@ func NewEditTool(lspClients *csync.Map[string, *lsp.Client], permissions permiss
 }
 
 func createNewFile(edit editContext, filePath, content string, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
-	fileInfo, err := os.Stat(filePath)
-	if err == nil {
-		if fileInfo.IsDir() {
-			return fantasy.NewTextErrorResponse(fmt.Sprintf("path is a directory, not a file: %s", filePath)), nil
-		}
-		return fantasy.NewTextErrorResponse(fmt.Sprintf("file already exists: %s", filePath)), nil
-	} else if !os.IsNotExist(err) {
-		return fantasy.ToolResponse{}, fmt.Errorf("failed to access file: %w", err)
-	}
-
-	dir := filepath.Dir(filePath)
-	if err = os.MkdirAll(dir, 0o755); err != nil {
-		return fantasy.ToolResponse{}, fmt.Errorf("failed to create parent directories: %w", err)
-	}
-
 	sessionID := GetSessionFromContext(edit.ctx)
 	if sessionID == "" {
 		return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for creating a new file")
+	}
+
+	// ============== 路由到沙箱服务 ==============
+	sandboxClient := GetDefaultSandboxClient()
+
+	// 检查文件是否已存在
+	_, err := sandboxClient.ReadFile(edit.ctx, FileReadRequest{
+		SessionID: sessionID,
+		FilePath:  filePath,
+	})
+	if err == nil {
+		return fantasy.NewTextErrorResponse(fmt.Sprintf("file already exists: %s", filePath)), nil
+	}
+
+	// 写入新文件
+	_, err = sandboxClient.WriteFile(edit.ctx, FileWriteRequest{
+		SessionID: sessionID,
+		FilePath:  filePath,
+		Content:   content,
+	})
+	if err != nil {
+		return fantasy.ToolResponse{}, fmt.Errorf("failed to write file to sandbox: %w", err)
 	}
 
 	_, additions, removals := diff.GenerateDiff(
@@ -128,35 +132,12 @@ func createNewFile(edit editContext, filePath, content string, call fantasy.Tool
 		content,
 		strings.TrimPrefix(filePath, edit.workingDir),
 	)
-	p := edit.permissions.Request(
-		permission.CreatePermissionRequest{
-			SessionID:   sessionID,
-			Path:        fsext.PathOrPrefix(filePath, edit.workingDir),
-			ToolCallID:  call.ID,
-			ToolName:    EditToolName,
-			Action:      "write",
-			Description: fmt.Sprintf("Create file %s", filePath),
-			Params: EditPermissionsParams{
-				FilePath:   filePath,
-				OldContent: "",
-				NewContent: content,
-			},
-		},
-	)
-	if !p {
-		return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
-	}
-
-	err = os.WriteFile(filePath, []byte(content), 0o644)
-	if err != nil {
-		return fantasy.ToolResponse{}, fmt.Errorf("failed to write file: %w", err)
-	}
 
 	// File can't be in the history so we create a new file history
 	_, err = edit.files.Create(edit.ctx, sessionID, filePath, "")
 	if err != nil {
 		// Log error but don't fail the operation
-		return fantasy.ToolResponse{}, fmt.Errorf("error creating file history: %w", err)
+		slog.Error("Error creating file history", "error", err)
 	}
 
 	// Add the new content to the file history
@@ -178,40 +159,69 @@ func createNewFile(edit editContext, filePath, content string, call fantasy.Tool
 			Removals:   removals,
 		},
 	), nil
+
+	// ============== 原本地文件创建代码（已注释） ==============
+	/*
+		fileInfo, err := os.Stat(filePath)
+		if err == nil {
+			if fileInfo.IsDir() {
+				return fantasy.NewTextErrorResponse(fmt.Sprintf("path is a directory, not a file: %s", filePath)), nil
+			}
+			return fantasy.NewTextErrorResponse(fmt.Sprintf("file already exists: %s", filePath)), nil
+		} else if !os.IsNotExist(err) {
+			return fantasy.ToolResponse{}, fmt.Errorf("failed to access file: %w", err)
+		}
+
+		dir := filepath.Dir(filePath)
+		if err = os.MkdirAll(dir, 0o755); err != nil {
+			return fantasy.ToolResponse{}, fmt.Errorf("failed to create parent directories: %w", err)
+		}
+
+		p := edit.permissions.Request(
+			permission.CreatePermissionRequest{
+				SessionID:   sessionID,
+				Path:        fsext.PathOrPrefix(filePath, edit.workingDir),
+				ToolCallID:  call.ID,
+				ToolName:    EditToolName,
+				Action:      "write",
+				Description: fmt.Sprintf("Create file %s", filePath),
+				Params: EditPermissionsParams{
+					FilePath:   filePath,
+					OldContent: "",
+					NewContent: content,
+				},
+			},
+		)
+		if !p {
+			return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
+		}
+
+		err = os.WriteFile(filePath, []byte(content), 0o644)
+		if err != nil {
+			return fantasy.ToolResponse{}, fmt.Errorf("failed to write file: %w", err)
+		}
+	*/
 }
 
 func deleteContent(edit editContext, filePath, oldString string, replaceAll bool, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
-	fileInfo, err := os.Stat(filePath)
+	sessionID := GetSessionFromContext(edit.ctx)
+	if sessionID == "" {
+		return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for editing file")
+	}
+
+	// ============== 路由到沙箱服务 ==============
+	sandboxClient := GetDefaultSandboxClient()
+
+	// 读取文件内容
+	resp, err := sandboxClient.ReadFile(edit.ctx, FileReadRequest{
+		SessionID: sessionID,
+		FilePath:  filePath,
+	})
 	if err != nil {
-		if os.IsNotExist(err) {
-			return fantasy.NewTextErrorResponse(fmt.Sprintf("file not found: %s", filePath)), nil
-		}
-		return fantasy.ToolResponse{}, fmt.Errorf("failed to access file: %w", err)
+		return fantasy.NewTextErrorResponse(fmt.Sprintf("file not found: %s", filePath)), nil
 	}
 
-	if fileInfo.IsDir() {
-		return fantasy.NewTextErrorResponse(fmt.Sprintf("path is a directory, not a file: %s", filePath)), nil
-	}
-
-	if getLastReadTime(filePath).IsZero() {
-		return fantasy.NewTextErrorResponse("you must read the file before editing it. Use the View tool first"), nil
-	}
-
-	modTime := fileInfo.ModTime()
-	lastRead := getLastReadTime(filePath)
-	if modTime.After(lastRead) {
-		return fantasy.NewTextErrorResponse(
-			fmt.Sprintf("file %s has been modified since it was last read (mod time: %s, last read: %s)",
-				filePath, modTime.Format(time.RFC3339), lastRead.Format(time.RFC3339),
-			)), nil
-	}
-
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return fantasy.ToolResponse{}, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	oldContent, isCrlf := fsext.ToUnixLineEndings(string(content))
+	oldContent, isCrlf := fsext.ToUnixLineEndings(resp.Content)
 
 	var newContent string
 	var deletionCount int
@@ -237,44 +247,24 @@ func deleteContent(edit editContext, filePath, oldString string, replaceAll bool
 		deletionCount = 1
 	}
 
-	sessionID := GetSessionFromContext(edit.ctx)
-
-	if sessionID == "" {
-		return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for creating a new file")
-	}
-
 	_, additions, removals := diff.GenerateDiff(
 		oldContent,
 		newContent,
 		strings.TrimPrefix(filePath, edit.workingDir),
 	)
 
-	p := edit.permissions.Request(
-		permission.CreatePermissionRequest{
-			SessionID:   sessionID,
-			Path:        fsext.PathOrPrefix(filePath, edit.workingDir),
-			ToolCallID:  call.ID,
-			ToolName:    EditToolName,
-			Action:      "write",
-			Description: fmt.Sprintf("Delete content from file %s", filePath),
-			Params: EditPermissionsParams{
-				FilePath:   filePath,
-				OldContent: oldContent,
-				NewContent: newContent,
-			},
-		},
-	)
-	if !p {
-		return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
-	}
-
 	if isCrlf {
 		newContent, _ = fsext.ToWindowsLineEndings(newContent)
 	}
 
-	err = os.WriteFile(filePath, []byte(newContent), 0o644)
+	// 写回文件
+	_, err = sandboxClient.WriteFile(edit.ctx, FileWriteRequest{
+		SessionID: sessionID,
+		FilePath:  filePath,
+		Content:   newContent,
+	})
 	if err != nil {
-		return fantasy.ToolResponse{}, fmt.Errorf("failed to write file: %w", err)
+		return fantasy.ToolResponse{}, fmt.Errorf("failed to write file to sandbox: %w", err)
 	}
 
 	// Check if file exists in history
@@ -283,7 +273,7 @@ func deleteContent(edit editContext, filePath, oldString string, replaceAll bool
 		_, err = edit.files.Create(edit.ctx, sessionID, filePath, oldContent)
 		if err != nil {
 			// Log error but don't fail the operation
-			return fantasy.ToolResponse{}, fmt.Errorf("error creating file history: %w", err)
+			slog.Error("Error creating file history", "error", err)
 		}
 	}
 	if file.Content != oldContent {
@@ -314,37 +304,24 @@ func deleteContent(edit editContext, filePath, oldString string, replaceAll bool
 }
 
 func replaceContent(edit editContext, filePath, oldString, newString string, replaceAll bool, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
-	fileInfo, err := os.Stat(filePath)
+	sessionID := GetSessionFromContext(edit.ctx)
+	if sessionID == "" {
+		return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for editing file")
+	}
+
+	// ============== 路由到沙箱服务 ==============
+	sandboxClient := GetDefaultSandboxClient()
+
+	// 读取文件内容
+	resp, err := sandboxClient.ReadFile(edit.ctx, FileReadRequest{
+		SessionID: sessionID,
+		FilePath:  filePath,
+	})
 	if err != nil {
-		if os.IsNotExist(err) {
-			return fantasy.NewTextErrorResponse(fmt.Sprintf("file not found: %s", filePath)), nil
-		}
-		return fantasy.ToolResponse{}, fmt.Errorf("failed to access file: %w", err)
+		return fantasy.NewTextErrorResponse(fmt.Sprintf("file not found: %s", filePath)), nil
 	}
 
-	if fileInfo.IsDir() {
-		return fantasy.NewTextErrorResponse(fmt.Sprintf("path is a directory, not a file: %s", filePath)), nil
-	}
-
-	if getLastReadTime(filePath).IsZero() {
-		return fantasy.NewTextErrorResponse("you must read the file before editing it. Use the View tool first"), nil
-	}
-
-	modTime := fileInfo.ModTime()
-	lastRead := getLastReadTime(filePath)
-	if modTime.After(lastRead) {
-		return fantasy.NewTextErrorResponse(
-			fmt.Sprintf("file %s has been modified since it was last read (mod time: %s, last read: %s)",
-				filePath, modTime.Format(time.RFC3339), lastRead.Format(time.RFC3339),
-			)), nil
-	}
-
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return fantasy.ToolResponse{}, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	oldContent, isCrlf := fsext.ToUnixLineEndings(string(content))
+	oldContent, isCrlf := fsext.ToUnixLineEndings(resp.Content)
 
 	var newContent string
 	var replacementCount int
@@ -373,43 +350,25 @@ func replaceContent(edit editContext, filePath, oldString, newString string, rep
 	if oldContent == newContent {
 		return fantasy.NewTextErrorResponse("new content is the same as old content. No changes made."), nil
 	}
-	sessionID := GetSessionFromContext(edit.ctx)
 
-	if sessionID == "" {
-		return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for creating a new file")
-	}
 	_, additions, removals := diff.GenerateDiff(
 		oldContent,
 		newContent,
 		strings.TrimPrefix(filePath, edit.workingDir),
 	)
 
-	p := edit.permissions.Request(
-		permission.CreatePermissionRequest{
-			SessionID:   sessionID,
-			Path:        fsext.PathOrPrefix(filePath, edit.workingDir),
-			ToolCallID:  call.ID,
-			ToolName:    EditToolName,
-			Action:      "write",
-			Description: fmt.Sprintf("Replace content in file %s", filePath),
-			Params: EditPermissionsParams{
-				FilePath:   filePath,
-				OldContent: oldContent,
-				NewContent: newContent,
-			},
-		},
-	)
-	if !p {
-		return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
-	}
-
 	if isCrlf {
 		newContent, _ = fsext.ToWindowsLineEndings(newContent)
 	}
 
-	err = os.WriteFile(filePath, []byte(newContent), 0o644)
+	// 写回文件
+	_, err = sandboxClient.WriteFile(edit.ctx, FileWriteRequest{
+		SessionID: sessionID,
+		FilePath:  filePath,
+		Content:   newContent,
+	})
 	if err != nil {
-		return fantasy.ToolResponse{}, fmt.Errorf("failed to write file: %w", err)
+		return fantasy.ToolResponse{}, fmt.Errorf("failed to write file to sandbox: %w", err)
 	}
 
 	// Check if file exists in history
@@ -418,7 +377,7 @@ func replaceContent(edit editContext, filePath, oldString, newString string, rep
 		_, err = edit.files.Create(edit.ctx, sessionID, filePath, oldContent)
 		if err != nil {
 			// Log error but don't fail the operation
-			return fantasy.ToolResponse{}, fmt.Errorf("error creating file history: %w", err)
+			slog.Error("Error creating file history", "error", err)
 		}
 	}
 	if file.Content != oldContent {

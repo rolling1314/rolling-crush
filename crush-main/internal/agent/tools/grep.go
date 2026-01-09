@@ -121,15 +121,51 @@ func NewGrepTool(workingDir string) fantasy.AgentTool {
 				return fantasy.NewTextErrorResponse("pattern is required"), nil
 			}
 
+			searchPath := params.Path
+			if searchPath == "" {
+				searchPath = workingDir
+			}
+			
+			sessionID := GetSessionFromContext(ctx)
+			if sessionID == "" {
+				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for searching files")
+			}
+
+			// ============== 路由到沙箱服务 ==============
+			sandboxClient := GetDefaultSandboxClient()
+			
+			resp, err := sandboxClient.Grep(ctx, GrepRequest{
+				SessionID: sessionID,
+				Pattern:   params.Pattern,
+				Path:      searchPath,
+			})
+			
+			if err != nil {
+				return fantasy.NewTextErrorResponse(fmt.Sprintf("Error searching files from sandbox: %v", err)), nil
+			}
+			
+			output := resp.Stdout
+			if output == "" {
+				output = "No matches found"
+			}
+			
+			// 简单统计匹配数
+			matchCount := strings.Count(output, "\n")
+			
+			return fantasy.WithResponseMetadata(
+				fantasy.NewTextResponse(output),
+				GrepResponseMetadata{
+					NumberOfMatches: matchCount,
+					Truncated:       false,
+				},
+			), nil
+			
+			// ============== 原本地文件搜索代码（已注释） ==============
+			/*
 			// If literal_text is true, escape the pattern
 			searchPattern := params.Pattern
 			if params.LiteralText {
 				searchPattern = escapeRegexPattern(params.Pattern)
-			}
-
-			searchPath := params.Path
-			if searchPath == "" {
-				searchPath = workingDir
 			}
 
 			matches, truncated, err := searchFiles(ctx, searchPattern, searchPath, params.Include, 100)
@@ -179,6 +215,7 @@ func NewGrepTool(workingDir string) fantasy.AgentTool {
 					Truncated:       truncated,
 				},
 			), nil
+			*/
 		})
 }
 

@@ -5,16 +5,12 @@ import (
 	_ "embed"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
-	"time"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/diff"
 	"github.com/charmbracelet/crush/internal/filepathext"
-	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/history"
 
 	"github.com/charmbracelet/crush/internal/lsp"
@@ -64,7 +60,83 @@ func NewWriteTool(lspClients *csync.Map[string, *lsp.Client], permissions permis
 			}
 
 			filePath := filepathext.SmartJoin(workingDir, params.FilePath)
+			
+			sessionID := GetSessionFromContext(ctx)
+			if sessionID == "" {
+				return fantasy.ToolResponse{}, fmt.Errorf("session_id is required")
+			}
 
+			// ============== 路由到沙箱服务 ==============
+			sandboxClient := GetDefaultSandboxClient()
+			
+			// 尝试读取旧内容
+			oldContent := ""
+			oldResp, err := sandboxClient.ReadFile(ctx, FileReadRequest{
+				SessionID: sessionID,
+				FilePath:  filePath,
+			})
+			if err == nil {
+				oldContent = oldResp.Content
+			}
+			
+			// 写入新内容
+			_, err = sandboxClient.WriteFile(ctx, FileWriteRequest{
+				SessionID: sessionID,
+				FilePath:  filePath,
+				Content:   params.Content,
+			})
+			
+			if err != nil {
+				return fantasy.ToolResponse{}, fmt.Errorf("error writing file to sandbox: %w", err)
+			}
+
+			// 计算diff
+			diffText, additions, removals := diff.GenerateDiff(
+				oldContent,
+				params.Content,
+				strings.TrimPrefix(filePath, workingDir),
+			)
+
+			// 检查文件历史
+			file, err := files.GetByPathAndSession(ctx, filePath, sessionID)
+			if err != nil {
+				_, err = files.Create(ctx, sessionID, filePath, oldContent)
+				if err != nil {
+					// Log error but don't fail the operation
+					slog.Error("Error creating file history", "error", err)
+				}
+			}
+			if file.Content != oldContent {
+				// User Manually changed the content store an intermediate version
+				_, err = files.CreateVersion(ctx, sessionID, filePath, oldContent)
+				if err != nil {
+					slog.Error("Error creating file history version", "error", err)
+				}
+			}
+			// Store the new version
+			_, err = files.CreateVersion(ctx, sessionID, filePath, params.Content)
+			if err != nil {
+				slog.Error("Error creating file history version", "error", err)
+			}
+
+			recordFileWrite(filePath)
+			recordFileRead(filePath)
+
+			notifyLSPs(ctx, lspClients, params.FilePath)
+
+			result := fmt.Sprintf("File successfully written: %s", filePath)
+			result = fmt.Sprintf("<result>\n%s\n</result>", result)
+			result += getDiagnostics(filePath, lspClients)
+			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(result),
+				WriteResponseMetadata{
+					Diff:      diffText,
+					Additions: additions,
+					Removals:  removals,
+				},
+			), nil
+			
+			// ============== 原本地文件写入代码（已注释） ==============
+			/*
 			fileInfo, err := os.Stat(filePath)
 			if err == nil {
 				if fileInfo.IsDir() {
@@ -99,17 +171,6 @@ func NewWriteTool(lspClients *csync.Map[string, *lsp.Client], permissions permis
 				}
 			}
 
-			sessionID := GetSessionFromContext(ctx)
-			if sessionID == "" {
-				return fantasy.ToolResponse{}, fmt.Errorf("session_id is required")
-			}
-
-			diff, additions, removals := diff.GenerateDiff(
-				oldContent,
-				params.Content,
-				strings.TrimPrefix(filePath, workingDir),
-			)
-
 			p := permissions.Request(
 				permission.CreatePermissionRequest{
 					SessionID:   sessionID,
@@ -133,43 +194,6 @@ func NewWriteTool(lspClients *csync.Map[string, *lsp.Client], permissions permis
 			if err != nil {
 				return fantasy.ToolResponse{}, fmt.Errorf("error writing file: %w", err)
 			}
-
-			// Check if file exists in history
-			file, err := files.GetByPathAndSession(ctx, filePath, sessionID)
-			if err != nil {
-				_, err = files.Create(ctx, sessionID, filePath, oldContent)
-				if err != nil {
-					// Log error but don't fail the operation
-					return fantasy.ToolResponse{}, fmt.Errorf("error creating file history: %w", err)
-				}
-			}
-			if file.Content != oldContent {
-				// User Manually changed the content store an intermediate version
-				_, err = files.CreateVersion(ctx, sessionID, filePath, oldContent)
-				if err != nil {
-					slog.Error("Error creating file history version", "error", err)
-				}
-			}
-			// Store the new version
-			_, err = files.CreateVersion(ctx, sessionID, filePath, params.Content)
-			if err != nil {
-				slog.Error("Error creating file history version", "error", err)
-			}
-
-			recordFileWrite(filePath)
-			recordFileRead(filePath)
-
-			notifyLSPs(ctx, lspClients, params.FilePath)
-
-			result := fmt.Sprintf("File successfully written: %s", filePath)
-			result = fmt.Sprintf("<result>\n%s\n</result>", result)
-			result += getDiagnostics(filePath, lspClients)
-			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(result),
-				WriteResponseMetadata{
-					Diff:      diff,
-					Additions: additions,
-					Removals:  removals,
-				},
-			), nil
+			*/
 		})
 }
