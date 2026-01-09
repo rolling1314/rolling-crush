@@ -16,7 +16,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
-	"github.com/charmbracelet/crush/internal/agent/prompt"
+	agentprompt "github.com/charmbracelet/crush/internal/agent/prompt"
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
@@ -107,12 +107,12 @@ func NewCoordinator(
 	}
 
 	// TODO: make this dynamic when we support multiple agents
-	prompt, err := coderPrompt(prompt.WithWorkingDir(c.cfg.WorkingDir()))
+	coderAgentPrompt, err := coderPrompt(agentprompt.WithWorkingDir(c.cfg.WorkingDir()))
 	if err != nil {
 		return nil, err
 	}
 
-	agent, err := c.buildAgent(ctx, prompt, agentCfg)
+	agent, err := c.buildAgent(ctx, coderAgentPrompt, agentCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -137,6 +137,23 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		return nil, errors.New("agent not initialized")
 	}
 	fmt.Println("currentAgent exists")
+
+	// Query workdir_path from session -> project for prompt
+	workingDirForPrompt := c.cfg.WorkingDir() // Default to config working dir
+	if c.dbQuerier != nil {
+		dbSession, err := c.dbQuerier.GetSessionByID(ctx, sessionID)
+		if err != nil {
+			slog.Warn("Failed to get session for workdir lookup", "session_id", sessionID, "error", err)
+		} else if dbSession.ProjectID.Valid && dbSession.ProjectID.String != "" {
+			project, err := c.dbQuerier.GetProjectByID(ctx, dbSession.ProjectID.String)
+			if err != nil {
+				slog.Warn("Failed to get project for workdir lookup", "project_id", dbSession.ProjectID.String, "error", err)
+			} else if project.WorkdirPath.Valid && project.WorkdirPath.String != "" {
+				workingDirForPrompt = project.WorkdirPath.String
+				slog.Info("Using project-specific working directory for prompt", "session_id", sessionID, "project_id", project.ID, "workdir", workingDirForPrompt)
+			}
+		}
+	}
 
 	// Load session-specific config from database if dbReader is available
 	sessionCfg := c.cfg
@@ -178,6 +195,21 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		fmt.Println("Models built successfully, updating agent")
 		// Update current agent's models for this session
 		c.currentAgent.SetModels(large, small)
+	}
+
+	// Rebuild system prompt with project-specific working directory
+	sessionPrompt, err := coderPrompt(agentprompt.WithWorkingDir(workingDirForPrompt))
+	if err != nil {
+		slog.Error("Failed to build session-specific prompt", "error", err)
+	} else {
+		sessionSystemPrompt, err := sessionPrompt.Build(ctx, large.Model.Provider(), large.Model.Model(), *sessionCfg)
+		if err != nil {
+			slog.Error("Failed to build session system prompt", "error", err)
+		} else {
+			// Update agent's system prompt for this session
+			c.currentAgent.(*sessionAgent).systemPrompt = sessionSystemPrompt
+			fmt.Println("Updated system prompt with workdir:", workingDirForPrompt)
+		}
 	}
 
 	model := large
@@ -341,7 +373,7 @@ func mergeCallOptions(model Model, cfg config.ProviderConfig) (fantasy.ProviderO
 	return modelOptions, temp, topP, topK, freqPenalty, presPenalty
 }
 
-func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, agent config.Agent) (SessionAgent, error) {
+func (c *coordinator) buildAgent(ctx context.Context, agentPrompt *agentprompt.Prompt, agent config.Agent) (SessionAgent, error) {
 	large, small, err := c.buildAgentModels(ctx)
 
 	// Build system prompt - use a default provider if models aren't configured yet
@@ -351,13 +383,13 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 		// In Web mode, models may not be configured yet (loaded per-session)
 		slog.Warn("Failed to build initial agent models, will load from session config", "error", err)
 		// Use default anthropic provider for prompt building
-		systemPrompt, err = prompt.Build(ctx, "anthropic", "claude-sonnet-4-5-20250929", *c.cfg)
+		systemPrompt, err = agentPrompt.Build(ctx, "anthropic", "claude-sonnet-4-5-20250929", *c.cfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to build system prompt: %w", err)
 		}
 		systemPromptPrefix = "" // Will be set when session model is loaded
 	} else {
-		systemPrompt, err = prompt.Build(ctx, large.Model.Provider(), large.Model.Model(), *c.cfg)
+		systemPrompt, err = agentPrompt.Build(ctx, large.Model.Provider(), large.Model.Model(), *c.cfg)
 		if err != nil {
 			return nil, err
 		}
