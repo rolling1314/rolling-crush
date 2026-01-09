@@ -431,6 +431,13 @@ class Sandbox:
         else:
             full_path = f"/sandbox/{path}"
         
+        # 自动创建目录结构（类似 Go 的 os.MkdirAll）
+        dir_path = os.path.dirname(full_path)
+        if dir_path:
+            result = self.container.exec_run(["mkdir", "-p", dir_path])
+            if result.exit_code != 0:
+                raise RuntimeError(f"创建目录失败: {result.output.decode()}")
+        
         # 创建 tar 归档并上传
         data = content.encode("utf-8")
         tarstream = io.BytesIO()
