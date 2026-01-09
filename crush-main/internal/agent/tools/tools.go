@@ -5,13 +5,15 @@ import (
 )
 
 type (
-	sessionIDContextKey string
-	messageIDContextKey string
+	sessionIDContextKey  string
+	messageIDContextKey  string
+	workingDirContextKey string
 )
 
 const (
-	SessionIDContextKey sessionIDContextKey = "session_id"
-	MessageIDContextKey messageIDContextKey = "message_id"
+	SessionIDContextKey  sessionIDContextKey  = "session_id"
+	MessageIDContextKey  messageIDContextKey  = "message_id"
+	WorkingDirContextKey workingDirContextKey = "working_dir"
 )
 
 func GetSessionFromContext(ctx context.Context) string {
@@ -36,4 +38,16 @@ func GetMessageFromContext(ctx context.Context) string {
 		return ""
 	}
 	return s
+}
+
+func GetWorkingDirFromContext(ctx context.Context) string {
+	workingDir := ctx.Value(WorkingDirContextKey)
+	if workingDir == nil {
+		return ""
+	}
+	wd, ok := workingDir.(string)
+	if !ok {
+		return ""
+	}
+	return wd
 }

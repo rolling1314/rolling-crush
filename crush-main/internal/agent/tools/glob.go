@@ -2,6 +2,7 @@ package tools
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	_ "embed"
 	"fmt"
@@ -40,9 +41,11 @@ func NewGlobTool(workingDir string) fantasy.AgentTool {
 				return fantasy.NewTextErrorResponse("pattern is required"), nil
 			}
 
+			contextWorkingDir := GetWorkingDirFromContext(ctx)
+			effectiveWorkingDir := cmp.Or(contextWorkingDir, workingDir)
 			searchPath := params.Path
 			if searchPath == "" {
-				searchPath = workingDir
+				searchPath = effectiveWorkingDir
 			}
 			
 			sessionID := GetSessionFromContext(ctx)

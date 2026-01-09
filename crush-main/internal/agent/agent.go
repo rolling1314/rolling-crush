@@ -30,6 +30,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
+	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/session"
@@ -85,6 +86,7 @@ type sessionAgent struct {
 	messages             message.Service
 	disableAutoSummarize bool
 	isYolo               bool
+	dbQuerier            db.Querier // For querying project info
 
 	messageQueue   *csync.Map[string, []SessionAgentCall]
 	activeRequests *csync.Map[string, context.CancelFunc]
@@ -100,6 +102,7 @@ type SessionAgentOptions struct {
 	Sessions             session.Service
 	Messages             message.Service
 	Tools                []fantasy.AgentTool
+	DBQuerier            db.Querier
 }
 
 func NewSessionAgent(
@@ -115,6 +118,7 @@ func NewSessionAgent(
 		disableAutoSummarize: opts.DisableAutoSummarize,
 		tools:                opts.Tools,
 		isYolo:               opts.IsYolo,
+		dbQuerier:            opts.DBQuerier,
 		messageQueue:         csync.NewMap[string, []SessionAgentCall](),
 		activeRequests:       csync.NewMap[string, context.CancelFunc](),
 	}
@@ -192,6 +196,22 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 
 	// Add the session to the context.
 	ctx = context.WithValue(ctx, tools.SessionIDContextKey, call.SessionID)
+
+	// Query and add working directory from project to the context
+	if a.dbQuerier != nil {
+		dbSession, err := a.dbQuerier.GetSessionByID(ctx, call.SessionID)
+		if err != nil {
+			slog.Warn("Failed to get session for workdir lookup", "session_id", call.SessionID, "error", err)
+		} else if dbSession.ProjectID.Valid && dbSession.ProjectID.String != "" {
+			project, err := a.dbQuerier.GetProjectByID(ctx, dbSession.ProjectID.String)
+			if err != nil {
+				slog.Warn("Failed to get project for workdir lookup", "project_id", dbSession.ProjectID.String, "error", err)
+			} else if project.WorkdirPath.Valid && project.WorkdirPath.String != "" {
+				ctx = context.WithValue(ctx, tools.WorkingDirContextKey, project.WorkdirPath.String)
+				slog.Info("Using project-specific working directory", "session_id", call.SessionID, "project_id", project.ID, "workdir", project.WorkdirPath.String)
+			}
+		}
+	}
 
 	genCtx, cancel := context.WithCancel(ctx)
 	a.activeRequests.Set(call.SessionID, cancel)

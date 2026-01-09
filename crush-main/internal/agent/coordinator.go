@@ -138,26 +138,6 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 	}
 	fmt.Println("currentAgent exists")
 
-	// Query workdir_path from session -> project
-	workingDir := c.cfg.WorkingDir() // Default to config working dir
-	if c.dbQuerier != nil {
-		fmt.Println("dbQuerier available, querying session and project")
-		dbSession, err := c.dbQuerier.GetSessionByID(ctx, sessionID)
-		if err != nil {
-			slog.Warn("Failed to get session for workdir lookup", "session_id", sessionID, "error", err)
-		} else if dbSession.ProjectID.Valid && dbSession.ProjectID.String != "" {
-			fmt.Println("Session has projectID:", dbSession.ProjectID.String)
-			project, err := c.dbQuerier.GetProjectByID(ctx, dbSession.ProjectID.String)
-			if err != nil {
-				slog.Warn("Failed to get project for workdir lookup", "project_id", dbSession.ProjectID.String, "error", err)
-			} else if project.WorkdirPath.Valid && project.WorkdirPath.String != "" {
-				workingDir = project.WorkdirPath.String
-				fmt.Println("Using project workdir:", workingDir)
-				slog.Info("Using project-specific working directory", "session_id", sessionID, "project_id", project.ID, "workdir", workingDir)
-			}
-		}
-	}
-
 	// Load session-specific config from database if dbReader is available
 	sessionCfg := c.cfg
 	if c.dbReader != nil {
@@ -165,7 +145,7 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		var err error
 		sessionCfg, err = config.LoadWithSessionConfig(
 			ctx,
-			workingDir, // Use the queried workingDir instead of c.cfg.WorkingDir()
+			c.cfg.WorkingDir(),
 			c.cfg.Options.DataDirectory,
 			c.cfg.Options.Debug,
 			sessionID,
@@ -198,20 +178,6 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		fmt.Println("Models built successfully, updating agent")
 		// Update current agent's models for this session
 		c.currentAgent.SetModels(large, small)
-	}
-
-	// Rebuild tools with session-specific working directory
-	// Use global agent config, not session-specific
-	agentCfg, ok := c.cfg.Agents[config.AgentCoder]
-	if !ok {
-		return nil, errors.New("coder agent not configured")
-	}
-	sessionTools, err := c.buildTools(ctx, agentCfg, workingDir)
-	if err != nil {
-		slog.Error("Failed to build session-specific tools, using default", "session_id", sessionID, "error", err)
-	} else {
-		fmt.Println("Rebuilt tools with workingDir:", workingDir)
-		c.currentAgent.SetTools(sessionTools)
 	}
 
 	model := large
@@ -401,15 +367,16 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 
 	// Create agent with system prompt (models may be empty initially)
 	result := NewSessionAgent(SessionAgentOptions{
-		large,
-		small,
-		systemPromptPrefix,
-		systemPrompt,
-		c.cfg.Options.DisableAutoSummarize,
-		c.permissions.SkipRequests(),
-		c.sessions,
-		c.messages,
-		nil,
+		LargeModel:           large,
+		SmallModel:           small,
+		SystemPromptPrefix:   systemPromptPrefix,
+		SystemPrompt:         systemPrompt,
+		DisableAutoSummarize: c.cfg.Options.DisableAutoSummarize,
+		IsYolo:               c.permissions.SkipRequests(),
+		Sessions:             c.sessions,
+		Messages:             c.messages,
+		Tools:                nil,
+		DBQuerier:            c.dbQuerier,
 	})
 
 	// Build tools asynchronously (tools don't depend on models)

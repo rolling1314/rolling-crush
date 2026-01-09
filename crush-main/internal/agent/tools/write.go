@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"cmp"
 	"context"
 	_ "embed"
 	"fmt"
@@ -60,7 +61,9 @@ func NewWriteTool(lspClients *csync.Map[string, *lsp.Client], permissions permis
 				return fantasy.NewTextErrorResponse("content is required"), nil
 			}
 
-			filePath := filepathext.SmartJoin(workingDir, params.FilePath)
+			contextWorkingDir := GetWorkingDirFromContext(ctx)
+			effectiveWorkingDir := cmp.Or(contextWorkingDir, workingDir)
+			filePath := filepathext.SmartJoin(effectiveWorkingDir, params.FilePath)
 			
 			sessionID := GetSessionFromContext(ctx)
 			if sessionID == "" {

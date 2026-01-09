@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"cmp"
 	"context"
 	_ "embed"
 	"fmt"
@@ -60,12 +61,14 @@ func NewEditTool(lspClients *csync.Map[string, *lsp.Client], permissions permiss
 				return fantasy.NewTextErrorResponse("file_path is required"), nil
 			}
 
-			params.FilePath = filepathext.SmartJoin(workingDir, params.FilePath)
+			contextWorkingDir := GetWorkingDirFromContext(ctx)
+			effectiveWorkingDir := cmp.Or(contextWorkingDir, workingDir)
+			params.FilePath = filepathext.SmartJoin(effectiveWorkingDir, params.FilePath)
 
 			var response fantasy.ToolResponse
 			var err error
 
-			editCtx := editContext{ctx, permissions, files, workingDir}
+			editCtx := editContext{ctx, permissions, files, effectiveWorkingDir}
 
 			if params.OldString == "" {
 				response, err = createNewFile(editCtx, params.FilePath, params.NewString, call)

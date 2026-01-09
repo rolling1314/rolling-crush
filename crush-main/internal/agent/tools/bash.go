@@ -196,8 +196,10 @@ func NewBashTool(permissions permission.Service, workingDir string, attribution 
 				return fantasy.NewTextErrorResponse("missing command"), nil
 			}
 
-			// Determine working directory
-			execWorkingDir := cmp.Or(params.WorkingDir, workingDir)
+			// Determine working directory - priority: params > context > default
+			contextWorkingDir := GetWorkingDirFromContext(ctx)
+			defaultWorkingDir := cmp.Or(contextWorkingDir, workingDir)
+			execWorkingDir := cmp.Or(params.WorkingDir, defaultWorkingDir)
 
 			isSafeReadOnly := false
 			cmdLower := strings.ToLower(params.Command)

@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"cmp"
 	"context"
 	_ "embed"
 	"fmt"
@@ -45,7 +46,9 @@ func NewWebFetchTool(workingDir string, client *http.Client) fantasy.AgentTool {
 			var result strings.Builder
 
 			if hasLargeContent {
-				tempFile, err := os.CreateTemp(workingDir, "page-*.md")
+				contextWorkingDir := GetWorkingDirFromContext(ctx)
+				effectiveWorkingDir := cmp.Or(contextWorkingDir, workingDir)
+				tempFile, err := os.CreateTemp(effectiveWorkingDir, "page-*.md")
 				if err != nil {
 					return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to create temporary file: %s", err)), nil
 				}

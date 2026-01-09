@@ -2,6 +2,7 @@ package tools
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	_ "embed"
 	"fmt"
@@ -62,7 +63,9 @@ func NewViewTool(lspClients *csync.Map[string, *lsp.Client], permissions permiss
 			}
 
 			// Handle relative paths
-			filePath := filepathext.SmartJoin(workingDir, params.FilePath)
+			contextWorkingDir := GetWorkingDirFromContext(ctx)
+			effectiveWorkingDir := cmp.Or(contextWorkingDir, workingDir)
+			filePath := filepathext.SmartJoin(effectiveWorkingDir, params.FilePath)
 			
 			sessionID := GetSessionFromContext(ctx)
 			if sessionID == "" {

@@ -751,7 +751,7 @@ func (p *chatPage) sendMessage(text string, attachments []message.Attachment) te
 	session := p.session
 	var cmds []tea.Cmd
 	if p.session.ID == "" {
-		newSession, err := p.app.Sessions.Create(context.Background(), "New Session")
+		newSession, err := p.app.Sessions.Create(context.Background(), "", "New Session")
 		if err != nil {
 			return util.ReportError(err)
 		}
