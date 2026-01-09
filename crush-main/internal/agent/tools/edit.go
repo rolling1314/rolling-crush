@@ -16,6 +16,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/internal/sandbox"
 )
 
 type EditParams struct {
@@ -106,10 +107,10 @@ func createNewFile(edit editContext, filePath, content string, call fantasy.Tool
 	}
 
 	// ============== 路由到沙箱服务 ==============
-	sandboxClient := GetDefaultSandboxClient()
+	sandboxClient := sandbox.GetDefaultClient()
 
 	// 检查文件是否已存在
-	_, err := sandboxClient.ReadFile(edit.ctx, FileReadRequest{
+	_, err := sandboxClient.ReadFile(edit.ctx, sandbox.FileReadRequest{
 		SessionID: sessionID,
 		FilePath:  filePath,
 	})
@@ -118,7 +119,7 @@ func createNewFile(edit editContext, filePath, content string, call fantasy.Tool
 	}
 
 	// 写入新文件
-	_, err = sandboxClient.WriteFile(edit.ctx, FileWriteRequest{
+	_, err = sandboxClient.WriteFile(edit.ctx, sandbox.FileWriteRequest{
 		SessionID: sessionID,
 		FilePath:  filePath,
 		Content:   content,
@@ -210,10 +211,10 @@ func deleteContent(edit editContext, filePath, oldString string, replaceAll bool
 	}
 
 	// ============== 路由到沙箱服务 ==============
-	sandboxClient := GetDefaultSandboxClient()
+	sandboxClient := sandbox.GetDefaultClient()
 
 	// 读取文件内容
-	resp, err := sandboxClient.ReadFile(edit.ctx, FileReadRequest{
+	resp, err := sandboxClient.ReadFile(edit.ctx, sandbox.FileReadRequest{
 		SessionID: sessionID,
 		FilePath:  filePath,
 	})
@@ -258,7 +259,7 @@ func deleteContent(edit editContext, filePath, oldString string, replaceAll bool
 	}
 
 	// 写回文件
-	_, err = sandboxClient.WriteFile(edit.ctx, FileWriteRequest{
+	_, err = sandboxClient.WriteFile(edit.ctx, sandbox.FileWriteRequest{
 		SessionID: sessionID,
 		FilePath:  filePath,
 		Content:   newContent,
@@ -310,10 +311,10 @@ func replaceContent(edit editContext, filePath, oldString, newString string, rep
 	}
 
 	// ============== 路由到沙箱服务 ==============
-	sandboxClient := GetDefaultSandboxClient()
+	sandboxClient := sandbox.GetDefaultClient()
 
 	// 读取文件内容
-	resp, err := sandboxClient.ReadFile(edit.ctx, FileReadRequest{
+	resp, err := sandboxClient.ReadFile(edit.ctx, sandbox.FileReadRequest{
 		SessionID: sessionID,
 		FilePath:  filePath,
 	})
@@ -362,7 +363,7 @@ func replaceContent(edit editContext, filePath, oldString, newString string, rep
 	}
 
 	// 写回文件
-	_, err = sandboxClient.WriteFile(edit.ctx, FileWriteRequest{
+	_, err = sandboxClient.WriteFile(edit.ctx, sandbox.FileWriteRequest{
 		SessionID: sessionID,
 		FilePath:  filePath,
 		Content:   newContent,

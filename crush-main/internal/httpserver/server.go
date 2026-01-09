@@ -4,12 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log/slog"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strconv"
 
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/auth"
@@ -17,6 +13,7 @@ import (
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/project"
+	"github.com/charmbracelet/crush/internal/sandbox"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/user"
 	"github.com/gin-gonic/gin"
@@ -31,6 +28,7 @@ type Server struct {
 	messageService message.Service
 	db             *db.Queries
 	config         *config.Config
+	sandboxClient  *sandbox.Client
 }
 
 func New(port string, userService user.Service, projectService project.Service, sessionService session.Service, messageService message.Service, queries *db.Queries, cfg *config.Config) *Server {
@@ -46,6 +44,7 @@ func New(port string, userService user.Service, projectService project.Service, 
 		messageService: messageService,
 		db:             queries,
 		config:         cfg,
+		sandboxClient:  sandbox.GetDefaultClient(),
 	}
 }
 
@@ -146,17 +145,6 @@ func ptrToNullString(s *string) sql.NullString {
 	}
 	return sql.NullString{String: *s, Valid: true}
 }
-
-type FileNode struct {
-	ID       string     `json:"id"`
-	Name     string     `json:"name"`
-	Type     string     `json:"type"`
-	Path     string     `json:"path"`
-	Content  string     `json:"content,omitempty"`
-	Children []FileNode `json:"children,omitempty"`
-}
-
-var idCounter = 0
 
 func (s *Server) Start() error {
 	s.engine.Use(corsMiddleware())
@@ -458,16 +446,16 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 	// Save model config using TUI's exact logic, writing to database instead of file
 	fmt.Println("=== handleCreateSession: About to save model config ===")
 	fmt.Println("req.ModelConfig:", req.ModelConfig)
-	
+
 	if req.ModelConfig != nil {
 		fmt.Println("ModelConfig is not nil, proceeding with config save")
 		fmt.Println("Provider:", req.ModelConfig.Provider, "Model:", req.ModelConfig.Model)
-		
+
 		// 1. 创建一个临时Config实例，启用数据库存储模式
 		tempConfig := *s.config // 浅拷贝基础配置
 		tempConfig.EnableDBStorage(sess.ID, s.db)
 		fmt.Println("Enabled DB storage for session:", sess.ID)
-		
+
 		// 2. 按照TUI逻辑设置API Key（会自动写入数据库）
 		if req.ModelConfig.APIKey != "" {
 			if err := tempConfig.SetProviderAPIKey(req.ModelConfig.Provider, req.ModelConfig.APIKey); err != nil {
@@ -476,7 +464,7 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 				slog.Info("Saved API key to database", "provider", req.ModelConfig.Provider, "session_id", sess.ID)
 			}
 		}
-		
+
 		// 3. 按照TUI逻辑更新preferred large model（会自动写入数据库）
 		largeModel := config.SelectedModel{
 			Model:           req.ModelConfig.Model,
@@ -491,7 +479,7 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 		} else {
 			slog.Info("Saved large model to database", "model", req.ModelConfig.Model, "session_id", sess.ID)
 		}
-		
+
 		// 4. 按照TUI逻辑自动设置small model（会自动写入数据库）
 		knownProviders, err := config.Providers(&tempConfig)
 		if err == nil {
@@ -502,7 +490,7 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 					break
 				}
 			}
-			
+
 			if providerInfo != nil && providerInfo.DefaultSmallModelID != "" {
 				smallModelInfo := tempConfig.GetModel(req.ModelConfig.Provider, providerInfo.DefaultSmallModelID)
 				if smallModelInfo != nil {
@@ -698,13 +686,13 @@ func (s *Server) handleTestProviderConnection(c *gin.Context) {
 
 func (s *Server) handleConfigureProvider(c *gin.Context) {
 	type ConfigureProviderRequest struct {
-		Provider        string  `json:"provider" binding:"required"`
-		Model           string  `json:"model" binding:"required"`
-		APIKey          string  `json:"api_key" binding:"required"`
-		BaseURL         string  `json:"base_url"`
-		MaxTokens       *int64  `json:"max_tokens"`
-		ReasoningEffort string  `json:"reasoning_effort"`
-		SetAsDefault    bool    `json:"set_as_default"` // 暂时保留参数但不使用
+		Provider        string `json:"provider" binding:"required"`
+		Model           string `json:"model" binding:"required"`
+		APIKey          string `json:"api_key" binding:"required"`
+		BaseURL         string `json:"base_url"`
+		MaxTokens       *int64 `json:"max_tokens"`
+		ReasoningEffort string `json:"reasoning_effort"`
+		SetAsDefault    bool   `json:"set_as_default"` // 暂时保留参数但不使用
 	}
 
 	var req ConfigureProviderRequest
@@ -728,112 +716,42 @@ func (s *Server) handleConfigureProvider(c *gin.Context) {
 }
 
 func (s *Server) handleGetFiles(c *gin.Context) {
+	// 获取请求参数
 	targetPath := c.DefaultQuery("path", ".")
-	idCounter = 0
+	sessionID := c.Query("session_id")
 
-	absPath, err := filepath.Abs(targetPath)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+	slog.Info("handleGetFiles request", "session_id", sessionID, "path", targetPath, "query", c.Request.URL.RawQuery)
+
+	// session_id 是必需的
+	if sessionID == "" {
+		slog.Warn("Missing session_id parameter", "path", targetPath)
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "session_id is required. Usage: /api/files?session_id=xxx&path=/sandbox/project"})
 		return
 	}
 
-	// Check if path exists
-	if _, err := os.Stat(absPath); os.IsNotExist(err) {
-		c.JSON(http.StatusNotFound, ErrorResponse{Error: "Path does not exist: " + absPath})
+	slog.Info("Fetching file tree from sandbox", "session_id", sessionID, "path", targetPath)
+
+	// 通过沙箱客户端获取文件树
+	resp, err := s.sandboxClient.GetFileTree(c.Request.Context(), sandbox.FileTreeRequest{
+		SessionID: sessionID,
+		Path:      targetPath,
+	})
+
+	if err != nil {
+		slog.Error("Failed to get file tree from sandbox", "error", err, "session_id", sessionID)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: fmt.Sprintf("Failed to get file tree: %v", err)})
 		return
 	}
 
-	fileTree, err := buildFileTree(absPath, absPath)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, fileTree)
-}
-
-func generateID() string {
-	idCounter++
-	return strconv.Itoa(idCounter)
-}
-
-func buildFileTree(path string, rootPath string) (*FileNode, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return nil, err
-	}
-
-	relativePath, err := filepath.Rel(rootPath, path)
-	if err != nil {
-		relativePath = path
-	}
-	if relativePath == "." {
-		relativePath = ""
-	}
-
-	node := &FileNode{
-		ID:   generateID(),
-		Name: info.Name(),
-		Path: "/" + filepath.ToSlash(relativePath),
-	}
-
-	if info.IsDir() {
-		node.Type = "folder"
-		files, err := ioutil.ReadDir(path)
-		if err != nil {
-			return nil, err
-		}
-
-		node.Children = []FileNode{}
-		for _, file := range files {
-			if shouldIgnoreFile(file.Name()) {
-				continue
-			}
-
-			childPath := filepath.Join(path, file.Name())
-			childNode, err := buildFileTree(childPath, rootPath)
-			if err != nil {
-				continue
-			}
-			node.Children = append(node.Children, *childNode)
-		}
-	} else {
-		node.Type = "file"
-		if info.Size() < 1024*1024 {
-			content, err := ioutil.ReadFile(path)
-			if err == nil {
-				node.Content = string(content)
-			}
-		}
-	}
-
-	return node, nil
-}
-
-func shouldIgnoreFile(name string) bool {
-	ignorePatterns := []string{
-		".git", ".DS_Store", "node_modules", ".idea", ".vscode",
-		"__pycache__", ".pytest_cache", ".pyc", ".pyo", ".env", ".env.local",
-	}
-
-	for _, pattern := range ignorePatterns {
-		if name == pattern {
-			return true
-		}
-		matched, err := filepath.Match(pattern, name)
-		if err == nil && matched {
-			return true
-		}
-	}
-
-	return false
+	// 返回文件树
+	c.JSON(http.StatusOK, resp.Tree)
 }
 
 // SessionConfigResponse represents the model configuration for a session
 type SessionConfigResponse struct {
 	Provider        string   `json:"provider"`
 	Model           string   `json:"model"`
-	APIKey          string   `json:"api_key"`          // Masked for security
+	APIKey          string   `json:"api_key"` // Masked for security
 	BaseURL         string   `json:"base_url,omitempty"`
 	MaxTokens       *int64   `json:"max_tokens,omitempty"`
 	Temperature     *float64 `json:"temperature,omitempty"`

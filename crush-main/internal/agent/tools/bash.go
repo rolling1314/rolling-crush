@@ -16,6 +16,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/internal/sandbox"
 	"github.com/charmbracelet/crush/internal/shell"
 )
 
@@ -233,9 +234,9 @@ func NewBashTool(permissions permission.Service, workingDir string, attribution 
 
 			// ============== 路由到沙箱服务 ==============
 			startTime := time.Now()
-			sandboxClient := GetDefaultSandboxClient()
+			sandboxClient := sandbox.GetDefaultClient()
 
-			resp, err := sandboxClient.Execute(ctx, ExecuteRequest{
+			resp, err := sandboxClient.Execute(ctx, sandbox.ExecuteRequest{
 				SessionID:  sessionID,
 				Command:    params.Command,
 				Language:   "bash",

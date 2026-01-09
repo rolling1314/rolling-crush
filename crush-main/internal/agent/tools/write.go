@@ -15,6 +15,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/internal/sandbox"
 )
 
 //go:embed write.md
@@ -66,25 +67,25 @@ func NewWriteTool(lspClients *csync.Map[string, *lsp.Client], permissions permis
 				return fantasy.ToolResponse{}, fmt.Errorf("session_id is required")
 			}
 
-			// ============== 路由到沙箱服务 ==============
-			sandboxClient := GetDefaultSandboxClient()
-			
-			// 尝试读取旧内容
-			oldContent := ""
-			oldResp, err := sandboxClient.ReadFile(ctx, FileReadRequest{
-				SessionID: sessionID,
-				FilePath:  filePath,
-			})
-			if err == nil {
-				oldContent = oldResp.Content
-			}
-			
-			// 写入新内容
-			_, err = sandboxClient.WriteFile(ctx, FileWriteRequest{
-				SessionID: sessionID,
-				FilePath:  filePath,
-				Content:   params.Content,
-			})
+		// ============== 路由到沙箱服务 ==============
+		sandboxClient := sandbox.GetDefaultClient()
+		
+		// 尝试读取旧内容
+		oldContent := ""
+		oldResp, err := sandboxClient.ReadFile(ctx, sandbox.FileReadRequest{
+			SessionID: sessionID,
+			FilePath:  filePath,
+		})
+		if err == nil {
+			oldContent = oldResp.Content
+		}
+		
+		// 写入新内容
+		_, err = sandboxClient.WriteFile(ctx, sandbox.FileWriteRequest{
+			SessionID: sessionID,
+			FilePath:  filePath,
+			Content:   params.Content,
+		})
 			
 			if err != nil {
 				return fantasy.ToolResponse{}, fmt.Errorf("error writing file to sandbox: %w", err)

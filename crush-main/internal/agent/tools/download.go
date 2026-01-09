@@ -14,6 +14,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/filepathext"
 	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/internal/sandbox"
 )
 
 type DownloadParams struct {
@@ -134,13 +135,13 @@ func NewDownloadTool(permissions permission.Service, workingDir string, client *
 				return fantasy.NewTextErrorResponse(fmt.Sprintf("File too large: exceeded %d bytes limit", maxSize)), nil
 			}
 			
-			// Write to sandbox
-			sandboxClient := GetDefaultSandboxClient()
-			_, err = sandboxClient.WriteFile(ctx, FileWriteRequest{
-				SessionID: sessionID,
-				FilePath:  filePath,
-				Content:   string(content),
-			})
+		// Write to sandbox
+		sandboxClient := sandbox.GetDefaultClient()
+		_, err = sandboxClient.WriteFile(ctx, sandbox.FileWriteRequest{
+			SessionID: sessionID,
+			FilePath:  filePath,
+			Content:   string(content),
+		})
 			if err != nil {
 				return fantasy.ToolResponse{}, fmt.Errorf("failed to write file to sandbox: %w", err)
 			}

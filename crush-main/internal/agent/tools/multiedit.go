@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/internal/sandbox"
 )
 
 type MultiEditOperation struct {
@@ -127,10 +128,10 @@ func processMultiEditWithCreation(edit editContext, params MultiEditParams, call
 	}
 
 	// ============== 路由到沙箱服务 ==============
-	sandboxClient := GetDefaultSandboxClient()
-	
+	sandboxClient := sandbox.GetDefaultClient()
+
 	// Check if file already exists in sandbox
-	_, err := sandboxClient.ReadFile(edit.ctx, FileReadRequest{
+	_, err := sandboxClient.ReadFile(edit.ctx, sandbox.FileReadRequest{
 		SessionID: sessionID,
 		FilePath:  params.FilePath,
 	})
@@ -161,7 +162,7 @@ func processMultiEditWithCreation(edit editContext, params MultiEditParams, call
 	_, additions, removals := diff.GenerateDiff("", currentContent, strings.TrimPrefix(params.FilePath, edit.workingDir))
 
 	// Write the file to sandbox
-	_, err = sandboxClient.WriteFile(edit.ctx, FileWriteRequest{
+	_, err = sandboxClient.WriteFile(edit.ctx, sandbox.FileWriteRequest{
 		SessionID: sessionID,
 		FilePath:  params.FilePath,
 		Content:   currentContent,
@@ -212,10 +213,10 @@ func processMultiEditExistingFile(edit editContext, params MultiEditParams, call
 	}
 
 	// ============== 路由到沙箱服务 ==============
-	sandboxClient := GetDefaultSandboxClient()
+	sandboxClient := sandbox.GetDefaultClient()
 	
 	// Read current file content from sandbox
-	resp, err := sandboxClient.ReadFile(edit.ctx, FileReadRequest{
+	resp, err := sandboxClient.ReadFile(edit.ctx, sandbox.FileReadRequest{
 		SessionID: sessionID,
 		FilePath:  params.FilePath,
 	})
@@ -264,7 +265,7 @@ func processMultiEditExistingFile(edit editContext, params MultiEditParams, call
 	}
 
 	// Write the updated content to sandbox
-	_, err = sandboxClient.WriteFile(edit.ctx, FileWriteRequest{
+	_, err = sandboxClient.WriteFile(edit.ctx, sandbox.FileWriteRequest{
 		SessionID: sessionID,
 		FilePath:  params.FilePath,
 		Content:   currentContent,

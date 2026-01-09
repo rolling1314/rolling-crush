@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/crush/internal/filepathext"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/internal/sandbox"
 )
 
 type LSParams struct {
@@ -101,13 +102,13 @@ func NewLsTool(permissions permission.Service, workingDir string, lsConfig confi
 				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for listing directory")
 			}
 
-			// ============== 路由到沙箱服务 ==============
-			sandboxClient := GetDefaultSandboxClient()
-			
-			resp, err := sandboxClient.ListFiles(ctx, FileListRequest{
-				SessionID: sessionID,
-				Path:      searchPath,
-			})
+		// ============== 路由到沙箱服务 ==============
+		sandboxClient := sandbox.GetDefaultClient()
+
+		resp, err := sandboxClient.ListFiles(ctx, sandbox.FileListRequest{
+			SessionID: sessionID,
+			Path:      searchPath,
+		})
 			
 			if err != nil {
 				return fantasy.NewTextErrorResponse(fmt.Sprintf("Error listing directory from sandbox: %v", err)), nil

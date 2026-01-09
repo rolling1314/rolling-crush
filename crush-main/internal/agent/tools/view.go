@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/crush/internal/filepathext"
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/internal/sandbox"
 )
 
 //go:embed view.md
@@ -73,13 +74,13 @@ func NewViewTool(lspClients *csync.Map[string, *lsp.Client], permissions permiss
 				params.Limit = DefaultReadLimit
 			}
 
-			// ============== 路由到沙箱服务 ==============
-			sandboxClient := GetDefaultSandboxClient()
-			
-			resp, err := sandboxClient.ReadFile(ctx, FileReadRequest{
-				SessionID: sessionID,
-				FilePath:  filePath,
-			})
+		// ============== 路由到沙箱服务 ==============
+		sandboxClient := sandbox.GetDefaultClient()
+
+		resp, err := sandboxClient.ReadFile(ctx, sandbox.FileReadRequest{
+			SessionID: sessionID,
+			FilePath:  filePath,
+		})
 			
 			if err != nil {
 				return fantasy.NewTextErrorResponse(fmt.Sprintf("Error reading file from sandbox: %v", err)), nil

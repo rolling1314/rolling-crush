@@ -95,10 +95,10 @@ export default function WorkspacePage() {
   }, [projectId]);
 
   useEffect(() => {
-    if (project?.workspace_path) {
-      loadFiles(project.workspace_path);
+    if (project?.workspace_path && currentSessionId) {
+      loadFiles(project.workspace_path, currentSessionId);
     }
-  }, [project]);
+  }, [project, currentSessionId]);
 
   // Load open files from localStorage
   useEffect(() => {
@@ -310,9 +310,9 @@ export default function WorkspacePage() {
       }
       
       // 如果消息包含工具调用结果，刷新文件树（因为工具可能修改了文件）
-      if (convertedMsg.toolResults && convertedMsg.toolResults.length > 0 && project?.workspace_path) {
+      if (convertedMsg.toolResults && convertedMsg.toolResults.length > 0 && project?.workspace_path && currentSessionId) {
         console.log('Tool result detected, refreshing file tree...');
-        loadFiles(project.workspace_path);
+        loadFiles(project.workspace_path, currentSessionId);
       }
     } else if (data.Type === 'permission_request' || data.type === 'permission_request') {
       // 处理权限请求
@@ -430,19 +430,36 @@ export default function WorkspacePage() {
     }
   };
 
-  const loadFiles = async (workspacePath: string) => {
+  const loadFiles = async (workspacePath: string, sessionId?: string) => {
     setLoadingFiles(true);
     try {
+      // 如果没有提供 sessionId，使用当前会话ID
+      const effectiveSessionId = sessionId || currentSessionId;
+      
+      if (!effectiveSessionId) {
+        console.warn('No session ID available, skipping file tree load');
+        setFiles([]);
+        setLoadingFiles(false);
+        return;
+      }
+      
       const token = localStorage.getItem('jwt_token');
-      const response = await fetch(`http://localhost:8081/api/files?path=${encodeURIComponent(workspacePath)}`, {
+      const url = `http://localhost:8081/api/files?session_id=${encodeURIComponent(effectiveSessionId)}&path=${encodeURIComponent(workspacePath)}`;
+      console.log('Loading file tree:', { sessionId: effectiveSessionId, path: workspacePath, url });
+      
+      const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
       if (!response.ok) {
-        throw new Error('Failed to fetch files');
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Failed to fetch files:', errorData);
+        throw new Error(errorData.error || 'Failed to fetch files');
       }
       
       const data = await response.json();
+      console.log('File tree loaded:', data);
+      
       if (Array.isArray(data)) {
         setFiles(data);
       } else if (data && typeof data === 'object') {

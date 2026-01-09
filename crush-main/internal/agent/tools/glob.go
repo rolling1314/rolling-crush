@@ -13,6 +13,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/fsext"
+	"github.com/charmbracelet/crush/internal/sandbox"
 )
 
 const GlobToolName = "glob"
@@ -49,14 +50,14 @@ func NewGlobTool(workingDir string) fantasy.AgentTool {
 				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for finding files")
 			}
 
-			// ============== 路由到沙箱服务 ==============
-			sandboxClient := GetDefaultSandboxClient()
-			
-			resp, err := sandboxClient.Glob(ctx, GlobRequest{
-				SessionID: sessionID,
-				Pattern:   params.Pattern,
-				Path:      searchPath,
-			})
+		// ============== 路由到沙箱服务 ==============
+		sandboxClient := sandbox.GetDefaultClient()
+
+		resp, err := sandboxClient.Glob(ctx, sandbox.GlobRequest{
+			SessionID: sessionID,
+			Pattern:   params.Pattern,
+			Path:      searchPath,
+		})
 			
 			if err != nil {
 				return fantasy.ToolResponse{}, fmt.Errorf("error finding files from sandbox: %w", err)

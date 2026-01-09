@@ -1,4 +1,4 @@
-package tools
+package sandbox
 
 import (
 	"bytes"
@@ -10,15 +10,15 @@ import (
 	"time"
 )
 
-// SandboxClient 沙箱服务HTTP客户端
-type SandboxClient struct {
+// Client 沙箱服务HTTP客户端
+type Client struct {
 	baseURL    string
 	httpClient *http.Client
 }
 
-// NewSandboxClient 创建沙箱客户端
-func NewSandboxClient(baseURL string) *SandboxClient {
-	return &SandboxClient{
+// NewClient 创建沙箱客户端
+func NewClient(baseURL string) *Client {
+	return &Client{
 		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 5 * time.Minute, // 5分钟超时，适合长时间运行的命令
@@ -132,7 +132,7 @@ type FileEditResponse struct {
 }
 
 // Execute 在沙箱中执行命令
-func (c *SandboxClient) Execute(ctx context.Context, req ExecuteRequest) (*ExecuteResponse, error) {
+func (c *Client) Execute(ctx context.Context, req ExecuteRequest) (*ExecuteResponse, error) {
 	var resp ExecuteResponse
 	err := c.doRequest(ctx, "POST", "/execute", req, &resp)
 	if err != nil {
@@ -145,7 +145,7 @@ func (c *SandboxClient) Execute(ctx context.Context, req ExecuteRequest) (*Execu
 }
 
 // ReadFile 读取沙箱中的文件
-func (c *SandboxClient) ReadFile(ctx context.Context, req FileReadRequest) (*FileReadResponse, error) {
+func (c *Client) ReadFile(ctx context.Context, req FileReadRequest) (*FileReadResponse, error) {
 	var resp FileReadResponse
 	err := c.doRequest(ctx, "POST", "/file/read", req, &resp)
 	if err != nil {
@@ -158,7 +158,7 @@ func (c *SandboxClient) ReadFile(ctx context.Context, req FileReadRequest) (*Fil
 }
 
 // WriteFile 写入文件到沙箱
-func (c *SandboxClient) WriteFile(ctx context.Context, req FileWriteRequest) (*FileWriteResponse, error) {
+func (c *Client) WriteFile(ctx context.Context, req FileWriteRequest) (*FileWriteResponse, error) {
 	var resp FileWriteResponse
 	err := c.doRequest(ctx, "POST", "/file/write", req, &resp)
 	if err != nil {
@@ -171,7 +171,7 @@ func (c *SandboxClient) WriteFile(ctx context.Context, req FileWriteRequest) (*F
 }
 
 // ListFiles 列出沙箱中的文件
-func (c *SandboxClient) ListFiles(ctx context.Context, req FileListRequest) (*FileListResponse, error) {
+func (c *Client) ListFiles(ctx context.Context, req FileListRequest) (*FileListResponse, error) {
 	var resp FileListResponse
 	err := c.doRequest(ctx, "POST", "/file/list", req, &resp)
 	if err != nil {
@@ -184,7 +184,7 @@ func (c *SandboxClient) ListFiles(ctx context.Context, req FileListRequest) (*Fi
 }
 
 // Grep 搜索文件内容
-func (c *SandboxClient) Grep(ctx context.Context, req GrepRequest) (*GrepResponse, error) {
+func (c *Client) Grep(ctx context.Context, req GrepRequest) (*GrepResponse, error) {
 	var resp GrepResponse
 	err := c.doRequest(ctx, "POST", "/file/grep", req, &resp)
 	if err != nil {
@@ -197,7 +197,7 @@ func (c *SandboxClient) Grep(ctx context.Context, req GrepRequest) (*GrepRespons
 }
 
 // Glob 文件名模式匹配
-func (c *SandboxClient) Glob(ctx context.Context, req GlobRequest) (*GlobResponse, error) {
+func (c *Client) Glob(ctx context.Context, req GlobRequest) (*GlobResponse, error) {
 	var resp GlobResponse
 	err := c.doRequest(ctx, "POST", "/file/glob", req, &resp)
 	if err != nil {
@@ -210,7 +210,7 @@ func (c *SandboxClient) Glob(ctx context.Context, req GlobRequest) (*GlobRespons
 }
 
 // EditFile 编辑文件内容
-func (c *SandboxClient) EditFile(ctx context.Context, req FileEditRequest) (*FileEditResponse, error) {
+func (c *Client) EditFile(ctx context.Context, req FileEditRequest) (*FileEditResponse, error) {
 	var resp FileEditResponse
 	err := c.doRequest(ctx, "POST", "/file/edit", req, &resp)
 	if err != nil {
@@ -222,8 +222,81 @@ func (c *SandboxClient) EditFile(ctx context.Context, req FileEditRequest) (*Fil
 	return &resp, nil
 }
 
+// FileTreeRequest 获取文件树请求
+type FileTreeRequest struct {
+	SessionID string `json:"session_id"`
+	Path      string `json:"path,omitempty"`
+}
+
+// FileNode 文件节点
+type FileNode struct {
+	ID       string     `json:"id"`
+	Name     string     `json:"name"`
+	Type     string     `json:"type"` // "file" 或 "folder"
+	Path     string     `json:"path"`
+	Content  string     `json:"content,omitempty"`
+	Children []FileNode `json:"children,omitempty"`
+}
+
+// FileTreeResponse 获取文件树响应
+type FileTreeResponse struct {
+	Status string   `json:"status"`
+	Tree   FileNode `json:"tree"`
+	Error  string   `json:"error,omitempty"`
+}
+
+// GetFileTree 获取文件树
+func (c *Client) GetFileTree(ctx context.Context, req FileTreeRequest) (*FileTreeResponse, error) {
+	// 构建 URL with query parameters
+	url := fmt.Sprintf("%s/file/tree?session_id=%s", c.baseURL, req.SessionID)
+	if req.Path != "" {
+		url = fmt.Sprintf("%s&path=%s", url, req.Path)
+	}
+
+	fmt.Printf("📤 Sandbox: GET %s\n", url)
+
+	httpReq, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		fmt.Printf("❌ Sandbox: 创建请求失败: %v\n", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	httpResp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		fmt.Printf("❌ Sandbox: 发送请求失败: %v\n", err)
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer httpResp.Body.Close()
+
+	respData, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		fmt.Printf("❌ Sandbox: 读取响应失败: %v\n", err)
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	fmt.Printf("📥 Sandbox: 状态码 %d, 响应大小 %d 字节\n", httpResp.StatusCode, len(respData))
+
+	if httpResp.StatusCode != http.StatusOK {
+		fmt.Printf("❌ Sandbox: 错误状态码 %d: %s\n", httpResp.StatusCode, string(respData))
+		return nil, fmt.Errorf("sandbox returned status %d: %s", httpResp.StatusCode, string(respData))
+	}
+
+	var resp FileTreeResponse
+	if err := json.Unmarshal(respData, &resp); err != nil {
+		fmt.Printf("❌ Sandbox: 解析响应失败: %v\n", err)
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if resp.Error != "" {
+		return &resp, fmt.Errorf("sandbox error: %s", resp.Error)
+	}
+
+	fmt.Printf("✅ Sandbox: 请求成功\n")
+	return &resp, nil
+}
+
 // doRequest 通用HTTP请求方法
-func (c *SandboxClient) doRequest(ctx context.Context, method, path string, reqBody, respBody interface{}) error {
+func (c *Client) doRequest(ctx context.Context, method, path string, reqBody, respBody interface{}) error {
 	var body io.Reader
 	var jsonData []byte
 	if reqBody != nil {
@@ -237,7 +310,7 @@ func (c *SandboxClient) doRequest(ctx context.Context, method, path string, reqB
 	}
 
 	url := c.baseURL + path
-	
+
 	// 打印请求信息
 	fmt.Printf("📤 Sandbox: %s %s\n", method, url)
 	if reqBody != nil && len(jsonData) < 500 {
@@ -289,13 +362,13 @@ func (c *SandboxClient) doRequest(ctx context.Context, method, path string, reqB
 	return nil
 }
 
-// GetDefaultSandboxClient 获取默认的沙箱客户端（单例）
-var defaultSandboxClient *SandboxClient
+// GetDefaultClient 获取默认的沙箱客户端（单例）
+var defaultClient *Client
 
-func GetDefaultSandboxClient() *SandboxClient {
-	if defaultSandboxClient == nil {
+func GetDefaultClient() *Client {
+	if defaultClient == nil {
 		// 默认连接到本地沙箱服务
-		defaultSandboxClient = NewSandboxClient("http://localhost:8888")
+		defaultClient = NewClient("http://localhost:8888")
 	}
-	return defaultSandboxClient
+	return defaultClient
 }

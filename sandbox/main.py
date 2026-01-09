@@ -847,6 +847,141 @@ def get_diagnostics():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/file/tree', methods=['GET'])
+def get_file_tree():
+    """获取文件树 - 对应前端文件浏览器"""
+    try:
+        # 从 query 参数获取
+        session_id = request.args.get('session_id')
+        target_path = request.args.get('path', '.')
+        
+        print(f"\n📨 [GET /file/tree] 收到请求", flush=True)
+        print(f"   会话ID: {session_id}", flush=True)
+        print(f"   目标路径: {target_path}", flush=True)
+        
+        if not session_id:
+            print(f"❌ [GET /file/tree] 参数缺失")
+            return jsonify({"error": "session_id is required"}), 400
+        
+        sandbox = session_manager.get_or_create(session_id)
+        
+        # 打印实际处理的容器路径
+        if sandbox.container:
+            print(f"   容器名称: {sandbox.container.name}", flush=True)
+            print(f"   容器ID: {sandbox.container.short_id}", flush=True)
+            print(f"   开始构建文件树...", flush=True)
+        
+        # 使用 Python 脚本在容器内生成文件树
+        tree_script = f'''
+import os
+import json
+
+def should_ignore(name):
+    """检查文件是否应该被忽略"""
+    ignore_patterns = [
+        ".git", ".DS_Store", "node_modules", ".idea", ".vscode",
+        "__pycache__", ".pytest_cache", ".pyc", ".pyo", ".env", ".env.local"
+    ]
+    return name in ignore_patterns or name.startswith('.')
+
+def build_tree(path, root_path, counter):
+    """递归构建文件树"""
+    try:
+        stat_info = os.stat(path)
+    except Exception as e:
+        return None
+    
+    # 计算相对路径
+    rel_path = os.path.relpath(path, root_path)
+    if rel_path == '.':
+        rel_path = ''
+    
+    counter[0] += 1
+    node = {{
+        "id": str(counter[0]),
+        "name": os.path.basename(path) if path != root_path else os.path.basename(root_path),
+        "path": "/" + rel_path.replace(os.sep, "/") if rel_path else "/"
+    }}
+    
+    if os.path.isdir(path):
+        node["type"] = "folder"
+        node["children"] = []
+        
+        try:
+            entries = os.listdir(path)
+            for entry in sorted(entries):
+                if should_ignore(entry):
+                    continue
+                
+                child_path = os.path.join(path, entry)
+                child_node = build_tree(child_path, root_path, counter)
+                if child_node:
+                    node["children"].append(child_node)
+        except Exception as e:
+            pass
+    else:
+        node["type"] = "file"
+        # 如果文件小于 1MB，读取内容
+        if stat_info.st_size < 1024 * 1024:
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    node["content"] = f.read()
+            except:
+                # 无法读取的文件（二进制文件等）不包含内容
+                pass
+    
+    return node
+
+# 获取目标路径
+target = "{target_path}"
+if not target.startswith('/'):
+    target = os.path.join('/sandbox', target)
+
+# 确保路径存在
+if not os.path.exists(target):
+    print(json.dumps({{"error": "Path does not exist: " + target}}))
+else:
+    counter = [0]
+    tree = build_tree(target, target, counter)
+    print(json.dumps(tree, ensure_ascii=False))
+'''
+        
+        # 执行脚本
+        result = sandbox.run_code(tree_script, language='python')
+        
+        if result['exit_code'] != 0:
+            print(f"❌ [GET /file/tree] 生成文件树失败: {result['stderr']}", flush=True)
+            return jsonify({"error": f"Failed to generate file tree: {result['stderr']}"}), 500
+        
+        # 解析返回的 JSON
+        try:
+            tree_data = json.loads(result['stdout'])
+            if 'error' in tree_data:
+                print(f"❌ [GET /file/tree] 路径错误: {tree_data['error']}", flush=True)
+                return jsonify({"error": tree_data['error']}), 404
+            
+            # 打印文件树统计信息
+            node_count = tree_data.get('id', 0)
+            print(f"✅ [GET /file/tree] 文件树生成成功", flush=True)
+            print(f"   节点总数: {node_count}", flush=True)
+            print(f"   根节点: {tree_data.get('name', 'unknown')}", flush=True)
+            
+            return jsonify({
+                "status": "ok",
+                "tree": tree_data
+            })
+        except json.JSONDecodeError as e:
+            print(f"❌ [GET /file/tree] JSON 解析失败: {str(e)}", flush=True)
+            print(f"   输出内容: {result['stdout'][:500]}", flush=True)
+            return jsonify({"error": f"Failed to parse tree data: {str(e)}"}), 500
+            
+    except Exception as e:
+        print(f"❌ [GET /file/tree] 异常: {str(e)}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 def run_server(host='0.0.0.0', port=8888, auto_cleanup=False):
     """运行Flask服务器
     

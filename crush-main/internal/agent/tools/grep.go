@@ -20,6 +20,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/fsext"
+	"github.com/charmbracelet/crush/internal/sandbox"
 )
 
 // regexCache provides thread-safe caching of compiled regex patterns
@@ -131,14 +132,14 @@ func NewGrepTool(workingDir string) fantasy.AgentTool {
 				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for searching files")
 			}
 
-			// ============== 路由到沙箱服务 ==============
-			sandboxClient := GetDefaultSandboxClient()
-			
-			resp, err := sandboxClient.Grep(ctx, GrepRequest{
-				SessionID: sessionID,
-				Pattern:   params.Pattern,
-				Path:      searchPath,
-			})
+		// ============== 路由到沙箱服务 ==============
+		sandboxClient := sandbox.GetDefaultClient()
+
+		resp, err := sandboxClient.Grep(ctx, sandbox.GrepRequest{
+			SessionID: sessionID,
+			Pattern:   params.Pattern,
+			Path:      searchPath,
+		})
 			
 			if err != nil {
 				return fantasy.NewTextErrorResponse(fmt.Sprintf("Error searching files from sandbox: %v", err)), nil
