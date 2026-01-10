@@ -56,7 +56,7 @@ export const CodeEditor = ({ code, onChange, readOnly = true, fileName, filePath
   }, []); // Empty dependency array - extensions created once
 
   return (
-    <div className="h-full w-full overflow-hidden bg-[#1e1e1e]">
+    <div className="h-full w-full overflow-hidden bg-black">
       <CodeMirror
         value={code}
         height="100%"

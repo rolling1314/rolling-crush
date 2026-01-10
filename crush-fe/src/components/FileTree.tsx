@@ -107,14 +107,14 @@ export const FileTree = ({
   if (!Array.isArray(data)) {
     console.warn('FileTree received non-array data:', data);
     return (
-      <div className="flex flex-col h-full bg-[#1e1e1e] text-gray-500 p-4 text-sm">
+      <div className="flex flex-col h-full bg-[#0A0A0A] text-gray-500 p-4 text-sm">
         No files to display
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto bg-[#1e1e1e] text-gray-300 py-2">
+    <div className="flex flex-col h-full overflow-y-auto bg-[#0A0A0A] text-gray-300 py-2">
       <div className="px-4 py-2 text-xs font-bold text-gray-500 uppercase tracking-wider">
         Explorer
       </div>

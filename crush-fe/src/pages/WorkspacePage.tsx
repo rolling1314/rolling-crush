@@ -872,18 +872,18 @@ export default function WorkspacePage() {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-[#1e1e1e] overflow-hidden">
+    <div className="flex h-screen w-screen bg-black overflow-hidden">
       {/* Left Side Container (Takes available space) */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* 1. Global Header for Left Section (Toggle) */}
-        <div className="h-12 bg-[#1e1e1e] border-b border-gray-700 flex items-center justify-center relative shrink-0">
-          <div className="bg-[#252526] p-1 rounded-lg border border-gray-700/50 flex items-center gap-1">
+        <div className="h-12 bg-black border-b border-[#222] flex items-center justify-center relative shrink-0">
+          <div className="bg-[#111] p-1 rounded-lg border border-[#333] flex items-center gap-1">
             <button
               onClick={() => setViewMode('preview')}
               className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
                 viewMode === 'preview'
-                  ? 'bg-[#3e3e42] text-white shadow-sm'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#2d2d2d]'
+                  ? 'bg-[#333] text-white shadow-sm'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#222]'
               }`}
             >
               <Eye size={16} />
@@ -893,8 +893,8 @@ export default function WorkspacePage() {
               onClick={() => setViewMode('code')}
               className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
                 viewMode === 'code'
-                  ? 'bg-[#3e3e42] text-white shadow-sm'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#2d2d2d]'
+                  ? 'bg-[#333] text-white shadow-sm'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#222]'
               }`}
             >
               <Code2 size={16} />
@@ -907,7 +907,7 @@ export default function WorkspacePage() {
         <div className="flex-1 flex min-h-0">
           {/* File Tree - Only in code mode */}
           <div 
-            className="w-[250px] shrink-0 border-r border-gray-700 bg-[#1e1e1e] flex flex-col"
+            className="w-[250px] shrink-0 border-r border-[#222] bg-[#0A0A0A] flex flex-col"
             style={{ display: viewMode === 'code' ? 'flex' : 'none' }}
           >
             {loadingFiles ? (
@@ -926,10 +926,10 @@ export default function WorkspacePage() {
           </div>
 
           {/* Editor/Preview Area */}
-          <div className="flex-1 min-w-0 bg-[#1e1e1e] flex flex-col relative">
+          <div className="flex-1 min-w-0 bg-black flex flex-col relative">
             {/* Code View - Always rendered but toggled via CSS */}
             <div 
-              className="flex-1 flex flex-col min-w-0 absolute inset-0 z-10 bg-[#1e1e1e]"
+              className="flex-1 flex flex-col min-w-0 absolute inset-0 z-10 bg-black"
               style={{ 
                 visibility: viewMode === 'code' ? 'visible' : 'hidden',
                 pointerEvents: viewMode === 'code' ? 'auto' : 'none'
@@ -937,15 +937,15 @@ export default function WorkspacePage() {
             >
               {openFiles.length > 0 ? (
                 <>
-                  <div className="flex items-center bg-[#252526] border-b border-gray-700 overflow-x-auto no-scrollbar shrink-0">
+                  <div className="flex items-center bg-[#0A0A0A] border-b border-[#222] overflow-x-auto no-scrollbar shrink-0">
                     {openFiles.map(file => (
                       <div
                         key={file.id}
                         onClick={() => setActiveFileId(file.id)}
-                        className={`flex items-center gap-2 px-3 py-2 text-sm border-r border-gray-700 cursor-pointer min-w-[120px] max-w-[200px] group ${
+                        className={`flex items-center gap-2 px-3 py-2 text-sm border-r border-[#222] cursor-pointer min-w-[120px] max-w-[200px] group ${
                           activeFileId === file.id 
-                            ? 'bg-[#1e1e1e] text-white border-t-2 border-t-blue-500' 
-                            : 'bg-[#2d2d2d] text-gray-400 hover:bg-[#2d2d2d]/80'
+                            ? 'bg-black text-white border-t-2 border-t-blue-500' 
+                            : 'bg-[#111] text-gray-400 hover:bg-[#111]/80'
                         }`}
                       >
                         <span className="truncate flex-1">{file.name}</span>
@@ -988,14 +988,14 @@ export default function WorkspacePage() {
 
             {/* Preview View - Always rendered but behind code view when inactive */}
             <div 
-              className="flex-1 flex flex-col min-w-0 bg-[#1e1e1e] absolute inset-0"
+              className="flex-1 flex flex-col min-w-0 bg-black absolute inset-0"
               style={{ 
                 zIndex: viewMode === 'preview' ? 20 : 0
               }}
             >
               <div className="flex-1 bg-white relative">
                 <iframe 
-                  src="http://127.0.0.1:5173" 
+                  src="http://localhost:5173"
                   className="absolute inset-0 w-full h-full border-none"
                   title="Application Preview"
                   allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone; midi; clipboard-read; clipboard-write"
@@ -1012,7 +1012,7 @@ export default function WorkspacePage() {
         ref={resizeRef}
         onMouseDown={handleResizeStart}
         className={`w-1 shrink-0 cursor-col-resize group hover:w-1.5 transition-all relative ${
-          isResizing ? 'bg-emerald-500' : 'bg-gray-700 hover:bg-emerald-500/70'
+          isResizing ? 'bg-emerald-500' : 'bg-[#222] hover:bg-emerald-500/70'
         }`}
       >
         {/* Grip indicator */}
@@ -1026,7 +1026,7 @@ export default function WorkspacePage() {
       {/* 3. Right: Chat & Session History */}
       <div 
         ref={chatPanelDivRef}
-        className="shrink-0 bg-[#252526] flex flex-col relative"
+        className="shrink-0 bg-[#0A0A0A] flex flex-col relative"
         style={{ width: chatPanelWidth }}
       >
         <div className="flex-1 overflow-hidden flex flex-col">
@@ -1050,8 +1050,8 @@ export default function WorkspacePage() {
         
         {/* Session List Overlay */}
         {showSessionHistory && (
-          <div className="absolute inset-0 bg-[#252526] z-20 flex flex-col border-l border-gray-700 shadow-xl">
-             <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-[#2d2d2d]">
+          <div className="absolute inset-0 bg-[#0A0A0A] z-20 flex flex-col border-l border-[#222] shadow-xl">
+             <div className="p-4 border-b border-[#222] flex justify-between items-center bg-[#111]">
               <div className="flex items-center gap-2">
                  <button 
                    onClick={() => setShowSessionHistory(false)}
@@ -1063,7 +1063,7 @@ export default function WorkspacePage() {
               </div>
               <button
                 onClick={() => setShowNewSessionModal(true)}
-                className="p-1 hover:bg-gray-700 rounded"
+                className="p-1 hover:bg-[#333] rounded"
                 title="New Session"
               >
                 <Plus size={18} className="text-gray-400" />
@@ -1074,8 +1074,8 @@ export default function WorkspacePage() {
               {sessions.map(session => (
                 <div
                   key={session.id}
-                  className={`group p-3 border-b border-gray-700 ${
-                    currentSessionId === session.id ? 'bg-gray-700' : ''
+                  className={`group p-3 border-b border-[#222] ${
+                    currentSessionId === session.id ? 'bg-[#222]' : ''
                   }`}
                 >
                   <div className="flex items-start gap-2">
@@ -1114,16 +1114,16 @@ export default function WorkspacePage() {
             </div>
 
             {/* Navigation and Logout in Session Overlay */}
-            <div className="p-3 border-t border-gray-700 space-y-2">
+            <div className="p-3 border-t border-[#222] space-y-2">
               <button
                 onClick={() => navigate('/projects')}
-                className="w-full flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white hover:bg-[#222] rounded transition-colors"
               >
                 <span className="text-sm">← Back to Projects</span>
               </button>
               <button
                 onClick={handleLogout}
-                className="w-full flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white hover:bg-[#222] rounded transition-colors"
               >
                 <LogOut size={16} />
                 <span className="text-sm">Logout</span>
@@ -1136,7 +1136,7 @@ export default function WorkspacePage() {
       {/* 新建会话模态框 */}
       {showNewSessionModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-[#252526] p-6 rounded-lg w-[500px] max-h-[80vh] overflow-y-auto border border-gray-700">
+          <div className="bg-[#1A1A1A] p-6 rounded-lg w-[500px] max-h-[80vh] overflow-y-auto border border-[#333]">
             <h2 className="text-xl font-bold text-white mb-4">New Session</h2>
             
             <div className="space-y-4">
@@ -1150,7 +1150,7 @@ export default function WorkspacePage() {
                   value={newSessionTitle}
                   onChange={e => setNewSessionTitle(e.target.value)}
                   onKeyPress={e => e.key === 'Enter' && createSession()}
-                  className="w-full px-4 py-2 bg-[#3c3c3c] border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-4 py-2 bg-[#0A0A0A] border border-[#333] rounded text-white focus:outline-none focus:border-blue-500"
                   autoFocus
                 />
               </div>

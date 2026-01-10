@@ -333,9 +333,9 @@ export const ChatPanel = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#1e1e1e]">
-      <div className="p-4 border-b border-gray-700 bg-[#252526] flex justify-between items-center">
-        <h2 className="text-sm font-semibold text-gray-200">AI Assistant</h2>
+    <div className="flex flex-col h-full bg-black">
+      <div className="p-4 border-b border-[#222] bg-[#0A0A0A] flex justify-between items-center">
+        <h2 className="text-sm font-semibold text-gray-200"></h2>
         {onToggleHistory && (
           <button 
             onClick={onToggleHistory}
@@ -364,11 +364,11 @@ export const ChatPanel = ({
               "flex flex-col gap-2 flex-1 min-w-0 p-3 rounded-lg text-sm leading-relaxed",
               isUser 
                 ? "bg-blue-600/10 text-blue-100 border border-blue-600/20" 
-                : "bg-gray-700/50 text-gray-200 border border-gray-600/30"
+                : "text-gray-200 px-0"
             )}>
               {group.map((msg, index) => (
                 <React.Fragment key={msg.id}>
-                  {index > 0 && <div className="w-full h-px bg-white/5 my-2" />}
+                  {index > 0 && <div className="w-full h-px bg-[#333] my-2" />}
                   
                   <div className="flex flex-col gap-2">
                     {/* Reasoning content (Collapsible) */}
@@ -520,18 +520,18 @@ export const ChatPanel = ({
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4 bg-[#252526]">
+      <div className="p-4 bg-[#0A0A0A]">
         <div 
             ref={inputContainerRef}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className="relative bg-[#3c3c3c] border border-gray-600 rounded-lg flex flex-col focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 transition-colors"
+            className="relative bg-[#111] border border-[#333] rounded-lg flex flex-col focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 transition-colors"
         >
           {attachedFiles.length > 0 && (
-            <div className="flex flex-wrap gap-2 p-2 border-b border-gray-600/50">
+            <div className="flex flex-wrap gap-2 p-2 border-b border-[#333]/50">
                 {attachedFiles.map(file => (
-                    <div key={file.id} className="flex items-center gap-1.5 px-2 py-1 bg-[#1e1e1e]/50 rounded text-xs text-blue-300 border border-blue-500/30">
+                    <div key={file.id} className="flex items-center gap-1.5 px-2 py-1 bg-black/50 rounded text-xs text-blue-300 border border-blue-500/30">
                         {file.type === 'folder' ? <FolderIcon size={12} /> : <FileIcon size={12} />}
                         <span className="truncate max-w-[150px]">
                             {file.name}
