@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, User, Bot, History, X, File as FileIcon, Folder as FolderIcon, ChevronDown, ChevronRight, Sparkles, Square } from 'lucide-react';
+import { Send, History, X, File as FileIcon, Folder as FolderIcon, ChevronDown, ChevronRight, Sparkles, Square } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -264,16 +264,9 @@ export const ChatPanel = ({
           <div
             key={msg.id}
             className={cn(
-              "flex gap-3 max-w-[90%] message-container streaming-message",
-              msg.role === 'user' ? "ml-auto flex-row-reverse" : "mr-auto"
+              "flex gap-3 max-w-[90%] message-container streaming-message mr-auto"
             )}
           >
-            <div className={cn(
-              "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
-              msg.role === 'user' ? "bg-blue-600" : "bg-green-600"
-            )}>
-              {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
-            </div>
             <div className={cn(
               "flex flex-col gap-2 flex-1 min-w-0 p-3 rounded-lg text-sm leading-relaxed",
               msg.role === 'user' 
