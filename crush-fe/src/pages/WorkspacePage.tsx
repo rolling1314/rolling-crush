@@ -85,6 +85,7 @@ export default function WorkspacePage() {
   });
   const [isResizing, setIsResizing] = useState(false);
   const resizeRef = useRef<HTMLDivElement>(null);
+  const chatPanelDivRef = useRef<HTMLDivElement>(null);
   
   // WebSocket connection
   const wsRef = useRef<WebSocket | null>(null);
@@ -156,7 +157,8 @@ export default function WorkspacePage() {
 
   // Panel resize handlers
   const chatPanelWidthRef = useRef(chatPanelWidth);
-  chatPanelWidthRef.current = chatPanelWidth;
+  // We don't update ref automatically here because we want to control it manually during resize
+  // chatPanelWidthRef.current = chatPanelWidth; 
   
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -167,13 +169,21 @@ export default function WorkspacePage() {
       
       // Constrain width between 280px and 800px
       const constrainedWidth = Math.min(Math.max(newWidth, 280), 800);
-      setChatPanelWidth(constrainedWidth);
+      
+      // Update DOM directly for performance
+      if (chatPanelDivRef.current) {
+        chatPanelDivRef.current.style.width = `${constrainedWidth}px`;
+      }
+      
+      // Keep ref updated for mouseup
+      chatPanelWidthRef.current = constrainedWidth;
     };
     
     const handleMouseUp = () => {
       if (isResizing) {
         setIsResizing(false);
-        // Save using ref to get the latest value
+        // Update React state only once at the end
+        setChatPanelWidth(chatPanelWidthRef.current);
         localStorage.setItem('chat_panel_width', chatPanelWidthRef.current.toString());
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
@@ -183,6 +193,8 @@ export default function WorkspacePage() {
     if (isResizing) {
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
+      // Initialize ref with current state when starting
+      chatPanelWidthRef.current = chatPanelWidth;
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     }
@@ -191,7 +203,7 @@ export default function WorkspacePage() {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isResizing]);
+  }, [isResizing, chatPanelWidth]);
 
   const handleResizeStart = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -987,6 +999,7 @@ export default function WorkspacePage() {
                   className="absolute inset-0 w-full h-full border-none"
                   title="Application Preview"
                   allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone; midi; clipboard-read; clipboard-write"
+                  style={{ pointerEvents: isResizing ? 'none' : 'auto' }}
                 />
               </div>
             </div>
@@ -1012,6 +1025,7 @@ export default function WorkspacePage() {
 
       {/* 3. Right: Chat & Session History */}
       <div 
+        ref={chatPanelDivRef}
         className="shrink-0 bg-[#252526] flex flex-col relative"
         style={{ width: chatPanelWidth }}
       >
