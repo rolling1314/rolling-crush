@@ -861,29 +861,9 @@ export default function WorkspacePage() {
 
   return (
     <div className="flex h-screen w-screen bg-[#1e1e1e] overflow-hidden">
-      {/* 1. Left: File Tree */}
-      <div 
-        className="w-[250px] shrink-0 border-r border-gray-700 bg-[#1e1e1e] flex-col"
-        style={{ display: viewMode === 'code' ? 'flex' : 'none' }}
-      >
-        {loadingFiles ? (
-          <div className="flex items-center justify-center h-full text-gray-500 text-sm">
-            Loading files...
-          </div>
-          ) : (
-            <FileTree 
-              data={files} 
-              onSelectFile={handleFileSelect}
-              selectedFileId={activeFileId || undefined}
-              expandedIds={expandedFolderIds}
-              onToggleExpand={handleToggleExpand}
-            />
-          )}
-      </div>
-
-      {/* 2. Center: Main Content (Code or Preview) */}
-      <div className="flex-1 min-w-0 bg-[#1e1e1e] flex flex-col relative">
-        {/* Top Navigation Bar with Toggle */}
+      {/* Left Side Container (Takes available space) */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* 1. Global Header for Left Section (Toggle) */}
         <div className="h-12 bg-[#1e1e1e] border-b border-gray-700 flex items-center justify-center relative shrink-0">
           <div className="bg-[#252526] p-1 rounded-lg border border-gray-700/50 flex items-center gap-1">
             <button
@@ -911,11 +891,38 @@ export default function WorkspacePage() {
           </div>
         </div>
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-hidden relative flex flex-col">
-          {viewMode === 'code' ? (
-            /* Code View */
-            <div className="flex-1 flex flex-col min-w-0">
+        {/* 2. Workspace Content (File Tree + Editor/Preview) */}
+        <div className="flex-1 flex min-h-0">
+          {/* File Tree - Only in code mode */}
+          <div 
+            className="w-[250px] shrink-0 border-r border-gray-700 bg-[#1e1e1e] flex flex-col"
+            style={{ display: viewMode === 'code' ? 'flex' : 'none' }}
+          >
+            {loadingFiles ? (
+              <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+                Loading files...
+              </div>
+            ) : (
+              <FileTree 
+                data={files} 
+                onSelectFile={handleFileSelect}
+                selectedFileId={activeFileId || undefined}
+                expandedIds={expandedFolderIds}
+                onToggleExpand={handleToggleExpand}
+              />
+            )}
+          </div>
+
+          {/* Editor/Preview Area */}
+          <div className="flex-1 min-w-0 bg-[#1e1e1e] flex flex-col relative">
+            {/* Code View - Always rendered but toggled via CSS */}
+            <div 
+              className="flex-1 flex flex-col min-w-0 absolute inset-0 z-10 bg-[#1e1e1e]"
+              style={{ 
+                visibility: viewMode === 'code' ? 'visible' : 'hidden',
+                pointerEvents: viewMode === 'code' ? 'auto' : 'none'
+              }}
+            >
               {openFiles.length > 0 ? (
                 <>
                   <div className="flex items-center bg-[#252526] border-b border-gray-700 overflow-x-auto no-scrollbar shrink-0">
@@ -966,9 +973,14 @@ export default function WorkspacePage() {
                 </div>
               )}
             </div>
-          ) : (
-            /* Preview View */
-            <div className="flex-1 flex flex-col min-w-0 bg-[#1e1e1e]">
+
+            {/* Preview View - Always rendered but behind code view when inactive */}
+            <div 
+              className="flex-1 flex flex-col min-w-0 bg-[#1e1e1e] absolute inset-0"
+              style={{ 
+                zIndex: viewMode === 'preview' ? 20 : 0
+              }}
+            >
               <div className="flex-1 bg-white relative">
                 <iframe 
                   src="http://127.0.0.1:5173" 
@@ -978,7 +990,7 @@ export default function WorkspacePage() {
                 />
               </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
 
