@@ -80,15 +80,30 @@ const UserMessageRenderer = ({ content }: { content: string }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   
   const { text, files } = useMemo(() => {
-    const contextMarker = '\n\nContext Files:\n';
-    const splitIndex = content.lastIndexOf(contextMarker);
+    // Determine the start of the file context section
+    const fullMarker = '\n\nContext Files:\n';
+    const startMarker = 'Context Files:\n';
+    
+    let splitIndex = -1;
+    let fileSectionStart = -1;
+
+    // First try finding the marker preceded by newlines (standard case)
+    const idxFull = content.lastIndexOf(fullMarker);
+    if (idxFull !== -1) {
+        splitIndex = idxFull;
+        fileSectionStart = idxFull + fullMarker.length;
+    } else if (content.startsWith(startMarker)) {
+        // Fallback: starts directly with marker (empty user text)
+        splitIndex = 0;
+        fileSectionStart = startMarker.length;
+    }
     
     if (splitIndex === -1) {
       return { text: content, files: [] };
     }
     
     const text = content.substring(0, splitIndex);
-    const fileContext = content.substring(splitIndex + contextMarker.length);
+    const fileContext = content.substring(fileSectionStart);
     const files: { type: 'file' | 'folder', path: string }[] = [];
     
     const entries = fileContext.split('\n\n');
@@ -124,12 +139,29 @@ const UserMessageRenderer = ({ content }: { content: string }) => {
           <span className="font-medium shrink-0">Context:</span>
           {!isExpanded ? (
              <div className="flex gap-2 overflow-hidden items-center flex-1">
-                {files.slice(0, 3).map((f, i) => (
-                    <span key={i} className="flex items-center gap-1 bg-blue-900/40 px-1.5 py-0.5 rounded border border-blue-700/30 truncate max-w-[150px]">
-                        {f.type === 'folder' ? <FolderIcon size={10} /> : <FileIcon size={10} />}
-                        <span className="truncate">{f.path.split('/').pop()}</span>
-                    </span>
-                ))}
+                {files.slice(0, 3).map((f, i) => {
+                    const fullPath = f.path;
+                    // Extract filename and potential line info "(12-34)"
+                    // path format from workspace: "/path/to/file.go (10-20)"
+                    // or just "/path/to/file.go"
+                    const fileNameWithLines = fullPath.split('/').pop() || '';
+                    
+                    // Simple regex to split filename and line info
+                    // Matches "filename.ext" or "filename.ext (10-20)"
+                    const match = fileNameWithLines.match(/^(.*?)(\s\(\d+-\d+\))?$/);
+                    const fileName = match ? match[1] : fileNameWithLines;
+                    const lineInfo = match ? match[2] : '';
+
+                    return (
+                        <span key={i} className="flex items-center gap-1 bg-blue-900/40 px-1.5 py-0.5 rounded border border-blue-700/30 truncate max-w-[200px]">
+                            {f.type === 'folder' ? <FolderIcon size={10} /> : <FileIcon size={10} />}
+                            <span className="truncate">
+                                {fileName}
+                                {lineInfo && <span className="text-gray-400 ml-0.5 text-[10px]">{lineInfo}</span>}
+                            </span>
+                        </span>
+                    );
+                })}
                 {files.length > 3 && <span className="shrink-0 opacity-70">+{files.length - 3} more</span>}
              </div>
           ) : (
@@ -139,12 +171,23 @@ const UserMessageRenderer = ({ content }: { content: string }) => {
         
         {isExpanded && (
           <div className="px-3 py-2 bg-black/20 text-xs text-blue-200/80 space-y-1 border-t border-blue-700/30 max-h-[200px] overflow-y-auto">
-            {files.map((file, idx) => (
-              <div key={idx} className="flex items-center gap-2 font-mono">
-                {file.type === 'folder' ? <FolderIcon size={12} className="shrink-0" /> : <FileIcon size={12} className="shrink-0" />}
-                <span className="truncate" title={file.path}>{file.path}</span>
-              </div>
-            ))}
+            {files.map((file, idx) => {
+                const fullPath = file.path;
+                const fileNameWithLines = fullPath.split('/').pop() || '';
+                const match = fileNameWithLines.match(/^(.*?)(\s\(\d+-\d+\))?$/);
+                const fileName = match ? match[1] : fileNameWithLines;
+                const lineInfo = match ? match[2] : '';
+
+                return (
+                  <div key={idx} className="flex items-center gap-2 font-mono">
+                    {file.type === 'folder' ? <FolderIcon size={12} className="shrink-0" /> : <FileIcon size={12} className="shrink-0" />}
+                    <span className="truncate" title={file.path}>
+                        {file.path.replace(fileNameWithLines, '')}{fileName}
+                        {lineInfo && <span className="text-gray-500">{lineInfo}</span>}
+                    </span>
+                  </div>
+                );
+            })}
           </div>
         )}
       </div>
