@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { X, Plus, MessageSquare, LogOut, ChevronRight, Trash2, GripVertical } from 'lucide-react';
+import { X, Plus, MessageSquare, LogOut, ChevronRight, Trash2, GripVertical, Eye, Code2 } from 'lucide-react';
 import axios from 'axios';
 import { ChatPanel } from '../components/ChatPanel';
 import { FileTree } from '../components/FileTree';
@@ -74,6 +74,9 @@ export default function WorkspacePage() {
   
   // Processing state - 是否正在处理请求
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // View mode state
+  const [viewMode, setViewMode] = useState<'code' | 'preview'>('code');
   
   // Resizable panel state
   const [chatPanelWidth, setChatPanelWidth] = useState(() => {
@@ -859,7 +862,10 @@ export default function WorkspacePage() {
   return (
     <div className="flex h-screen w-screen bg-[#1e1e1e] overflow-hidden">
       {/* 1. Left: File Tree */}
-      <div className="w-[250px] shrink-0 border-r border-gray-700 bg-[#1e1e1e] flex flex-col">
+      <div 
+        className="w-[250px] shrink-0 border-r border-gray-700 bg-[#1e1e1e] flex-col"
+        style={{ display: viewMode === 'code' ? 'flex' : 'none' }}
+      >
         {loadingFiles ? (
           <div className="flex items-center justify-center h-full text-gray-500 text-sm">
             Loading files...
@@ -875,50 +881,105 @@ export default function WorkspacePage() {
           )}
       </div>
 
-      {/* 2. Center: Code Editor */}
-      <div className="flex-1 min-w-0 bg-[#1e1e1e] flex flex-col">
-        {openFiles.length > 0 ? (
-          <>
-            <div className="flex items-center bg-[#252526] border-b border-gray-700 overflow-x-auto no-scrollbar">
-              {openFiles.map(file => (
-                <div
-                  key={file.id}
-                  onClick={() => setActiveFileId(file.id)}
-                  className={`flex items-center gap-2 px-3 py-2 text-sm border-r border-gray-700 cursor-pointer ${
-                    activeFileId === file.id 
-                      ? 'bg-[#1e1e1e] text-white' 
-                      : 'bg-[#2d2d2d] text-gray-400 hover:bg-[#2d2d2d]/80'
-                  }`}
-                >
-                  <span className="truncate">{file.name}</span>
-                  <button
-                    onClick={(e) => handleCloseTab(e, file.id)}
-                    className="p-0.5 rounded hover:bg-white/20"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              ))}
-            </div>
+      {/* 2. Center: Main Content (Code or Preview) */}
+      <div className="flex-1 min-w-0 bg-[#1e1e1e] flex flex-col relative">
+        {/* Top Navigation Bar with Toggle */}
+        <div className="h-12 bg-[#1e1e1e] border-b border-gray-700 flex items-center justify-center relative shrink-0">
+          <div className="bg-[#252526] p-1 rounded-lg border border-gray-700/50 flex items-center gap-1">
+            <button
+              onClick={() => setViewMode('preview')}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+                viewMode === 'preview'
+                  ? 'bg-[#3e3e42] text-white shadow-sm'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#2d2d2d]'
+              }`}
+            >
+              <Eye size={16} />
+              <span>Preview</span>
+            </button>
+            <button
+              onClick={() => setViewMode('code')}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+                viewMode === 'code'
+                  ? 'bg-[#3e3e42] text-white shadow-sm'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#2d2d2d]'
+              }`}
+            >
+              <Code2 size={16} />
+              <span>Code</span>
+            </button>
+          </div>
+        </div>
 
-            <div className="flex-1 overflow-hidden">
-              {activeFile && (
-                <CodeEditor 
-                  key={activeFile.id}
-                  code={activeFile.content || '// No content'} 
-                  onChange={() => {}}
-                  readOnly={false}
-                  fileName={activeFile.name}
-                  filePath={activeFile.path}
-                />
+        {/* Content Area */}
+        <div className="flex-1 overflow-hidden relative flex flex-col">
+          {viewMode === 'code' ? (
+            /* Code View */
+            <div className="flex-1 flex flex-col min-w-0">
+              {openFiles.length > 0 ? (
+                <>
+                  <div className="flex items-center bg-[#252526] border-b border-gray-700 overflow-x-auto no-scrollbar shrink-0">
+                    {openFiles.map(file => (
+                      <div
+                        key={file.id}
+                        onClick={() => setActiveFileId(file.id)}
+                        className={`flex items-center gap-2 px-3 py-2 text-sm border-r border-gray-700 cursor-pointer min-w-[120px] max-w-[200px] group ${
+                          activeFileId === file.id 
+                            ? 'bg-[#1e1e1e] text-white border-t-2 border-t-blue-500' 
+                            : 'bg-[#2d2d2d] text-gray-400 hover:bg-[#2d2d2d]/80'
+                        }`}
+                      >
+                        <span className="truncate flex-1">{file.name}</span>
+                        <button
+                          onClick={(e) => handleCloseTab(e, file.id)}
+                          className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-white/20 transition-opacity"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex-1 overflow-hidden relative">
+                    {activeFile ? (
+                      <CodeEditor 
+                        key={activeFile.id}
+                        code={activeFile.content || '// No content'} 
+                        onChange={() => {}}
+                        readOnly={false}
+                        fileName={activeFile.name}
+                        filePath={activeFile.path}
+                      />
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-gray-500">
+                        Select a file to view
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-gray-500 gap-4">
+                  <div className="w-16 h-16 rounded-full bg-[#2d2d2d] flex items-center justify-center">
+                    <Code2 size={32} className="text-gray-600" />
+                  </div>
+                  <p>Select a file from the explorer to start editing</p>
+                </div>
               )}
             </div>
-          </>
-        ) : (
-          <div className="h-full flex items-center justify-center text-gray-500">
-            Select a file to view
-          </div>
-        )}
+          ) : (
+            /* Preview View */
+            <div className="flex-1 flex flex-col min-w-0 bg-[#1e1e1e]">
+              <div className="flex-1 bg-white relative">
+                <iframe 
+                  src="http://127.0.0.1:5173" 
+                  className="absolute inset-0 w-full h-full border-none"
+                  title="Application Preview"
+                  allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone; midi; clipboard-read; clipboard-write"
+                />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Resize Handle */}
