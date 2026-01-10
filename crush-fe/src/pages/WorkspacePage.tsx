@@ -214,32 +214,32 @@ export default function WorkspacePage() {
     }
   }, [currentSessionId]);
 
-  // WebSocket 连接管理
-  useEffect(() => {
-    connectWebSocket();
-    
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const connectWebSocket = useCallback(() => {
+  // WebSocket 连接函数 - 需要在 useEffect 之前定义
+  const connectWebSocket = useCallback((sessionId: string | null) => {
     const token = localStorage.getItem('jwt_token');
     if (!token) {
       console.error('No JWT token found');
       return;
     }
 
-    // 创建 WebSocket 连接，将 token 作为查询参数
-    const ws = new WebSocket(`${WS_URL}?token=${encodeURIComponent(token)}`);
+    // 关闭现有连接
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+
+    // 清除重连定时器
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    // 创建 WebSocket 连接，将 token 和 session_id 作为查询参数
+    const sessionParam = sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : '';
+    const ws = new WebSocket(`${WS_URL}?token=${encodeURIComponent(token)}${sessionParam}`);
     
     ws.onopen = () => {
-      console.log('WebSocket connected');
+      console.log('WebSocket connected', sessionId ? `to session: ${sessionId}` : '(no session)');
       wsRef.current = ws;
     };
 
@@ -262,10 +262,27 @@ export default function WorkspacePage() {
       
       // 5秒后重连
       reconnectTimeoutRef.current = setTimeout(() => {
-        connectWebSocket();
+        connectWebSocket(sessionId);
       }, 5000);
     };
   }, []);
+
+  // WebSocket 连接管理 - 当 session 变化时重新连接
+  useEffect(() => {
+    // 只有当有 sessionId 时才连接（确保消息路由到正确的 session）
+    if (currentSessionId) {
+      connectWebSocket(currentSessionId);
+    }
+    
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+    };
+  }, [currentSessionId, connectWebSocket]);
 
   const handleWebSocketMessage = (data: any) => {
     console.log('=== WebSocket message received ===');

@@ -26,16 +26,16 @@ type HandlerFunc func(message []byte)
 type DisconnectFunc func()
 
 type Server struct {
-	clients          map[*websocket.Conn]bool
-	broadcast        chan []byte
-	mutex            sync.Mutex
-	handler          HandlerFunc
+	clients           map[*websocket.Conn]string // conn -> sessionID
+	broadcast         chan []byte
+	mutex             sync.Mutex
+	handler           HandlerFunc
 	disconnectHandler DisconnectFunc
 }
 
 func New() *Server {
 	return &Server{
-		clients:   make(map[*websocket.Conn]bool),
+		clients:   make(map[*websocket.Conn]string),
 		broadcast: make(chan []byte),
 	}
 }
@@ -68,6 +68,10 @@ func (s *Server) HandleConnections(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("WebSocket authentication successful", "user_id", claims.UserID, "username", claims.Username)
 
+	// Get sessionID from query parameter
+	sessionID := r.URL.Query().Get("session_id")
+	slog.Info("WebSocket connection with session", "session_id", sessionID)
+
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		slog.Error("WebSocket upgrade error", "error", err)
@@ -75,9 +79,9 @@ func (s *Server) HandleConnections(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.mutex.Lock()
-	s.clients[ws] = true
+	s.clients[ws] = sessionID
 	s.mutex.Unlock()
-	slog.Info("New WebSocket connection established", "username", claims.Username)
+	slog.Info("New WebSocket connection established", "username", claims.Username, "session_id", sessionID)
 
 	// Keep connection alive and handle disconnects
 	go func() {
@@ -137,6 +141,43 @@ func (s *Server) Broadcast(msg interface{}) {
 			client.Close()
 			delete(s.clients, client)
 		}
+	}
+}
+
+// SendToSession sends a message only to clients connected to a specific session
+func (s *Server) SendToSession(sessionID string, msg interface{}) {
+	jsonMsg, err := json.Marshal(msg)
+	if err != nil {
+		slog.Error("JSON marshal error", "error", err)
+		return
+	}
+
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	sentCount := 0
+	for client, clientSessionID := range s.clients {
+		if clientSessionID == sessionID {
+			err := client.WriteMessage(websocket.TextMessage, jsonMsg)
+			if err != nil {
+				slog.Error("WebSocket write error", "error", err)
+				client.Close()
+				delete(s.clients, client)
+			} else {
+				sentCount++
+			}
+		}
+	}
+	slog.Debug("SendToSession completed", "session_id", sessionID, "sent_to_clients", sentCount)
+}
+
+// UpdateClientSession updates the session ID for a specific client connection
+func (s *Server) UpdateClientSession(ws *websocket.Conn, sessionID string) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if _, exists := s.clients[ws]; exists {
+		s.clients[ws] = sessionID
+		slog.Info("Updated client session", "session_id", sessionID)
 	}
 }
 

@@ -578,16 +578,16 @@ func (app *App) Subscribe() {
 			// DEBUG: 打印收到的事件类型
 			fmt.Printf("[EVENT] Received event type: %T\n", msg)
 
-			// Broadcast messages to WebSocket
+			// Send messages to specific session via WebSocket
 			if event, ok := msg.(pubsub.Event[message.Message]); ok {
-				fmt.Printf("[BROADCAST] Broadcasting message: ID=%s, Role=%s, SessionID=%s\n", event.Payload.ID, event.Payload.Role, event.Payload.SessionID)
-				app.WSServer.Broadcast(event.Payload)
+				fmt.Printf("[SEND] Sending message to session: ID=%s, Role=%s, SessionID=%s\n", event.Payload.ID, event.Payload.Role, event.Payload.SessionID)
+				app.WSServer.SendToSession(event.Payload.SessionID, event.Payload)
 			}
 
-			// Broadcast permission requests to WebSocket
+			// Send permission requests to specific session via WebSocket
 			if event, ok := msg.(pubsub.Event[permission.PermissionRequest]); ok {
-				slog.Info("Broadcasting permission request to WebSocket", "tool_call_id", event.Payload.ToolCallID)
-				app.WSServer.Broadcast(map[string]interface{}{
+				slog.Info("Sending permission request to session", "session_id", event.Payload.SessionID, "tool_call_id", event.Payload.ToolCallID)
+				app.WSServer.SendToSession(event.Payload.SessionID, map[string]interface{}{
 					"Type":         "permission_request",
 					"id":           event.Payload.ID,
 					"session_id":   event.Payload.SessionID,
@@ -600,10 +600,10 @@ func (app *App) Subscribe() {
 				})
 			}
 
-			// Broadcast permission notifications to WebSocket
+			// Send permission notifications to specific session via WebSocket
 			if event, ok := msg.(pubsub.Event[permission.PermissionNotification]); ok {
-				slog.Info("Broadcasting permission notification to WebSocket", "tool_call_id", event.Payload.ToolCallID, "granted", event.Payload.Granted)
-				app.WSServer.Broadcast(map[string]interface{}{
+				slog.Info("Sending permission notification to session", "session_id", event.Payload.SessionID, "tool_call_id", event.Payload.ToolCallID, "granted", event.Payload.Granted)
+				app.WSServer.SendToSession(event.Payload.SessionID, map[string]interface{}{
 					"Type":         "permission_notification",
 					"tool_call_id": event.Payload.ToolCallID,
 					"granted":      event.Payload.Granted,

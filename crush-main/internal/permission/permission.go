@@ -26,6 +26,7 @@ type CreatePermissionRequest struct {
 }
 
 type PermissionNotification struct {
+	SessionID  string `json:"session_id"`
 	ToolCallID string `json:"tool_call_id"`
 	Granted    bool   `json:"granted"`
 	Denied     bool   `json:"denied"`
@@ -67,13 +68,14 @@ type permissionService struct {
 	skip                  bool
 	allowedTools          []string
 
-	// used to make sure we only process one request at a time
-	requestMu     sync.Mutex
-	activeRequest *PermissionRequest
+	// Per-session request locks and active requests
+	sessionRequestMu     *csync.Map[string, *sync.Mutex]
+	sessionActiveRequest *csync.Map[string, *PermissionRequest]
 }
 
 func (s *permissionService) GrantPersistent(permission PermissionRequest) {
 	s.notificationBroker.Publish(pubsub.CreatedEvent, PermissionNotification{
+		SessionID:  permission.SessionID,
 		ToolCallID: permission.ToolCallID,
 		Granted:    true,
 	})
@@ -86,13 +88,15 @@ func (s *permissionService) GrantPersistent(permission PermissionRequest) {
 	s.sessionPermissions = append(s.sessionPermissions, permission)
 	s.sessionPermissionsMu.Unlock()
 
-	if s.activeRequest != nil && s.activeRequest.ID == permission.ID {
-		s.activeRequest = nil
+	// Clear active request for this session
+	if activeReq, ok := s.sessionActiveRequest.Get(permission.SessionID); ok && activeReq != nil && activeReq.ID == permission.ID {
+		s.sessionActiveRequest.Del(permission.SessionID)
 	}
 }
 
 func (s *permissionService) Grant(permission PermissionRequest) {
 	s.notificationBroker.Publish(pubsub.CreatedEvent, PermissionNotification{
+		SessionID:  permission.SessionID,
 		ToolCallID: permission.ToolCallID,
 		Granted:    true,
 	})
@@ -101,13 +105,15 @@ func (s *permissionService) Grant(permission PermissionRequest) {
 		respCh <- true
 	}
 
-	if s.activeRequest != nil && s.activeRequest.ID == permission.ID {
-		s.activeRequest = nil
+	// Clear active request for this session
+	if activeReq, ok := s.sessionActiveRequest.Get(permission.SessionID); ok && activeReq != nil && activeReq.ID == permission.ID {
+		s.sessionActiveRequest.Del(permission.SessionID)
 	}
 }
 
 func (s *permissionService) Deny(permission PermissionRequest) {
 	s.notificationBroker.Publish(pubsub.CreatedEvent, PermissionNotification{
+		SessionID:  permission.SessionID,
 		ToolCallID: permission.ToolCallID,
 		Granted:    false,
 		Denied:     true,
@@ -117,8 +123,9 @@ func (s *permissionService) Deny(permission PermissionRequest) {
 		respCh <- false
 	}
 
-	if s.activeRequest != nil && s.activeRequest.ID == permission.ID {
-		s.activeRequest = nil
+	// Clear active request for this session
+	if activeReq, ok := s.sessionActiveRequest.Get(permission.SessionID); ok && activeReq != nil && activeReq.ID == permission.ID {
+		s.sessionActiveRequest.Del(permission.SessionID)
 	}
 }
 
@@ -129,10 +136,18 @@ func (s *permissionService) Request(opts CreatePermissionRequest) bool {
 
 	// tell the UI that a permission was requested
 	s.notificationBroker.Publish(pubsub.CreatedEvent, PermissionNotification{
+		SessionID:  opts.SessionID,
 		ToolCallID: opts.ToolCallID,
 	})
-	s.requestMu.Lock()
-	defer s.requestMu.Unlock()
+
+	// Get or create per-session mutex
+	sessionMu, _ := s.sessionRequestMu.Get(opts.SessionID)
+	if sessionMu == nil {
+		sessionMu = &sync.Mutex{}
+		s.sessionRequestMu.Set(opts.SessionID, sessionMu)
+	}
+	sessionMu.Lock()
+	defer sessionMu.Unlock()
 
 	// Check if the tool/action combination is in the allowlist
 	commandKey := opts.ToolName + ":" + opts.Action
@@ -181,16 +196,8 @@ func (s *permissionService) Request(opts CreatePermissionRequest) bool {
 	}
 	s.sessionPermissionsMu.RUnlock()
 
-	s.sessionPermissionsMu.RLock()
-	for _, p := range s.sessionPermissions {
-		if p.ToolName == permission.ToolName && p.Action == permission.Action && p.SessionID == permission.SessionID && p.Path == permission.Path {
-			s.sessionPermissionsMu.RUnlock()
-			return true
-		}
-	}
-	s.sessionPermissionsMu.RUnlock()
-
-	s.activeRequest = &permission
+	// Set active request for this session
+	s.sessionActiveRequest.Set(opts.SessionID, &permission)
 
 	respCh := make(chan bool, 1)
 	s.pendingRequests.Set(permission.ID, respCh)
@@ -222,13 +229,15 @@ func (s *permissionService) SkipRequests() bool {
 
 func NewPermissionService(workingDir string, skip bool, allowedTools []string) Service {
 	return &permissionService{
-		Broker:              pubsub.NewBroker[PermissionRequest](),
-		notificationBroker:  pubsub.NewBroker[PermissionNotification](),
-		workingDir:          workingDir,
-		sessionPermissions:  make([]PermissionRequest, 0),
-		autoApproveSessions: make(map[string]bool),
-		skip:                skip,
-		allowedTools:        allowedTools,
-		pendingRequests:     csync.NewMap[string, chan bool](),
+		Broker:               pubsub.NewBroker[PermissionRequest](),
+		notificationBroker:   pubsub.NewBroker[PermissionNotification](),
+		workingDir:           workingDir,
+		sessionPermissions:   make([]PermissionRequest, 0),
+		autoApproveSessions:  make(map[string]bool),
+		skip:                 skip,
+		allowedTools:         allowedTools,
+		pendingRequests:      csync.NewMap[string, chan bool](),
+		sessionRequestMu:     csync.NewMap[string, *sync.Mutex](),
+		sessionActiveRequest: csync.NewMap[string, *PermissionRequest](),
 	}
 }
