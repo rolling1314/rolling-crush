@@ -33,6 +33,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         localStorage.setItem('jwt_token', data.token);
         localStorage.setItem('username', data.user.username);
         localStorage.setItem('user_id', data.user.id);
+        localStorage.setItem('email', data.user.email);
         onLoginSuccess(data.token, data.user.username);
         navigate('/projects');
       } else {

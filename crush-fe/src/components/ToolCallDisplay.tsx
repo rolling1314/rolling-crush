@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import CodeMirror, { EditorView, Decoration, RangeSetBuilder } from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { vscodeDark } from '@uiw/codemirror-theme-vscode';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { type ToolCall, type ToolResult } from '../types';
 import { cn } from '../lib/utils';
 
@@ -36,10 +36,16 @@ const CodeBlock: React.FC<{
   extensions?: any[];
 }> = ({ content, language = 'javascript', className, maxHeight = '400px', copyContent, extensions = [] }) => {
   const [copied, setCopied] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   
+  const lineCount = content.split('\n').length;
+  // 5 lines * ~20px = ~100px. Using 120px for safety.
+  const collapsedHeight = '120px';
+  const shouldCollapse = lineCount > 6;
+
   const allExtensions = useMemo(() => [
     javascript({ jsx: true, typescript: true }),
-    EditorView.lineWrapping,
+    // Removed EditorView.lineWrapping to prevent wrapping
     ...extensions
   ], [extensions]);
 
@@ -51,7 +57,7 @@ const CodeBlock: React.FC<{
 
   return (
     <div className={cn("bg-[#1e1e1e] relative group", className)}>
-      <div className="absolute right-4 top-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+      <div className="absolute right-4 top-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
         <button
           onClick={handleCopy}
           className="p-1.5 bg-gray-700/80 hover:bg-gray-600 rounded text-gray-300 hover:text-white transition-colors backdrop-blur-sm"
@@ -60,15 +66,46 @@ const CodeBlock: React.FC<{
           {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
         </button>
       </div>
-      <CodeMirror
-        value={content}
-        theme={vscodeDark}
-        extensions={allExtensions}
-        readOnly={true}
-        basicSetup={{ lineNumbers: true, foldGutter: false }}
-        className="text-xs"
-        maxHeight={maxHeight}
-      />
+      
+      <div className={cn(
+          "transition-all duration-200 ease-in-out relative",
+          !isExpanded && shouldCollapse ? "overflow-hidden" : ""
+      )}
+      style={{ maxHeight: !isExpanded && shouldCollapse ? collapsedHeight : 'none' }}
+      >
+        <CodeMirror
+            value={content}
+            theme={vscodeDark}
+            extensions={allExtensions}
+            readOnly={true}
+            basicSetup={{ lineNumbers: true, foldGutter: false }}
+            className="text-xs"
+            height="auto" // Allow CodeMirror to size itself based on content
+        />
+      </div>
+
+      {shouldCollapse && (
+        <div className={cn(
+            "absolute bottom-0 left-0 right-0 flex justify-center z-10 pointer-events-none",
+            !isExpanded ? "bg-gradient-to-t from-[#1e1e1e] via-[#1e1e1e]/40 to-transparent pt-10 pb-1" : "sticky bottom-0 h-0 flex items-end pb-1 overflow-visible"
+        )}>
+            <div className={cn("pointer-events-auto transform transition-transform", isExpanded ? "translate-y-1/2" : "")}>
+                <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="bg-[#252526] hover:bg-[#2d2d30] text-gray-400 hover:text-gray-200 text-[10px] px-3 py-0.5 rounded-full border border-gray-600/50 shadow-sm flex items-center gap-1 backdrop-blur-sm"
+                >
+                {isExpanded ? (
+                    <><ChevronUp size={10} /> Collapse</>
+                ) : (
+                    <><ChevronDown size={10} /> Show all {lineCount} lines</>
+                )}
+                </button>
+            </div>
+        </div>
+      )}
+      
+      {/* Spacer for button when expanded */}
+      {isExpanded && shouldCollapse && <div className="h-4" />}
     </div>
   );
 };
