@@ -177,6 +177,39 @@ export const ChatPanel = ({
     scrollToBottom();
   }, [messages]);
 
+  const groupedMessages = useMemo(() => {
+    const filtered = messages.filter((msg) => {
+      const hasContent = msg.content && msg.content.trim();
+      const hasReasoning = msg.reasoning && msg.reasoning.trim();
+      const hasToolCalls = msg.toolCalls && msg.toolCalls.some(tc => tc && tc.id && tc.name);
+      const isStreaming = msg.isStreaming;
+      return hasContent || hasReasoning || hasToolCalls || isStreaming;
+    });
+
+    const groups: Message[][] = [];
+    let currentGroup: Message[] = [];
+
+    filtered.forEach((msg) => {
+      if (currentGroup.length === 0) {
+        currentGroup.push(msg);
+      } else {
+        const lastMsg = currentGroup[currentGroup.length - 1];
+        if (msg.role === 'user' || lastMsg.role === 'user') {
+          groups.push(currentGroup);
+          currentGroup = [msg];
+        } else {
+          currentGroup.push(msg);
+        }
+      }
+    });
+    
+    if (currentGroup.length > 0) {
+      groups.push(currentGroup);
+    }
+    
+    return groups;
+  }, [messages]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() && attachedFiles.length === 0) return;
@@ -250,149 +283,151 @@ export const ChatPanel = ({
       </div>
       
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages
-          // 过滤空消息（没有内容、没有思考过程、没有有效工具调用的消息）
-          .filter((msg) => {
-            const hasContent = msg.content && msg.content.trim();
-            const hasReasoning = msg.reasoning && msg.reasoning.trim();
-            const hasToolCalls = msg.toolCalls && msg.toolCalls.some(tc => tc && tc.id && tc.name);
-            const isStreaming = msg.isStreaming;
-            // 保留有任何内容的消息，或正在流式传输的消息
-            return hasContent || hasReasoning || hasToolCalls || isStreaming;
-          })
-          .map((msg) => (
+        {groupedMessages.map((group) => {
+          const firstMsg = group[0];
+          const isUser = firstMsg.role === 'user';
+          
+          return (
           <div
-            key={msg.id}
+            key={firstMsg.id}
             className={cn(
               "flex gap-3 max-w-[90%] message-container streaming-message mr-auto"
             )}
           >
             <div className={cn(
               "flex flex-col gap-2 flex-1 min-w-0 p-3 rounded-lg text-sm leading-relaxed",
-              msg.role === 'user' 
+              isUser 
                 ? "bg-blue-600/10 text-blue-100 border border-blue-600/20" 
                 : "bg-gray-700/50 text-gray-200 border border-gray-600/30"
             )}>
-              {/* Reasoning content (Collapsible) */}
-              {msg.reasoning && (
-                <ThinkingProcess 
-                    reasoning={msg.reasoning}
-                    isStreaming={!!msg.isStreaming}
-                    hasContent={!!msg.content}
-                />
-              )}
-              
-              {/* Tool Calls - filter out invalid ones */}
-              {msg.toolCalls && msg.toolCalls.length > 0 && (
-                <div className="space-y-2">
-                  {msg.toolCalls
-                    .filter(tc => tc && tc.id && tc.name) // Only render valid tool calls
-                    .map((toolCall) => {
-                      const result = msg.toolResults?.find(r => r.tool_call_id === toolCall.id);
-                      const needsPermission = pendingPermissions.has(toolCall.id);
-                      console.log('=== ChatPanel: Rendering ToolCall ===');
-                      console.log('Tool Call ID:', toolCall.id);
-                      console.log('Tool Call Name:', toolCall.name);
-                      console.log('Pending permissions Map keys:', Array.from(pendingPermissions.keys()));
-                      console.log('needsPermission:', needsPermission);
-                      console.log('Has result:', !!result);
-                      return (
-                        <ToolCallDisplay
-                          key={toolCall.id}
-                          toolCall={toolCall}
-                          result={result}
-                          needsPermission={needsPermission}
-                          onApprove={onPermissionApprove}
-                          onDeny={onPermissionDeny}
-                          onFileClick={onFileClick}
-                        />
-                      );
-                    })}
-                </div>
-              )}
-              
-              {/* Main content */}
-              {msg.content && (
-                <div className={cn(
-                  "prose prose-invert prose-sm max-w-none streaming-content",
-                  msg.isStreaming && "streaming-cursor"
-                )}>
-                  {msg.role === 'assistant' || msg.role === 'tool' ? (
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      rehypePlugins={[rehypeHighlight]}
-                      components={{
-                        code: ({node, inline, className, children, ...props}: any) => {
-                          return inline ? (
-                            <code className="bg-gray-800 px-1.5 py-0.5 rounded text-xs font-mono text-green-400" {...props}>
-                              {children}
-                            </code>
-                          ) : (
-                            <code className={cn("block bg-gray-900 p-3 rounded-md overflow-x-auto text-xs", className)} {...props}>
-                              {children}
-                            </code>
-                          );
-                        },
-                        pre: ({children, ...props}: any) => (
-                          <pre className="bg-gray-900 rounded-md overflow-x-auto my-2" {...props}>
-                            {children}
-                          </pre>
-                        ),
-                        p: ({children, ...props}: any) => (
-                          <p className="mb-2 last:mb-0 leading-relaxed" {...props}>
-                            {children}
-                          </p>
-                        ),
-                        ul: ({children, ...props}: any) => (
-                          <ul className="list-disc list-inside mb-2 space-y-1" {...props}>
-                            {children}
-                          </ul>
-                        ),
-                        ol: ({children, ...props}: any) => (
-                          <ol className="list-decimal list-inside mb-2 space-y-1" {...props}>
-                            {children}
-                          </ol>
-                        ),
-                        li: ({children, ...props}: any) => (
-                          <li className="ml-2" {...props}>
-                            {children}
-                          </li>
-                        ),
-                        h1: ({children, ...props}: any) => (
-                          <h1 className="text-lg font-bold mb-2 mt-3 first:mt-0" {...props}>
-                            {children}
-                          </h1>
-                        ),
-                        h2: ({children, ...props}: any) => (
-                          <h2 className="text-base font-bold mb-2 mt-3 first:mt-0" {...props}>
-                            {children}
-                          </h2>
-                        ),
-                        h3: ({children, ...props}: any) => (
-                          <h3 className="text-sm font-bold mb-2 mt-2 first:mt-0" {...props}>
-                            {children}
-                          </h3>
-                        ),
-                        blockquote: ({children, ...props}: any) => (
-                          <blockquote className="border-l-4 border-gray-600 pl-3 italic my-2" {...props}>
-                            {children}
-                          </blockquote>
-                        ),
-                      }}
-                    >
-                      {msg.content}
-                    </ReactMarkdown>
-                  ) : (
-                    <UserMessageRenderer content={msg.content} />
-                  )}
-                  {msg.isStreaming && (
-                    <span className="inline-block w-1.5 h-4 ml-1 bg-green-500 animate-pulse align-middle"></span>
-                  )}
-                </div>
-              )}
+              {group.map((msg, index) => (
+                <React.Fragment key={msg.id}>
+                  {index > 0 && <div className="w-full h-px bg-white/5 my-2" />}
+                  
+                  <div className="flex flex-col gap-2">
+                    {/* Reasoning content (Collapsible) */}
+                    {msg.reasoning && (
+                      <ThinkingProcess 
+                          reasoning={msg.reasoning}
+                          isStreaming={!!msg.isStreaming}
+                          hasContent={!!msg.content}
+                      />
+                    )}
+                    
+                    {/* Tool Calls - filter out invalid ones */}
+                    {msg.toolCalls && msg.toolCalls.length > 0 && (
+                      <div className="space-y-2">
+                        {msg.toolCalls
+                          .filter(tc => tc && tc.id && tc.name) // Only render valid tool calls
+                          .map((toolCall) => {
+                            const result = msg.toolResults?.find(r => r.tool_call_id === toolCall.id);
+                            const needsPermission = pendingPermissions.has(toolCall.id);
+                            console.log('=== ChatPanel: Rendering ToolCall ===');
+                            console.log('Tool Call ID:', toolCall.id);
+                            console.log('Tool Call Name:', toolCall.name);
+                            console.log('Pending permissions Map keys:', Array.from(pendingPermissions.keys()));
+                            console.log('needsPermission:', needsPermission);
+                            console.log('Has result:', !!result);
+                            return (
+                              <ToolCallDisplay
+                                key={toolCall.id}
+                                toolCall={toolCall}
+                                result={result}
+                                needsPermission={needsPermission}
+                                onApprove={onPermissionApprove}
+                                onDeny={onPermissionDeny}
+                                onFileClick={onFileClick}
+                              />
+                            );
+                          })}
+                      </div>
+                    )}
+                    
+                    {/* Main content */}
+                    {msg.content && (
+                      <div className={cn(
+                        "prose prose-invert prose-sm max-w-none streaming-content",
+                        msg.isStreaming && "streaming-cursor"
+                      )}>
+                        {msg.role === 'assistant' || msg.role === 'tool' ? (
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            rehypePlugins={[rehypeHighlight]}
+                            components={{
+                              code: ({node, inline, className, children, ...props}: any) => {
+                                return inline ? (
+                                  <code className="bg-gray-800 px-1.5 py-0.5 rounded text-xs font-mono text-green-400" {...props}>
+                                    {children}
+                                  </code>
+                                ) : (
+                                  <code className={cn("block bg-gray-900 p-3 rounded-md overflow-x-auto text-xs", className)} {...props}>
+                                    {children}
+                                  </code>
+                                );
+                              },
+                              pre: ({children, ...props}: any) => (
+                                <pre className="bg-gray-900 rounded-md overflow-x-auto my-2" {...props}>
+                                  {children}
+                                </pre>
+                              ),
+                              p: ({children, ...props}: any) => (
+                                <p className="mb-2 last:mb-0 leading-relaxed" {...props}>
+                                  {children}
+                                </p>
+                              ),
+                              ul: ({children, ...props}: any) => (
+                                <ul className="list-disc list-inside mb-2 space-y-1" {...props}>
+                                  {children}
+                                </ul>
+                              ),
+                              ol: ({children, ...props}: any) => (
+                                <ol className="list-decimal list-inside mb-2 space-y-1" {...props}>
+                                  {children}
+                                </ol>
+                              ),
+                              li: ({children, ...props}: any) => (
+                                <li className="ml-2" {...props}>
+                                  {children}
+                                </li>
+                              ),
+                              h1: ({children, ...props}: any) => (
+                                <h1 className="text-lg font-bold mb-2 mt-3 first:mt-0" {...props}>
+                                  {children}
+                                </h1>
+                              ),
+                              h2: ({children, ...props}: any) => (
+                                <h2 className="text-base font-bold mb-2 mt-3 first:mt-0" {...props}>
+                                  {children}
+                                </h2>
+                              ),
+                              h3: ({children, ...props}: any) => (
+                                <h3 className="text-sm font-bold mb-2 mt-2 first:mt-0" {...props}>
+                                  {children}
+                                </h3>
+                              ),
+                              blockquote: ({children, ...props}: any) => (
+                                <blockquote className="border-l-4 border-gray-600 pl-3 italic my-2" {...props}>
+                                  {children}
+                                </blockquote>
+                              ),
+                            }}
+                          >
+                            {msg.content}
+                          </ReactMarkdown>
+                        ) : (
+                          <UserMessageRenderer content={msg.content} />
+                        )}
+                        {msg.isStreaming && (
+                          <span className="inline-block w-1.5 h-4 ml-1 bg-green-500 animate-pulse align-middle"></span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </React.Fragment>
+              ))}
             </div>
           </div>
-        ))}
+        )})}
         <div ref={messagesEndRef} />
       </div>
 
