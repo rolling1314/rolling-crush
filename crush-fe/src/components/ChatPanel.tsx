@@ -291,7 +291,8 @@ export const ChatPanel = ({
           <div
             key={firstMsg.id}
             className={cn(
-              "flex gap-3 max-w-[90%] message-container streaming-message mr-auto"
+              "flex gap-3 message-container streaming-message",
+              isUser ? "ml-auto w-fit max-w-[80%] justify-end" : "w-full"
             )}
           >
             <div className={cn(
