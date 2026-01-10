@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, History, X, File as FileIcon, Folder as FolderIcon, ChevronDown, ChevronRight, Sparkles, Square } from 'lucide-react';
+import { Send, History, X, File as FileIcon, Folder as FolderIcon, ChevronDown, ChevronRight, Sparkles, Square, Copy, Check } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -421,18 +421,41 @@ export const ChatPanel = ({
                             rehypePlugins={[rehypeHighlight]}
                             components={{
                               code: ({node, inline, className, children, ...props}: any) => {
-                                return inline ? (
-                                  <code className="bg-gray-800 px-1.5 py-0.5 rounded text-xs font-mono text-green-400" {...props}>
-                                    {children}
-                                  </code>
-                                ) : (
-                                  <code className={cn("block bg-gray-900 p-3 rounded-md overflow-x-auto text-xs", className)} {...props}>
-                                    {children}
-                                  </code>
+                                if (inline) {
+                                  return (
+                                    <code className="bg-gray-800 px-1.5 py-0.5 rounded text-xs font-mono text-green-400" {...props}>
+                                      {children}
+                                    </code>
+                                  );
+                                }
+                                
+                                const [copied, setCopied] = useState(false);
+                                const handleCopy = () => {
+                                  const text = String(children).replace(/\n$/, '');
+                                  navigator.clipboard.writeText(text);
+                                  setCopied(true);
+                                  setTimeout(() => setCopied(false), 2000);
+                                };
+
+                                return (
+                                  <div className="relative group my-2">
+                                    <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                                      <button
+                                        onClick={handleCopy}
+                                        className="p-1.5 bg-gray-700/80 hover:bg-gray-600 rounded text-gray-300 hover:text-white transition-colors backdrop-blur-sm"
+                                        title="Copy code"
+                                      >
+                                        {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                                      </button>
+                                    </div>
+                                    <code className={cn("block bg-gray-900 p-3 rounded-md overflow-x-auto text-xs", className)} {...props}>
+                                      {children}
+                                    </code>
+                                  </div>
                                 );
                               },
                               pre: ({children, ...props}: any) => (
-                                <pre className="bg-gray-900 rounded-md overflow-x-auto my-2" {...props}>
+                                <pre className="bg-transparent p-0 m-0" {...props}>
                                   {children}
                                 </pre>
                               ),

@@ -1,4 +1,8 @@
 import React, { useState, useMemo } from 'react';
+import CodeMirror, { EditorView, Decoration, RangeSetBuilder } from '@uiw/react-codemirror';
+import { javascript } from '@codemirror/lang-javascript';
+import { vscodeDark } from '@uiw/codemirror-theme-vscode';
+import { Copy, Check } from 'lucide-react';
 import { type ToolCall, type ToolResult } from '../types';
 import { cn } from '../lib/utils';
 
@@ -21,6 +25,53 @@ const ICONS = {
 
 // Maximum lines to display in code/output sections
 const MAX_DISPLAY_LINES = 10;
+
+// Reusable CodeBlock component with Copy button
+const CodeBlock: React.FC<{
+  content: string;
+  language?: string;
+  className?: string;
+  maxHeight?: string;
+  copyContent?: string;
+  extensions?: any[];
+}> = ({ content, language = 'javascript', className, maxHeight = '400px', copyContent, extensions = [] }) => {
+  const [copied, setCopied] = useState(false);
+  
+  const allExtensions = useMemo(() => [
+    javascript({ jsx: true, typescript: true }),
+    EditorView.lineWrapping,
+    ...extensions
+  ], [extensions]);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(copyContent || content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className={cn("bg-[#1e1e1e] relative group", className)}>
+      <div className="absolute right-4 top-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <button
+          onClick={handleCopy}
+          className="p-1.5 bg-gray-700/80 hover:bg-gray-600 rounded text-gray-300 hover:text-white transition-colors backdrop-blur-sm"
+          title={copyContent ? "Copy result code" : "Copy code"}
+        >
+          {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+        </button>
+      </div>
+      <CodeMirror
+        value={content}
+        theme={vscodeDark}
+        extensions={allExtensions}
+        readOnly={true}
+        basicSetup={{ lineNumbers: true, foldGutter: false }}
+        className="text-xs"
+        maxHeight={maxHeight}
+      />
+    </div>
+  );
+};
 
 // Prettify tool name (matching TUI style)
 const prettifyToolName = (name: string): string => {
@@ -218,13 +269,7 @@ const CodeContent: React.FC<{
   filePath,
   isNew = false
 }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
   const lines = content.split('\n');
-  const effectiveMaxLines = isExpanded ? lines.length : maxLines;
-  const displayLines = lines.slice(0, effectiveMaxLines);
-  const hiddenCount = lines.length - effectiveMaxLines;
-  const maxLineNum = startLine + lines.length - 1;
-  const lineNumWidth = Math.max(String(maxLineNum).length, 2);
   const language = filePath ? getLanguageFromPath(filePath) : 'text';
 
   return (
@@ -244,43 +289,7 @@ const CodeContent: React.FC<{
           <span className="text-gray-500 text-[10px]">{lines.length} lines</span>
         </div>
       )}
-      {/* Code content - horizontal scroll for entire block */}
-      <div className={cn(
-        "bg-[#1e1e1e] overflow-x-auto",
-        isExpanded && "max-h-[400px] overflow-y-auto"
-      )}>
-        <div className="min-w-max">
-          {displayLines.map((line, idx) => (
-            <div key={idx} className="flex hover:bg-[#2a2a2a]">
-              <span 
-                className="text-gray-600 bg-[#1e1e1e] px-2 py-0.5 text-right select-none border-r border-gray-800 sticky left-0"
-                style={{ minWidth: `${lineNumWidth + 1.5}ch` }}
-              >
-                {startLine + idx}
-              </span>
-              <pre className="text-gray-300 px-3 py-0.5 whitespace-pre m-0">
-                {line || ' '}
-              </pre>
-            </div>
-          ))}
-        </div>
-      </div>
-      {/* Footer with expand/collapse */}
-      {lines.length > maxLines && (
-        <div 
-          className="flex items-center justify-between px-3 py-1.5 bg-[#252526] border-t border-gray-700/50 cursor-pointer hover:bg-[#2a2a2a] transition-colors"
-          onClick={() => setIsExpanded(!isExpanded)}
-        >
-          <span className="text-gray-500 text-xs">
-            {isExpanded ? `▲ Collapse` : `▼ Show all ${lines.length} lines`}
-          </span>
-          {!isExpanded && (
-            <span className="text-gray-600 text-xs">
-              … ({hiddenCount} more lines)
-            </span>
-          )}
-        </div>
-      )}
+      <CodeBlock content={content} language={language} />
     </div>
   );
 };
@@ -337,66 +346,113 @@ const PlainContent: React.FC<{ content: string; maxLines?: number; label?: strin
   );
 };
 
-// Diff view component (TUI style)
+// Diff view component (CodeMirror style, Unified View)
 const DiffContent: React.FC<{ oldContent: string; newContent: string; fileName?: string }> = ({
   oldContent,
   newContent,
   fileName
 }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const language = fileName ? getLanguageFromPath(fileName) : 'javascript';
   
-  const fullDiff = useMemo(() => {
+  // Calculate Diff and Decorations
+  const { mergedContent, diffExtensions, additions, deletions } = useMemo(() => {
     const oldLines = oldContent.split('\n');
     const newLines = newContent.split('\n');
     
-    // Simple diff algorithm - find changes
-    const result: Array<{ type: 'equal' | 'insert' | 'delete'; content: string; lineNum?: number }> = [];
+    // Simple Diff Logic (Heuristic)
+    const diffLines: { type: 'equal' | 'insert' | 'delete', content: string }[] = [];
     let oldIdx = 0;
     let newIdx = 0;
     
     while (oldIdx < oldLines.length || newIdx < newLines.length) {
       if (oldIdx >= oldLines.length) {
-        result.push({ type: 'insert', content: newLines[newIdx], lineNum: newIdx + 1 });
+        diffLines.push({ type: 'insert', content: newLines[newIdx] });
         newIdx++;
       } else if (newIdx >= newLines.length) {
-        result.push({ type: 'delete', content: oldLines[oldIdx], lineNum: oldIdx + 1 });
+        diffLines.push({ type: 'delete', content: oldLines[oldIdx] });
         oldIdx++;
       } else if (oldLines[oldIdx] === newLines[newIdx]) {
-        result.push({ type: 'equal', content: oldLines[oldIdx], lineNum: oldIdx + 1 });
+        diffLines.push({ type: 'equal', content: oldLines[oldIdx] });
         oldIdx++;
         newIdx++;
       } else {
-        // Check for insert or delete
-        const oldInNew = newLines.indexOf(oldLines[oldIdx], newIdx);
-        const newInOld = oldLines.indexOf(newLines[newIdx], oldIdx);
+        // Heuristic: look ahead
+        let found = false;
+        const searchLimit = 20; // limit search depth
         
-        if (oldInNew === -1 && newInOld === -1) {
-          result.push({ type: 'delete', content: oldLines[oldIdx], lineNum: oldIdx + 1 });
-          result.push({ type: 'insert', content: newLines[newIdx], lineNum: newIdx + 1 });
-          oldIdx++;
-          newIdx++;
-        } else if (oldInNew !== -1 && (newInOld === -1 || oldInNew - newIdx < newInOld - oldIdx)) {
-          while (newIdx < oldInNew) {
-            result.push({ type: 'insert', content: newLines[newIdx], lineNum: newIdx + 1 });
-            newIdx++;
-          }
-        } else {
-          while (oldIdx < newInOld) {
-            result.push({ type: 'delete', content: oldLines[oldIdx], lineNum: oldIdx + 1 });
-            oldIdx++;
-          }
+        // Try to find old line in new content (deleted block ending?)
+        for (let i = 1; i < searchLimit; i++) {
+            if (newIdx + i < newLines.length && oldLines[oldIdx] === newLines[newIdx + i]) {
+                // Found match ahead in new lines -> these were inserts
+                for (let j = 0; j < i; j++) {
+                    diffLines.push({ type: 'insert', content: newLines[newIdx + j] });
+                }
+                newIdx += i;
+                found = true;
+                break;
+            }
+            if (oldIdx + i < oldLines.length && newLines[newIdx] === oldLines[oldIdx + i]) {
+                // Found match ahead in old lines -> these were deletes
+                for (let j = 0; j < i; j++) {
+                    diffLines.push({ type: 'delete', content: oldLines[oldIdx + j] });
+                }
+                oldIdx += i;
+                found = true;
+                break;
+            }
+        }
+        
+        if (!found) {
+            // No simple match found, treat as 1 delete and 1 insert (substitution)
+            // But prefer grouping deletes then inserts
+             diffLines.push({ type: 'delete', content: oldLines[oldIdx] });
+             oldIdx++;
+             // We don't increment newIdx here, so next loop might insert it
         }
       }
     }
     
-    return result;
-  }, [oldContent, newContent]);
+    // Build merged content
+    const mergedContent = diffLines.map(l => l.content).join('\n');
+    
+    // Build decorations
+    const diffTheme = EditorView.theme({
+        ".cm-diff-delete": { backgroundColor: "#781b1b60" },
+        ".cm-diff-insert": { backgroundColor: "#1b5e2060" },
+    });
 
-  const maxDiffLines = MAX_DISPLAY_LINES * 2;
-  const diff = isExpanded ? fullDiff : fullDiff.slice(0, maxDiffLines);
-  const hiddenCount = fullDiff.length - maxDiffLines;
-  const additions = fullDiff.filter(d => d.type === 'insert').length;
-  const deletions = fullDiff.filter(d => d.type === 'delete').length;
+    const diffDecorations = EditorView.decorations.of((view) => {
+        const builder = new RangeSetBuilder<Decoration>();
+        let pos = 0;
+        
+        for (const line of diffLines) {
+            const length = line.content.length;
+            // Decoration logic
+            if (line.type === 'delete') {
+                 // For delete lines, add decoration to the full line
+                 // Note: we need to handle the case where pos + length is valid
+                 builder.add(pos, pos, Decoration.line({ class: "cm-diff-delete" }));
+            } else if (line.type === 'insert') {
+                 builder.add(pos, pos, Decoration.line({ class: "cm-diff-insert" }));
+            }
+            
+            // Move pos (content + newline)
+            // CodeMirror document positions include newlines as 1 character
+            pos += length + 1; 
+        }
+        return builder.finish();
+    });
+
+    const adds = diffLines.filter(l => l.type === 'insert').length;
+    const dels = diffLines.filter(l => l.type === 'delete').length;
+
+    return {
+        mergedContent,
+        diffExtensions: [diffTheme, diffDecorations],
+        additions: adds,
+        deletions: dels
+    };
+  }, [oldContent, newContent]);
 
   return (
     <div className="font-mono text-xs rounded overflow-hidden border border-gray-700/50">
@@ -413,61 +469,16 @@ const DiffContent: React.FC<{ oldContent: string; newContent: string; fileName?:
           <span className="text-red-400">-{deletions}</span>
         </div>
       </div>
-      {/* Diff content - horizontal scroll for entire block */}
-      <div className={cn(
-        "bg-[#1e1e1e] overflow-x-auto",
-        isExpanded && "max-h-[400px] overflow-y-auto"
-      )}>
-        <div className="min-w-max">
-          {diff.map((line, idx) => (
-            <div 
-              key={idx} 
-              className={cn(
-                "flex",
-                line.type === 'insert' && "bg-[#1e3a1e]",
-                line.type === 'delete' && "bg-[#3a1e1e]"
-              )}
-            >
-              <span 
-                className={cn(
-                  "px-2 py-0.5 text-right select-none min-w-[3ch] border-r border-gray-800 sticky left-0",
-                  line.type === 'insert' && "text-emerald-500 bg-[#1a2e1a]",
-                  line.type === 'delete' && "text-red-500 bg-[#2e1a1a]",
-                  line.type === 'equal' && "text-gray-600 bg-[#1e1e1e]"
-                )}
-              >
-                {line.type === 'insert' ? '+' : line.type === 'delete' ? '-' : ' '}
-              </span>
-              <pre 
-                className={cn(
-                  "px-3 py-0.5 whitespace-pre m-0",
-                  line.type === 'insert' && "text-emerald-300",
-                  line.type === 'delete' && "text-red-300",
-                  line.type === 'equal' && "text-gray-400"
-                )}
-              >
-                {line.content || ' '}
-              </pre>
-            </div>
-          ))}
-        </div>
+
+      <div>
+           <CodeBlock 
+             content={mergedContent} 
+             copyContent={newContent} // Copy button gets the new clean content
+             language={language} 
+             extensions={diffExtensions}
+             maxHeight="400px"
+           />
       </div>
-      {/* Footer with expand/collapse */}
-      {fullDiff.length > maxDiffLines && (
-        <div 
-          className="flex items-center justify-between px-3 py-1.5 bg-[#252526] border-t border-gray-700/50 cursor-pointer hover:bg-[#2a2a2a] transition-colors"
-          onClick={() => setIsExpanded(!isExpanded)}
-        >
-          <span className="text-gray-500 text-xs">
-            {isExpanded ? `▲ Collapse` : `▼ Show all ${fullDiff.length} changes`}
-          </span>
-          {!isExpanded && (
-            <span className="text-gray-600 text-xs">
-              … ({hiddenCount} more)
-            </span>
-          )}
-        </div>
-      )}
     </div>
   );
 };
