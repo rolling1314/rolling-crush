@@ -121,6 +121,25 @@ func createNewFile(edit editContext, filePath, content string, call fantasy.Tool
 		return fantasy.NewTextErrorResponse(fmt.Sprintf("file already exists: %s", filePath)), nil
 	}
 
+	p := edit.permissions.Request(
+		permission.CreatePermissionRequest{
+			SessionID:   sessionID,
+			Path:        fsext.PathOrPrefix(filePath, edit.workingDir),
+			ToolCallID:  call.ID,
+			ToolName:    EditToolName,
+			Action:      "write",
+			Description: fmt.Sprintf("Create file %s", filePath),
+			Params: EditPermissionsParams{
+				FilePath:   filePath,
+				OldContent: "",
+				NewContent: content,
+			},
+		},
+	)
+	if !p {
+		return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
+	}
+
 	// 写入新文件
 	_, err = sandboxClient.WriteFile(edit.ctx, sandbox.FileWriteRequest{
 		SessionID: sessionID,
@@ -261,6 +280,25 @@ func deleteContent(edit editContext, filePath, oldString string, replaceAll bool
 		newContent, _ = fsext.ToWindowsLineEndings(newContent)
 	}
 
+	p := edit.permissions.Request(
+		permission.CreatePermissionRequest{
+			SessionID:   sessionID,
+			Path:        fsext.PathOrPrefix(filePath, edit.workingDir),
+			ToolCallID:  call.ID,
+			ToolName:    EditToolName,
+			Action:      "edit",
+			Description: fmt.Sprintf("Delete content in %s", filePath),
+			Params: EditPermissionsParams{
+				FilePath:   filePath,
+				OldContent: oldContent,
+				NewContent: newContent,
+			},
+		},
+	)
+	if !p {
+		return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
+	}
+
 	// 写回文件
 	_, err = sandboxClient.WriteFile(edit.ctx, sandbox.FileWriteRequest{
 		SessionID: sessionID,
@@ -363,6 +401,25 @@ func replaceContent(edit editContext, filePath, oldString, newString string, rep
 
 	if isCrlf {
 		newContent, _ = fsext.ToWindowsLineEndings(newContent)
+	}
+
+	p := edit.permissions.Request(
+		permission.CreatePermissionRequest{
+			SessionID:   sessionID,
+			Path:        fsext.PathOrPrefix(filePath, edit.workingDir),
+			ToolCallID:  call.ID,
+			ToolName:    EditToolName,
+			Action:      "edit",
+			Description: fmt.Sprintf("Replace content in %s", filePath),
+			Params: EditPermissionsParams{
+				FilePath:   filePath,
+				OldContent: oldContent,
+				NewContent: newContent,
+			},
+		},
+	)
+	if !p {
+		return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
 	}
 
 	// 写回文件

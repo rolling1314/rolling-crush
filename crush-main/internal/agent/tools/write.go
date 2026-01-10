@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/diff"
 	"github.com/charmbracelet/crush/internal/filepathext"
+	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/history"
 
 	"github.com/charmbracelet/crush/internal/lsp"
@@ -83,6 +84,25 @@ func NewWriteTool(lspClients *csync.Map[string, *lsp.Client], permissions permis
 			oldContent = oldResp.Content
 		}
 		
+		p := permissions.Request(
+			permission.CreatePermissionRequest{
+				SessionID:   sessionID,
+				Path:        fsext.PathOrPrefix(filePath, workingDir),
+				ToolCallID:  call.ID,
+				ToolName:    WriteToolName,
+				Action:      "write",
+				Description: fmt.Sprintf("Write to file %s", filePath),
+				Params: WritePermissionsParams{
+					FilePath:   filePath,
+					OldContent: oldContent,
+					NewContent: params.Content,
+				},
+			},
+		)
+		if !p {
+			return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
+		}
+
 		// 写入新内容
 		_, err = sandboxClient.WriteFile(ctx, sandbox.FileWriteRequest{
 			SessionID: sessionID,

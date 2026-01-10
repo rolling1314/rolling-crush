@@ -268,7 +268,49 @@ export default function WorkspacePage() {
   }, []);
 
   const handleWebSocketMessage = (data: any) => {
-    console.log('WebSocket message received:', data);
+    console.log('=== WebSocket message received ===');
+    console.log('Type:', data.Type || data.type);
+    console.log('Data:', data);
+    
+    // 处理权限请求 - 优先处理，确保在消息之前
+    if (data.Type === 'permission_request' || data.type === 'permission_request') {
+      // 处理权限请求
+      console.log('=== Permission request received ===');
+      console.log('Full data:', JSON.stringify(data, null, 2));
+      const request: PermissionRequest = {
+        id: data.id,
+        session_id: data.session_id,
+        tool_call_id: data.tool_call_id,
+        tool_name: data.tool_name,
+        action: data.action
+      };
+      
+      console.log('Parsed PermissionRequest:', request);
+      console.log('Tool call ID to add to map:', request.tool_call_id);
+      
+      setPendingPermissions(prev => {
+        const next = new Map(prev);
+        next.set(request.tool_call_id, request);
+        console.log('=== Updated pendingPermissions ===');
+        console.log('Map size:', next.size);
+        console.log('Map keys:', Array.from(next.keys()));
+        console.log('Map entries:', Array.from(next.entries()).map(([k, v]) => ({ key: k, value: v })));
+        return next;
+      });
+      return; // 立即返回，不处理其他逻辑
+    }
+    
+    // 处理权限通知
+    if (data.Type === 'permission_notification' || data.type === 'permission_notification') {
+      console.log('Permission notification:', data);
+      setPendingPermissions(prev => {
+        const next = new Map(prev);
+        next.delete(data.tool_call_id);
+        console.log('Removed permission, remaining:', next.size);
+        return next;
+      });
+      return; // 立即返回
+    }
     
     // 后端直接广播 message.Message 对象
     // 支持大写和小写字段名（ID/id, Role/role, Parts/parts）
@@ -287,7 +329,10 @@ export default function WorkspacePage() {
       };
       
       const convertedMsg = convertBackendMessageToFrontend(normalizedData);
-      console.log('Converted message:', convertedMsg);
+      console.log('=== Converted message ===');
+      console.log('Message ID:', convertedMsg.id);
+      console.log('Role:', convertedMsg.role);
+      console.log('Tool calls:', convertedMsg.toolCalls?.map(tc => ({ id: tc.id, name: tc.name, finished: tc.finished })));
       
       setMessages(prev => {
         // 检查消息是否已存在
@@ -314,33 +359,6 @@ export default function WorkspacePage() {
         console.log('Tool result detected, refreshing file tree...');
         loadFiles(project.workspace_path, currentSessionId);
       }
-    } else if (data.Type === 'permission_request' || data.type === 'permission_request') {
-      // 处理权限请求
-      console.log('=== Permission request received ===', data);
-      const request: PermissionRequest = {
-        id: data.id,
-        session_id: data.session_id,
-        tool_call_id: data.tool_call_id,
-        tool_name: data.tool_name,
-        action: data.action
-      };
-      
-      console.log('Adding permission to map, tool_call_id:', request.tool_call_id);
-      setPendingPermissions(prev => {
-        const next = new Map(prev);
-        next.set(request.tool_call_id, request);
-        console.log('Pending permissions now has', next.size, 'items:', Array.from(next.keys()));
-        return next;
-      });
-    } else if (data.Type === 'permission_notification' || data.type === 'permission_notification') {
-      // 处理权限结果通知
-      console.log('Permission notification:', data);
-      setPendingPermissions(prev => {
-        const next = new Map(prev);
-        next.delete(data.tool_call_id);
-        console.log('Removed permission, remaining:', next.size);
-        return next;
-      });
     }
   };
 

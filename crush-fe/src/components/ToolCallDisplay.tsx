@@ -483,18 +483,22 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
   const [isBodyExpanded, setIsBodyExpanded] = useState(true);
   
   // Debug log
-  console.log('ToolCallDisplay render:', { 
-    id: toolCall.id, 
-    name: toolCall.name, 
-    input: toolCall.input?.substring(0, 100),
-    finished: toolCall.finished,
-    hasResult: !!result 
-  });
+  console.log('=== ToolCallDisplay render ===');
+  console.log('Tool Call ID:', toolCall.id);
+  console.log('Tool Call Name:', toolCall.name);
+  console.log('needsPermission:', needsPermission);
+  console.log('onApprove:', typeof onApprove);
+  console.log('onDeny:', typeof onDeny);
+  console.log('finished:', toolCall.finished);
+  console.log('hasResult:', !!result);
+  console.log('input preview:', toolCall.input?.substring(0, 100));
   
   const isPending = !toolCall.finished && !result;
   const isError = result?.is_error;
   const isSuccess = result && !result.is_error;
-  const isCancelled = toolCall.finished && !result;
+  // If tool call is finished (args generated) but no result yet, it is executing, not cancelled.
+  const isExecuting = toolCall.finished && !result;
+  const isCancelled = false; // We don't have a reliable way to detect cancellation yet
 
   // Parse parameters - handle empty/undefined input
   const { main: mainParam, extra: extraParams } = useMemo(() => 
@@ -523,6 +527,9 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
     }
     if (isCancelled) {
       return <span className="text-gray-500">{ICONS.pending}</span>;
+    }
+    if (isExecuting) {
+      return <span className="text-emerald-600 animate-pulse">{ICONS.working}</span>;
     }
     return <span className="text-gray-500">{ICONS.pending}</span>;
   };
@@ -646,6 +653,16 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
             {preview}
             <div className="text-gray-500 text-xs pl-4 mt-2">
               Waiting for tool response...
+            </div>
+          </>
+        );
+      }
+      if (isExecuting) {
+        return (
+          <>
+            {preview}
+            <div className="text-gray-500 text-xs pl-4 mt-2 flex items-center gap-2">
+              <span className="animate-spin">⟳</span> Running...
             </div>
           </>
         );
@@ -809,8 +826,8 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
           </span>
         )}
 
-        {/* Working animation for pending */}
-        {isPending && !needsPermission && (
+        {/* Working animation for pending/executing */}
+        {(isPending || isExecuting) && !needsPermission && (
           <div className="flex items-center gap-1">
             <div className="flex gap-0.5">
               {[0, 1, 2].map(i => (
@@ -821,27 +838,41 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
                 />
               ))}
             </div>
-            <span className="text-emerald-600 text-xs">Working</span>
+            <span className="text-emerald-600 text-xs">{isExecuting ? 'Running' : 'Working'}</span>
           </div>
         )}
       </div>
 
       {/* Permission Buttons - more compact TUI style */}
-      {needsPermission && onApprove && onDeny && (
+      {needsPermission && onApprove && onDeny ? (
         <div className="flex gap-2 mt-2 pl-4">
           <button
-            onClick={() => onApprove(toolCall.id)}
+            onClick={() => {
+              console.log('=== Approve button clicked ===');
+              console.log('Tool Call ID:', toolCall.id);
+              onApprove(toolCall.id);
+            }}
             className="px-3 py-1 text-xs bg-emerald-700 hover:bg-emerald-600 text-white rounded transition-colors"
           >
             ✓ Allow
           </button>
           <button
-            onClick={() => onDeny(toolCall.id)}
+            onClick={() => {
+              console.log('=== Deny button clicked ===');
+              console.log('Tool Call ID:', toolCall.id);
+              onDeny(toolCall.id);
+            }}
             className="px-3 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
           >
             × Deny
           </button>
         </div>
+      ) : (
+        needsPermission && console.log('=== Permission buttons NOT rendered ===', {
+          needsPermission,
+          hasOnApprove: !!onApprove,
+          hasOnDeny: !!onDeny
+        }) && null
       )}
 
       {/* Body - collapsible */}

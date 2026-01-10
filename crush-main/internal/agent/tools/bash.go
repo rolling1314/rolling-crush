@@ -204,11 +204,16 @@ func NewBashTool(permissions permission.Service, workingDir string, attribution 
 			isSafeReadOnly := false
 			cmdLower := strings.ToLower(params.Command)
 
-			for _, safe := range safeCommands {
-				if strings.HasPrefix(cmdLower, safe) {
-					if len(cmdLower) == len(safe) || cmdLower[len(safe)] == ' ' || cmdLower[len(safe)] == '-' {
-						isSafeReadOnly = true
-						break
+			// Always require permission for chained commands or pipes
+			if strings.Contains(params.Command, "&&") || strings.Contains(params.Command, ";") || strings.Contains(params.Command, "|") {
+				isSafeReadOnly = false
+			} else {
+				for _, safe := range safeCommands {
+					if strings.HasPrefix(cmdLower, safe) {
+						if len(cmdLower) == len(safe) || cmdLower[len(safe)] == ' ' || cmdLower[len(safe)] == '-' {
+							isSafeReadOnly = true
+							break
+						}
 					}
 				}
 			}
