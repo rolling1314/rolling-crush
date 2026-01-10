@@ -263,6 +263,28 @@ export const ChatPanel = ({
     }
   };
 
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const data = e.clipboardData.getData('application/json');
+    if (data) {
+      try {
+        const fileNode = JSON.parse(data) as FileNode;
+        if (fileNode.name && (fileNode.path || fileNode.content)) {
+          e.preventDefault();
+          setAttachedFiles(prev => {
+             // Generate unique ID if conflict for paste
+             const id = fileNode.id || `pasted-${Date.now()}`;
+             const newNode = { ...fileNode, id };
+             
+             if (prev.some(f => f.id === newNode.id)) return prev;
+             return [...prev, newNode];
+          });
+        }
+      } catch (err) {
+        // Fallback to default paste
+      }
+    }
+  };
+
   const removeAttachedFile = (fileId: string) => {
     setAttachedFiles(prev => prev.filter(f => f.id !== fileId));
   };
@@ -445,7 +467,14 @@ export const ChatPanel = ({
                 {attachedFiles.map(file => (
                     <div key={file.id} className="flex items-center gap-1.5 px-2 py-1 bg-[#1e1e1e]/50 rounded text-xs text-blue-300 border border-blue-500/30">
                         {file.type === 'folder' ? <FolderIcon size={12} /> : <FileIcon size={12} />}
-                        <span className="truncate max-w-[150px]">{file.name}</span>
+                        <span className="truncate max-w-[150px]">
+                            {file.name}
+                            {file.startLine !== undefined && file.endLine !== undefined && (
+                                <span className="text-gray-400 ml-1">
+                                    ({file.startLine}-{file.endLine})
+                                </span>
+                            )}
+                        </span>
                         <button 
                             onClick={() => removeAttachedFile(file.id)}
                             className="hover:text-white ml-0.5"
@@ -460,6 +489,7 @@ export const ChatPanel = ({
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onPaste={handlePaste}
             onKeyDown={handleKeyDown}
             placeholder={attachedFiles.length > 0 ? "Describe what to do with these files..." : "问问关于代码的问题......"}
             className="w-full bg-transparent border-none text-sm text-gray-200 placeholder-gray-500 p-3 min-h-[60px] max-h-[200px] resize-none focus:ring-0 focus:outline-none scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent"

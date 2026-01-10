@@ -5,6 +5,8 @@ export type FileNode = {
   children?: FileNode[];
   content?: string;
   path: string;
+  startLine?: number;
+  endLine?: number;
 };
 
 // Tool call and result types

@@ -650,7 +650,11 @@ export default function WorkspacePage() {
             const openFile = openFiles.find(f => f.id === file.id);
             const fileContent = openFile?.content || file.content || '// Content not available';
             
-            return `File: ${file.path || file.name}\n\`\`\`${file.name.split('.').pop() || ''}\n${fileContent}\n\`\`\``;
+            const lineInfo = (file.startLine !== undefined && file.endLine !== undefined) 
+                ? ` (${file.startLine}-${file.endLine})` 
+                : '';
+                
+            return `File: ${file.path || file.name}${lineInfo}\n\`\`\`${file.name.split('.').pop() || ''}\n${fileContent}\n\`\`\``;
         }).join('\n\n');
 
         if (messageContent.trim()) {
@@ -904,6 +908,8 @@ export default function WorkspacePage() {
                   code={activeFile.content || '// No content'} 
                   onChange={() => {}}
                   readOnly={false}
+                  fileName={activeFile.name}
+                  filePath={activeFile.path}
                 />
               )}
             </div>
