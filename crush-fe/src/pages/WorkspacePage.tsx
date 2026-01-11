@@ -405,7 +405,7 @@ export default function WorkspacePage() {
 
       if (convertedMsg.toolResults && convertedMsg.toolResults.length > 0 && currentProject?.workspace_path && currentSession) {
         console.log('Tool result detected, refreshing file tree...');
-        loadFiles(currentProject.workspace_path, currentSession);
+        loadFiles(currentProject.workspace_path, currentSession, true);
       }
     }
   };
@@ -496,8 +496,10 @@ export default function WorkspacePage() {
     }
   };
 
-  const loadFiles = async (workspacePath: string, sessionId?: string) => {
-    setLoadingFiles(true);
+  const loadFiles = async (workspacePath: string, sessionId?: string, isBackground: boolean = false) => {
+    if (!isBackground) {
+      setLoadingFiles(true);
+    }
     try {
       // 如果没有提供 sessionId，使用当前会话ID
       const effectiveSessionId = sessionId || currentSessionId;
@@ -505,13 +507,15 @@ export default function WorkspacePage() {
       if (!effectiveSessionId) {
         console.warn('No session ID available, skipping file tree load');
         setFiles([]);
-        setLoadingFiles(false);
+        if (!isBackground) {
+          setLoadingFiles(false);
+        }
         return;
       }
       
       const token = localStorage.getItem('jwt_token');
       const url = `http://localhost:8081/api/files?session_id=${encodeURIComponent(effectiveSessionId)}&path=${encodeURIComponent(workspacePath)}`;
-      console.log('Loading file tree:', { sessionId: effectiveSessionId, path: workspacePath, url });
+      console.log('Loading file tree:', { sessionId: effectiveSessionId, path: workspacePath, url, isBackground });
       
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -535,9 +539,13 @@ export default function WorkspacePage() {
       }
     } catch (error) {
       console.error('Error fetching files:', error);
-      setFiles([]);
+      if (!isBackground) {
+        setFiles([]);
+      }
     } finally {
-      setLoadingFiles(false);
+      if (!isBackground) {
+        setLoadingFiles(false);
+      }
     }
   };
 
