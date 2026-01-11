@@ -23,8 +23,8 @@ interface Project {
   id: string;
   name: string;
   description: string;
-  host: string;
-  port: number;
+  external_ip: string;
+  frontend_port: number;
   workspace_path: string;
 }
 
@@ -1019,7 +1019,7 @@ export default function WorkspacePage() {
             >
               <div className="flex-1 bg-white relative">
                 <iframe 
-                  src="http://localhost:5173"
+                  src={project ? `http://${project.external_ip}:${project.frontend_port}` : 'about:blank'}
                   className="absolute inset-0 w-full h-full border-none"
                   title="Application Preview"
                   allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone; midi; clipboard-read; clipboard-write"

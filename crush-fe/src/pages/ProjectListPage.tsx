@@ -27,8 +27,8 @@ interface Project {
   id: string;
   name: string;
   description: string;
-  host: string;
-  port: number;
+  external_ip: string;
+  frontend_port: number;
   workspace_path: string;
   created_at: number;
   updated_at: number;
@@ -51,8 +51,8 @@ export default function ProjectListPage() {
   const [newProject, setNewProject] = useState({ 
     name: '', 
     description: '', 
-    host: 'localhost', 
-    port: 8080, 
+    external_ip: 'localhost', 
+    frontend_port: 8080, 
     workspace_path: '.' 
   });
   const navigate = useNavigate();
@@ -103,7 +103,7 @@ export default function ProjectListPage() {
         headers: { Authorization: `Bearer ${token}` }
       });
       setShowCreateModal(false);
-      setNewProject({ name: '', description: '', host: 'localhost', port: 8080, workspace_path: '.' });
+      setNewProject({ name: '', description: '', external_ip: 'localhost', frontend_port: 8080, workspace_path: '.' });
       loadProjects();
     } catch (error) {
       console.error('Failed to create project:', error);
@@ -432,22 +432,22 @@ export default function ProjectListPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">Host</label>
+                    <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">External IP</label>
                     <input
                       type="text"
                       placeholder="localhost"
-                      value={newProject.host}
-                      onChange={e => setNewProject({ ...newProject, host: e.target.value })}
+                      value={newProject.external_ip}
+                      onChange={e => setNewProject({ ...newProject, external_ip: e.target.value })}
                       className="w-full px-4 py-2.5 bg-[#0A0A0A] border border-[#333] rounded-lg focus:border-blue-500 text-white text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">Port</label>
+                    <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">Frontend Port</label>
                     <input
                       type="number"
                       placeholder="8080"
-                      value={newProject.port}
-                      onChange={e => setNewProject({ ...newProject, port: parseInt(e.target.value) || 0 })}
+                      value={newProject.frontend_port}
+                      onChange={e => setNewProject({ ...newProject, frontend_port: parseInt(e.target.value) || 0 })}
                       className="w-full px-4 py-2.5 bg-[#0A0A0A] border border-[#333] rounded-lg focus:border-blue-500 text-white text-sm"
                     />
                   </div>
