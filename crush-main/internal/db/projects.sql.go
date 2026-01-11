@@ -16,31 +16,51 @@ INSERT INTO projects (
     user_id,
     name,
     description,
-    host,
-    port,
+    external_ip,
+    frontend_port,
     workspace_path,
     container_name,
     workdir_path,
+    db_host,
+    db_port,
+    db_user,
+    db_password,
+    db_name,
+    backend_port,
+    frontend_command,
+    frontend_language,
+    backend_command,
+    backend_language,
     created_at,
     updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9,
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
     EXTRACT(EPOCH FROM NOW()) * 1000,
     EXTRACT(EPOCH FROM NOW()) * 1000
 )
-RETURNING id, user_id, name, description, host, port, workspace_path, container_name, workdir_path, created_at, updated_at
+RETURNING id, user_id, name, description, created_at, updated_at, external_ip, frontend_port, workspace_path, container_name, workdir_path, db_host, db_port, db_user, db_password, db_name, backend_port, frontend_command, frontend_language, backend_command, backend_language
 `
 
 type CreateProjectParams struct {
-	ID            string         `json:"id"`
-	UserID        string         `json:"user_id"`
-	Name          string         `json:"name"`
-	Description   sql.NullString `json:"description"`
-	Host          string         `json:"host"`
-	Port          int32          `json:"port"`
-	WorkspacePath string         `json:"workspace_path"`
-	ContainerName sql.NullString `json:"container_name"`
-	WorkdirPath   sql.NullString `json:"workdir_path"`
+	ID               string         `json:"id"`
+	UserID           string         `json:"user_id"`
+	Name             string         `json:"name"`
+	Description      sql.NullString `json:"description"`
+	ExternalIP       string         `json:"external_ip"`
+	FrontendPort     int32          `json:"frontend_port"`
+	WorkspacePath    string         `json:"workspace_path"`
+	ContainerName    sql.NullString `json:"container_name"`
+	WorkdirPath      sql.NullString `json:"workdir_path"`
+	DbHost           sql.NullString `json:"db_host"`
+	DbPort           sql.NullInt32  `json:"db_port"`
+	DbUser           sql.NullString `json:"db_user"`
+	DbPassword       sql.NullString `json:"db_password"`
+	DbName           sql.NullString `json:"db_name"`
+	BackendPort      sql.NullInt32  `json:"backend_port"`
+	FrontendCommand  sql.NullString `json:"frontend_command"`
+	FrontendLanguage sql.NullString `json:"frontend_language"`
+	BackendCommand   sql.NullString `json:"backend_command"`
+	BackendLanguage  sql.NullString `json:"backend_language"`
 }
 
 func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
@@ -49,11 +69,21 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		arg.UserID,
 		arg.Name,
 		arg.Description,
-		arg.Host,
-		arg.Port,
+		arg.ExternalIP,
+		arg.FrontendPort,
 		arg.WorkspacePath,
 		arg.ContainerName,
 		arg.WorkdirPath,
+		arg.DbHost,
+		arg.DbPort,
+		arg.DbUser,
+		arg.DbPassword,
+		arg.DbName,
+		arg.BackendPort,
+		arg.FrontendCommand,
+		arg.FrontendLanguage,
+		arg.BackendCommand,
+		arg.BackendLanguage,
 	)
 	var i Project
 	err := row.Scan(
@@ -61,13 +91,23 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.UserID,
 		&i.Name,
 		&i.Description,
-		&i.Host,
-		&i.Port,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ExternalIP,
+		&i.FrontendPort,
 		&i.WorkspacePath,
 		&i.ContainerName,
 		&i.WorkdirPath,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.DbHost,
+		&i.DbPort,
+		&i.DbUser,
+		&i.DbPassword,
+		&i.DbName,
+		&i.BackendPort,
+		&i.FrontendCommand,
+		&i.FrontendLanguage,
+		&i.BackendCommand,
+		&i.BackendLanguage,
 	)
 	return i, err
 }
@@ -83,7 +123,7 @@ func (q *Queries) DeleteProject(ctx context.Context, id string) error {
 }
 
 const getProjectByID = `-- name: GetProjectByID :one
-SELECT id, user_id, name, description, host, port, workspace_path, container_name, workdir_path, created_at, updated_at
+SELECT id, user_id, name, description, created_at, updated_at, external_ip, frontend_port, workspace_path, container_name, workdir_path, db_host, db_port, db_user, db_password, db_name, backend_port, frontend_command, frontend_language, backend_command, backend_language
 FROM projects
 WHERE id = $1 LIMIT 1
 `
@@ -96,13 +136,23 @@ func (q *Queries) GetProjectByID(ctx context.Context, id string) (Project, error
 		&i.UserID,
 		&i.Name,
 		&i.Description,
-		&i.Host,
-		&i.Port,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ExternalIP,
+		&i.FrontendPort,
 		&i.WorkspacePath,
 		&i.ContainerName,
 		&i.WorkdirPath,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.DbHost,
+		&i.DbPort,
+		&i.DbUser,
+		&i.DbPassword,
+		&i.DbName,
+		&i.BackendPort,
+		&i.FrontendCommand,
+		&i.FrontendLanguage,
+		&i.BackendCommand,
+		&i.BackendLanguage,
 	)
 	return i, err
 }
@@ -151,7 +201,7 @@ func (q *Queries) GetProjectSessions(ctx context.Context, projectID sql.NullStri
 }
 
 const listProjectsByUser = `-- name: ListProjectsByUser :many
-SELECT id, user_id, name, description, host, port, workspace_path, container_name, workdir_path, created_at, updated_at
+SELECT id, user_id, name, description, created_at, updated_at, external_ip, frontend_port, workspace_path, container_name, workdir_path, db_host, db_port, db_user, db_password, db_name, backend_port, frontend_command, frontend_language, backend_command, backend_language
 FROM projects
 WHERE user_id = $1
 ORDER BY updated_at DESC
@@ -171,13 +221,23 @@ func (q *Queries) ListProjectsByUser(ctx context.Context, userID string) ([]Proj
 			&i.UserID,
 			&i.Name,
 			&i.Description,
-			&i.Host,
-			&i.Port,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ExternalIP,
+			&i.FrontendPort,
 			&i.WorkspacePath,
 			&i.ContainerName,
 			&i.WorkdirPath,
-			&i.CreatedAt,
-			&i.UpdatedAt,
+			&i.DbHost,
+			&i.DbPort,
+			&i.DbUser,
+			&i.DbPassword,
+			&i.DbName,
+			&i.BackendPort,
+			&i.FrontendCommand,
+			&i.FrontendLanguage,
+			&i.BackendCommand,
+			&i.BackendLanguage,
 		); err != nil {
 			return nil, err
 		}
@@ -197,25 +257,45 @@ UPDATE projects
 SET
     name = $2,
     description = $3,
-    host = $4,
-    port = $5,
+    external_ip = $4,
+    frontend_port = $5,
     workspace_path = $6,
     container_name = $7,
     workdir_path = $8,
+    db_host = $9,
+    db_port = $10,
+    db_user = $11,
+    db_password = $12,
+    db_name = $13,
+    backend_port = $14,
+    frontend_command = $15,
+    frontend_language = $16,
+    backend_command = $17,
+    backend_language = $18,
     updated_at = EXTRACT(EPOCH FROM NOW()) * 1000
 WHERE id = $1
-RETURNING id, user_id, name, description, host, port, workspace_path, container_name, workdir_path, created_at, updated_at
+RETURNING id, user_id, name, description, created_at, updated_at, external_ip, frontend_port, workspace_path, container_name, workdir_path, db_host, db_port, db_user, db_password, db_name, backend_port, frontend_command, frontend_language, backend_command, backend_language
 `
 
 type UpdateProjectParams struct {
-	ID            string         `json:"id"`
-	Name          string         `json:"name"`
-	Description   sql.NullString `json:"description"`
-	Host          string         `json:"host"`
-	Port          int32          `json:"port"`
-	WorkspacePath string         `json:"workspace_path"`
-	ContainerName sql.NullString `json:"container_name"`
-	WorkdirPath   sql.NullString `json:"workdir_path"`
+	ID               string         `json:"id"`
+	Name             string         `json:"name"`
+	Description      sql.NullString `json:"description"`
+	ExternalIP       string         `json:"external_ip"`
+	FrontendPort     int32          `json:"frontend_port"`
+	WorkspacePath    string         `json:"workspace_path"`
+	ContainerName    sql.NullString `json:"container_name"`
+	WorkdirPath      sql.NullString `json:"workdir_path"`
+	DbHost           sql.NullString `json:"db_host"`
+	DbPort           sql.NullInt32  `json:"db_port"`
+	DbUser           sql.NullString `json:"db_user"`
+	DbPassword       sql.NullString `json:"db_password"`
+	DbName           sql.NullString `json:"db_name"`
+	BackendPort      sql.NullInt32  `json:"backend_port"`
+	FrontendCommand  sql.NullString `json:"frontend_command"`
+	FrontendLanguage sql.NullString `json:"frontend_language"`
+	BackendCommand   sql.NullString `json:"backend_command"`
+	BackendLanguage  sql.NullString `json:"backend_language"`
 }
 
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
@@ -223,11 +303,21 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		arg.ID,
 		arg.Name,
 		arg.Description,
-		arg.Host,
-		arg.Port,
+		arg.ExternalIP,
+		arg.FrontendPort,
 		arg.WorkspacePath,
 		arg.ContainerName,
 		arg.WorkdirPath,
+		arg.DbHost,
+		arg.DbPort,
+		arg.DbUser,
+		arg.DbPassword,
+		arg.DbName,
+		arg.BackendPort,
+		arg.FrontendCommand,
+		arg.FrontendLanguage,
+		arg.BackendCommand,
+		arg.BackendLanguage,
 	)
 	var i Project
 	err := row.Scan(
@@ -235,13 +325,23 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.UserID,
 		&i.Name,
 		&i.Description,
-		&i.Host,
-		&i.Port,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ExternalIP,
+		&i.FrontendPort,
 		&i.WorkspacePath,
 		&i.ContainerName,
 		&i.WorkdirPath,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.DbHost,
+		&i.DbPort,
+		&i.DbUser,
+		&i.DbPassword,
+		&i.DbName,
+		&i.BackendPort,
+		&i.FrontendCommand,
+		&i.FrontendLanguage,
+		&i.BackendCommand,
+		&i.BackendLanguage,
 	)
 	return i, err
 }

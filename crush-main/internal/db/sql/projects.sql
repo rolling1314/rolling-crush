@@ -4,15 +4,25 @@ INSERT INTO projects (
     user_id,
     name,
     description,
-    host,
-    port,
+    external_ip,
+    frontend_port,
     workspace_path,
     container_name,
     workdir_path,
+    db_host,
+    db_port,
+    db_user,
+    db_password,
+    db_name,
+    backend_port,
+    frontend_command,
+    frontend_language,
+    backend_command,
+    backend_language,
     created_at,
     updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9,
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
     EXTRACT(EPOCH FROM NOW()) * 1000,
     EXTRACT(EPOCH FROM NOW()) * 1000
 )
@@ -34,11 +44,21 @@ UPDATE projects
 SET
     name = $2,
     description = $3,
-    host = $4,
-    port = $5,
+    external_ip = $4,
+    frontend_port = $5,
     workspace_path = $6,
     container_name = $7,
     workdir_path = $8,
+    db_host = $9,
+    db_port = $10,
+    db_user = $11,
+    db_password = $12,
+    db_name = $13,
+    backend_port = $14,
+    frontend_command = $15,
+    frontend_language = $16,
+    backend_command = $17,
+    backend_language = $18,
     updated_at = EXTRACT(EPOCH FROM NOW()) * 1000
 WHERE id = $1
 RETURNING *;

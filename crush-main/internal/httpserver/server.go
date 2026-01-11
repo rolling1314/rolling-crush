@@ -74,26 +74,46 @@ type UserInfo struct {
 }
 
 type ProjectRequest struct {
-	Name          string  `json:"name" binding:"required"`
-	Description   string  `json:"description"`
-	Host          string  `json:"host" binding:"required"`
-	Port          int32   `json:"port" binding:"required"`
-	WorkspacePath string  `json:"workspace_path" binding:"required"`
-	ContainerName *string `json:"container_name,omitempty"`
-	WorkdirPath   *string `json:"workdir_path,omitempty"`
+	Name             string  `json:"name" binding:"required"`
+	Description      string  `json:"description"`
+	ExternalIP       string  `json:"external_ip" binding:"required"`
+	FrontendPort     int32   `json:"frontend_port" binding:"required"`
+	WorkspacePath    string  `json:"workspace_path" binding:"required"`
+	ContainerName    *string `json:"container_name,omitempty"`
+	WorkdirPath      *string `json:"workdir_path,omitempty"`
+	DbHost           *string `json:"db_host,omitempty"`
+	DbPort           *int32  `json:"db_port,omitempty"`
+	DbUser           *string `json:"db_user,omitempty"`
+	DbPassword       *string `json:"db_password,omitempty"`
+	DbName           *string `json:"db_name,omitempty"`
+	BackendPort      *int32  `json:"backend_port,omitempty"`
+	FrontendCommand  *string `json:"frontend_command,omitempty"`
+	FrontendLanguage *string `json:"frontend_language,omitempty"`
+	BackendCommand   *string `json:"backend_command,omitempty"`
+	BackendLanguage  *string `json:"backend_language,omitempty"`
 }
 
 type ProjectResponse struct {
-	ID            string  `json:"id"`
-	Name          string  `json:"name"`
-	Description   string  `json:"description"`
-	Host          string  `json:"host"`
-	Port          int32   `json:"port"`
-	WorkspacePath string  `json:"workspace_path"`
-	ContainerName *string `json:"container_name,omitempty"`
-	WorkdirPath   *string `json:"workdir_path,omitempty"`
-	CreatedAt     int64   `json:"created_at"`
-	UpdatedAt     int64   `json:"updated_at"`
+	ID               string  `json:"id"`
+	Name             string  `json:"name"`
+	Description      string  `json:"description"`
+	ExternalIP       string  `json:"external_ip"`
+	FrontendPort     int32   `json:"frontend_port"`
+	WorkspacePath    string  `json:"workspace_path"`
+	ContainerName    *string `json:"container_name,omitempty"`
+	WorkdirPath      *string `json:"workdir_path,omitempty"`
+	DbHost           *string `json:"db_host,omitempty"`
+	DbPort           *int32  `json:"db_port,omitempty"`
+	DbUser           *string `json:"db_user,omitempty"`
+	DbPassword       *string `json:"db_password,omitempty"`
+	DbName           *string `json:"db_name,omitempty"`
+	BackendPort      *int32  `json:"backend_port,omitempty"`
+	FrontendCommand  *string `json:"frontend_command,omitempty"`
+	FrontendLanguage *string `json:"frontend_language,omitempty"`
+	BackendCommand   *string `json:"backend_command,omitempty"`
+	BackendLanguage  *string `json:"backend_language,omitempty"`
+	CreatedAt        int64   `json:"created_at"`
+	UpdatedAt        int64   `json:"updated_at"`
 }
 
 type SessionResponse struct {
@@ -144,6 +164,22 @@ func ptrToNullString(s *string) sql.NullString {
 		return sql.NullString{Valid: false}
 	}
 	return sql.NullString{String: *s, Valid: true}
+}
+
+// Helper function to convert sql.NullInt32 to *int32
+func nullInt32ToPtr(ni sql.NullInt32) *int32 {
+	if !ni.Valid {
+		return nil
+	}
+	return &ni.Int32
+}
+
+// Helper function to convert *int32 to sql.NullInt32
+func ptrToNullInt32(i *int32) sql.NullInt32 {
+	if i == nil {
+		return sql.NullInt32{Valid: false}
+	}
+	return sql.NullInt32{Int32: *i, Valid: true}
 }
 
 func (s *Server) Start() error {
@@ -288,23 +324,33 @@ func (s *Server) handleCreateProject(c *gin.Context) {
 		return
 	}
 
-	proj, err := s.projectService.Create(c.Request.Context(), userID, req.Name, req.Description, req.Host, req.WorkspacePath, req.Port)
+	proj, err := s.projectService.Create(c.Request.Context(), userID, req.Name, req.Description, req.ExternalIP, req.WorkspacePath, req.FrontendPort)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, ProjectResponse{
-		ID:            proj.ID,
-		Name:          proj.Name,
-		Description:   proj.Description.String,
-		Host:          proj.Host,
-		Port:          proj.Port,
-		WorkspacePath: proj.WorkspacePath,
-		ContainerName: nullStringToPtr(proj.ContainerName),
-		WorkdirPath:   nullStringToPtr(proj.WorkdirPath),
-		CreatedAt:     proj.CreatedAt,
-		UpdatedAt:     proj.UpdatedAt,
+		ID:               proj.ID,
+		Name:             proj.Name,
+		Description:      proj.Description.String,
+		ExternalIP:       proj.ExternalIP,
+		FrontendPort:     proj.FrontendPort,
+		WorkspacePath:    proj.WorkspacePath,
+		ContainerName:    nullStringToPtr(proj.ContainerName),
+		WorkdirPath:      nullStringToPtr(proj.WorkdirPath),
+		DbHost:           nullStringToPtr(proj.DbHost),
+		DbPort:           nullInt32ToPtr(proj.DbPort),
+		DbUser:           nullStringToPtr(proj.DbUser),
+		DbPassword:       nullStringToPtr(proj.DbPassword),
+		DbName:           nullStringToPtr(proj.DbName),
+		BackendPort:      nullInt32ToPtr(proj.BackendPort),
+		FrontendCommand:  nullStringToPtr(proj.FrontendCommand),
+		FrontendLanguage: nullStringToPtr(proj.FrontendLanguage),
+		BackendCommand:   nullStringToPtr(proj.BackendCommand),
+		BackendLanguage:  nullStringToPtr(proj.BackendLanguage),
+		CreatedAt:        proj.CreatedAt,
+		UpdatedAt:        proj.UpdatedAt,
 	})
 }
 
@@ -319,16 +365,26 @@ func (s *Server) handleListProjects(c *gin.Context) {
 	response := make([]ProjectResponse, len(projects))
 	for i, proj := range projects {
 		response[i] = ProjectResponse{
-			ID:            proj.ID,
-			Name:          proj.Name,
-			Description:   proj.Description.String,
-			Host:          proj.Host,
-			Port:          proj.Port,
-			WorkspacePath: proj.WorkspacePath,
-			ContainerName: nullStringToPtr(proj.ContainerName),
-			WorkdirPath:   nullStringToPtr(proj.WorkdirPath),
-			CreatedAt:     proj.CreatedAt,
-			UpdatedAt:     proj.UpdatedAt,
+			ID:               proj.ID,
+			Name:             proj.Name,
+			Description:      proj.Description.String,
+			ExternalIP:       proj.ExternalIP,
+			FrontendPort:     proj.FrontendPort,
+			WorkspacePath:    proj.WorkspacePath,
+			ContainerName:    nullStringToPtr(proj.ContainerName),
+			WorkdirPath:      nullStringToPtr(proj.WorkdirPath),
+			DbHost:           nullStringToPtr(proj.DbHost),
+			DbPort:           nullInt32ToPtr(proj.DbPort),
+			DbUser:           nullStringToPtr(proj.DbUser),
+			DbPassword:       nullStringToPtr(proj.DbPassword),
+			DbName:           nullStringToPtr(proj.DbName),
+			BackendPort:      nullInt32ToPtr(proj.BackendPort),
+			FrontendCommand:  nullStringToPtr(proj.FrontendCommand),
+			FrontendLanguage: nullStringToPtr(proj.FrontendLanguage),
+			BackendCommand:   nullStringToPtr(proj.BackendCommand),
+			BackendLanguage:  nullStringToPtr(proj.BackendLanguage),
+			CreatedAt:        proj.CreatedAt,
+			UpdatedAt:        proj.UpdatedAt,
 		}
 	}
 
@@ -344,16 +400,26 @@ func (s *Server) handleGetProject(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ProjectResponse{
-		ID:            proj.ID,
-		Name:          proj.Name,
-		Description:   proj.Description.String,
-		Host:          proj.Host,
-		Port:          proj.Port,
-		WorkspacePath: proj.WorkspacePath,
-		ContainerName: nullStringToPtr(proj.ContainerName),
-		WorkdirPath:   nullStringToPtr(proj.WorkdirPath),
-		CreatedAt:     proj.CreatedAt,
-		UpdatedAt:     proj.UpdatedAt,
+		ID:               proj.ID,
+		Name:             proj.Name,
+		Description:      proj.Description.String,
+		ExternalIP:       proj.ExternalIP,
+		FrontendPort:     proj.FrontendPort,
+		WorkspacePath:    proj.WorkspacePath,
+		ContainerName:    nullStringToPtr(proj.ContainerName),
+		WorkdirPath:      nullStringToPtr(proj.WorkdirPath),
+		DbHost:           nullStringToPtr(proj.DbHost),
+		DbPort:           nullInt32ToPtr(proj.DbPort),
+		DbUser:           nullStringToPtr(proj.DbUser),
+		DbPassword:       nullStringToPtr(proj.DbPassword),
+		DbName:           nullStringToPtr(proj.DbName),
+		BackendPort:      nullInt32ToPtr(proj.BackendPort),
+		FrontendCommand:  nullStringToPtr(proj.FrontendCommand),
+		FrontendLanguage: nullStringToPtr(proj.FrontendLanguage),
+		BackendCommand:   nullStringToPtr(proj.BackendCommand),
+		BackendLanguage:  nullStringToPtr(proj.BackendLanguage),
+		CreatedAt:        proj.CreatedAt,
+		UpdatedAt:        proj.UpdatedAt,
 	})
 }
 
@@ -366,14 +432,24 @@ func (s *Server) handleUpdateProject(c *gin.Context) {
 	}
 
 	proj, err := s.projectService.Update(c.Request.Context(), project.Project{
-		ID:            projectID,
-		Name:          req.Name,
-		Description:   sql.NullString{String: req.Description, Valid: req.Description != ""},
-		Host:          req.Host,
-		Port:          req.Port,
-		WorkspacePath: req.WorkspacePath,
-		ContainerName: ptrToNullString(req.ContainerName),
-		WorkdirPath:   ptrToNullString(req.WorkdirPath),
+		ID:               projectID,
+		Name:             req.Name,
+		Description:      sql.NullString{String: req.Description, Valid: req.Description != ""},
+		ExternalIP:       req.ExternalIP,
+		FrontendPort:     req.FrontendPort,
+		WorkspacePath:    req.WorkspacePath,
+		ContainerName:    ptrToNullString(req.ContainerName),
+		WorkdirPath:      ptrToNullString(req.WorkdirPath),
+		DbHost:           ptrToNullString(req.DbHost),
+		DbPort:           ptrToNullInt32(req.DbPort),
+		DbUser:           ptrToNullString(req.DbUser),
+		DbPassword:       ptrToNullString(req.DbPassword),
+		DbName:           ptrToNullString(req.DbName),
+		BackendPort:      ptrToNullInt32(req.BackendPort),
+		FrontendCommand:  ptrToNullString(req.FrontendCommand),
+		FrontendLanguage: ptrToNullString(req.FrontendLanguage),
+		BackendCommand:   ptrToNullString(req.BackendCommand),
+		BackendLanguage:  ptrToNullString(req.BackendLanguage),
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
@@ -381,16 +457,26 @@ func (s *Server) handleUpdateProject(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ProjectResponse{
-		ID:            proj.ID,
-		Name:          proj.Name,
-		Description:   proj.Description.String,
-		Host:          proj.Host,
-		Port:          proj.Port,
-		WorkspacePath: proj.WorkspacePath,
-		ContainerName: nullStringToPtr(proj.ContainerName),
-		WorkdirPath:   nullStringToPtr(proj.WorkdirPath),
-		CreatedAt:     proj.CreatedAt,
-		UpdatedAt:     proj.UpdatedAt,
+		ID:               proj.ID,
+		Name:             proj.Name,
+		Description:      proj.Description.String,
+		ExternalIP:       proj.ExternalIP,
+		FrontendPort:     proj.FrontendPort,
+		WorkspacePath:    proj.WorkspacePath,
+		ContainerName:    nullStringToPtr(proj.ContainerName),
+		WorkdirPath:      nullStringToPtr(proj.WorkdirPath),
+		DbHost:           nullStringToPtr(proj.DbHost),
+		DbPort:           nullInt32ToPtr(proj.DbPort),
+		DbUser:           nullStringToPtr(proj.DbUser),
+		DbPassword:       nullStringToPtr(proj.DbPassword),
+		DbName:           nullStringToPtr(proj.DbName),
+		BackendPort:      nullInt32ToPtr(proj.BackendPort),
+		FrontendCommand:  nullStringToPtr(proj.FrontendCommand),
+		FrontendLanguage: nullStringToPtr(proj.FrontendLanguage),
+		BackendCommand:   nullStringToPtr(proj.BackendCommand),
+		BackendLanguage:  nullStringToPtr(proj.BackendLanguage),
+		CreatedAt:        proj.CreatedAt,
+		UpdatedAt:        proj.UpdatedAt,
 	})
 }
 

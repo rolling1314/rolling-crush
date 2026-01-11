@@ -67,9 +67,19 @@ class DatabaseManager:
                 'name': 项目名称,
                 'container_name': 容器名称,
                 'workdir_path': 工作目录路径,
-                'host': 主机地址,
-                'port': 端口,
-                'workspace_path': 工作空间路径
+                'external_ip': 外部IP地址,
+                'frontend_port': 前端端口,
+                'workspace_path': 工作空间路径,
+                'db_host': 数据库主机,
+                'db_port': 数据库端口,
+                'db_user': 数据库用户,
+                'db_password': 数据库密码,
+                'db_name': 数据库名称,
+                'backend_port': 后端端口,
+                'frontend_command': 前端命令,
+                'frontend_language': 前端语言,
+                'backend_command': 后端命令,
+                'backend_language': 后端语言
             }
         """
         if not self.conn:
@@ -84,9 +94,19 @@ class DatabaseManager:
                         p.name,
                         p.container_name,
                         p.workdir_path,
-                        p.host,
-                        p.port,
-                        p.workspace_path
+                        p.external_ip,
+                        p.frontend_port,
+                        p.workspace_path,
+                        p.db_host,
+                        p.db_port,
+                        p.db_user,
+                        p.db_password,
+                        p.db_name,
+                        p.backend_port,
+                        p.frontend_command,
+                        p.frontend_language,
+                        p.backend_command,
+                        p.backend_language
                     FROM sessions s
                     JOIN projects p ON s.project_id = p.id
                     WHERE s.id = %s

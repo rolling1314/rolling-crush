@@ -32,17 +32,27 @@ type Message struct {
 }
 
 type Project struct {
-	ID            string         `json:"id"`
-	UserID        string         `json:"user_id"`
-	Name          string         `json:"name"`
-	Description   sql.NullString `json:"description"`
-	Host          string         `json:"host"`
-	Port          int32          `json:"port"`
-	WorkspacePath string         `json:"workspace_path"`
-	ContainerName sql.NullString `json:"container_name"`
-	WorkdirPath   sql.NullString `json:"workdir_path"`
-	CreatedAt     int64          `json:"created_at"`
-	UpdatedAt     int64          `json:"updated_at"`
+	ID               string         `json:"id"`
+	UserID           string         `json:"user_id"`
+	Name             string         `json:"name"`
+	Description      sql.NullString `json:"description"`
+	CreatedAt        int64          `json:"created_at"`
+	UpdatedAt        int64          `json:"updated_at"`
+	ExternalIP       string         `json:"external_ip"`
+	FrontendPort     int32          `json:"frontend_port"`
+	WorkspacePath    string         `json:"workspace_path"`
+	ContainerName    sql.NullString `json:"container_name"`
+	WorkdirPath      sql.NullString `json:"workdir_path"`
+	DbHost           sql.NullString `json:"db_host"`
+	DbPort           sql.NullInt32  `json:"db_port"`
+	DbUser           sql.NullString `json:"db_user"`
+	DbPassword       sql.NullString `json:"db_password"`
+	DbName           sql.NullString `json:"db_name"`
+	BackendPort      sql.NullInt32  `json:"backend_port"`
+	FrontendCommand  sql.NullString `json:"frontend_command"`
+	FrontendLanguage sql.NullString `json:"frontend_language"`
+	BackendCommand   sql.NullString `json:"backend_command"`
+	BackendLanguage  sql.NullString `json:"backend_language"`
 }
 
 type Session struct {
