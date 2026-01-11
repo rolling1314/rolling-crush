@@ -290,6 +290,7 @@ class Sandbox:
         self.cpu_limit = cpu_limit
         self.destroy_delay = destroy_delay
         self.container = None
+        self.workdir = "/sandbox"  # 默认工作目录
         
     def __enter__(self):
         """启动沙箱容器"""
@@ -355,6 +356,9 @@ class Sandbox:
                 time.sleep(1)
                 self.container.reload()
             
+            # 保存工作目录
+            self.workdir = workdir
+            
             # 确保工作目录存在
             result = self.container.exec_run(f"mkdir -p {workdir}")
             if result.exit_code != 0:
@@ -395,7 +399,7 @@ class Sandbox:
         
         Args:
             code: 要执行的代码
-            language: 编程语言 (目前支持 python, bash)
+            language: 编程语言 (目前支持 python, bash, sh)
             
         Returns:
             {"stdout": str, "stderr": str, "exit_code": int}
@@ -408,13 +412,15 @@ class Sandbox:
             cmd = ["python", "-c", code]
         elif language == "bash":
             cmd = ["bash", "-c", code]
+        elif language == "sh":
+            cmd = ["sh", "-c", code]
         else:
             raise ValueError(f"不支持的语言: {language}")
         
         try:
             result = self.container.exec_run(
                 cmd,
-                workdir="/sandbox",
+                workdir=self.workdir,
                 demux=True,  # 分离 stdout 和 stderr
             )
             
@@ -445,11 +451,11 @@ class Sandbox:
         if not self.container:
             raise RuntimeError("沙箱未启动")
 
-        # 标准化路径：如果是绝对路径就直接使用，否则添加 /sandbox 前缀
+        # 标准化路径：如果是绝对路径就直接使用，否则添加工作目录前缀
         if path.startswith('/'):
             full_path = path
         else:
-            full_path = f"/sandbox/{path}"
+            full_path = f"{self.workdir}/{path}"
         
         # 自动创建目录结构（类似 Go 的 os.MkdirAll）
         dir_path = os.path.dirname(full_path)
@@ -483,11 +489,11 @@ class Sandbox:
         if not self.container:
             raise RuntimeError("沙箱未启动")
 
-        # 标准化路径：如果是绝对路径就直接使用，否则添加 /sandbox 前缀
+        # 标准化路径：如果是绝对路径就直接使用，否则添加工作目录前缀
         if path.startswith('/'):
             full_path = path
         else:
-            full_path = f"/sandbox/{path}"
+            full_path = f"{self.workdir}/{path}"
         result = self.container.exec_run(["cat", full_path])
         
         if result.exit_code != 0:
@@ -495,18 +501,22 @@ class Sandbox:
             
         return result.output.decode("utf-8")
     
-    def list_files(self, path: str = "/sandbox") -> list:
+    def list_files(self, path: str = None) -> list:
         """
         列出沙箱中的文件
         
         Args:
-            path: 目录路径
+            path: 目录路径，默认为工作目录
             
         Returns:
             文件名列表
         """
         if not self.container:
             raise RuntimeError("沙箱未启动")
+        
+        # 如果没有指定路径，使用工作目录
+        if path is None:
+            path = self.workdir
             
         result = self.container.exec_run(["ls", "-1", path])
         if result.exit_code != 0:
@@ -1024,83 +1034,122 @@ def get_file_tree():
             print(f"   容器ID: {sandbox.container.short_id}", flush=True)
             print(f"   开始构建文件树...", flush=True)
         
-        # 使用 Python 脚本在容器内生成文件树
-        tree_script = f'''
-import os
-import json
+        # 使用 shell 脚本在容器内生成文件树（不包含文件内容）
+        # 转义目标路径中的特殊字符
+        escaped_path = target_path.replace('"', '\\"').replace('$', '\\$').replace('`', '\\`')
+        
+        tree_script = f'''#!/bin/sh
 
-def should_ignore(name):
-    """检查文件是否应该被忽略"""
-    ignore_patterns = [
-        ".git", ".DS_Store", "node_modules", ".idea", ".vscode",
-        "__pycache__", ".pytest_cache", ".pyc", ".pyo", ".env", ".env.local"
-    ]
-    return name in ignore_patterns or name.startswith('.')
+# 目标路径
+TARGET="{escaped_path}"
+if [ "${{TARGET:0:1}}" != "/" ]; then
+    TARGET="/workspace/$TARGET"
+fi
 
-def build_tree(path, root_path, counter):
-    """递归构建文件树"""
-    try:
-        stat_info = os.stat(path)
-    except Exception as e:
-        return None
+# 检查路径是否存在
+if [ ! -e "$TARGET" ]; then
+    echo '{{"error": "Path does not exist: '"$TARGET"'"}}'
+    exit 0
+fi
+
+# 全局计数器文件
+COUNTER_FILE="/tmp/tree_counter_$$"
+echo "0" > "$COUNTER_FILE"
+
+# 获取并增加计数器
+next_id() {{
+    local current=$(cat "$COUNTER_FILE")
+    local next=$((current + 1))
+    echo "$next" > "$COUNTER_FILE"
+    echo "$next"
+}}
+
+# 检查是否应该忽略
+should_ignore() {{
+    local name="$1"
+    case "$name" in
+        .git|.DS_Store|node_modules|.idea|.vscode|__pycache__|.pytest_cache|*.pyc|*.pyo|.env|.env.local|.*) 
+            return 0 ;;
+        *) 
+            return 1 ;;
+    esac
+}}
+
+# 转义 JSON 字符串中的特殊字符
+escape_json() {{
+    printf '%s' "$1" | sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g; s/\\x08/\\\\b/g; s/\\x0c/\\\\f/g; s/\\n/\\\\n/g; s/\\r/\\\\r/g; s/\\t/\\\\t/g'
+}}
+
+# 构建文件树（递归）
+build_tree() {{
+    local path="$1"
+    local root_path="$2"
+    
+    # 检查路径是否存在
+    [ -e "$path" ] || return
     
     # 计算相对路径
-    rel_path = os.path.relpath(path, root_path)
-    if rel_path == '.':
-        rel_path = ''
+    local rel_path="${{path#$root_path}}"
+    [ -z "$rel_path" ] && rel_path="/"
+    [ "${{rel_path:0:1}}" != "/" ] && rel_path="/$rel_path"
     
-    counter[0] += 1
-    node = {{
-        "id": str(counter[0]),
-        "name": os.path.basename(path) if path != root_path else os.path.basename(root_path),
-        "path": "/" + rel_path.replace(os.sep, "/") if rel_path else "/"
-    }}
+    # 获取基本名称
+    local name=$(basename "$path")
+    [ "$path" = "$root_path" ] && name=$(basename "$root_path")
     
-    if os.path.isdir(path):
-        node["type"] = "folder"
-        node["children"] = []
+    # 转义名称和路径
+    local escaped_name=$(escape_json "$name")
+    local escaped_rel_path=$(escape_json "$rel_path")
+    
+    # 获取节点ID
+    local node_id=$(next_id)
+    
+    # 检查是否是目录
+    if [ -d "$path" ]; then
+        # 构建子节点列表
+        local children=""
+        local first=1
         
-        try:
-            entries = os.listdir(path)
-            for entry in sorted(entries):
-                if should_ignore(entry):
-                    continue
-                
-                child_path = os.path.join(path, entry)
-                child_node = build_tree(child_path, root_path, counter)
-                if child_node:
-                    node["children"].append(child_node)
-        except Exception as e:
-            pass
-    else:
-        node["type"] = "file"
-        # 如果文件小于 1MB，读取内容
-        if stat_info.st_size < 1024 * 1024:
-            try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    node["content"] = f.read()
-            except:
-                # 无法读取的文件（二进制文件等）不包含内容
-                pass
-    
-    return node
+        for entry in "$path"/*; do
+            [ -e "$entry" ] || continue
+            local entry_name=$(basename "$entry")
+            should_ignore "$entry_name" && continue
+            
+            # 递归构建子树
+            local child=$(build_tree "$entry" "$root_path")
+            [ -z "$child" ] && continue
+            
+            [ $first -eq 0 ] && children="$children,"
+            children="$children$child"
+            first=0
+        done
+        
+        # 输出目录节点
+        printf '{{"id":"%s","name":"%s","path":"%s","type":"folder","children":[%s]}}' \\
+            "$node_id" "$escaped_name" "$escaped_rel_path" "$children"
+    else
+        # 输出文件节点
+        printf '{{"id":"%s","name":"%s","path":"%s","type":"file"}}' \\
+            "$node_id" "$escaped_name" "$escaped_rel_path"
+    fi
+}}
 
-# 获取目标路径
-target = "{target_path}"
-if not target.startswith('/'):
-    target = os.path.join('/sandbox', target)
+# 开始构建树
+result=$(build_tree "$TARGET" "$TARGET")
+echo "$result"
 
-# 确保路径存在
-if not os.path.exists(target):
-    print(json.dumps({{"error": "Path does not exist: " + target}}))
-else:
-    counter = [0]
-    tree = build_tree(target, target, counter)
-    print(json.dumps(tree, ensure_ascii=False))
+# 清理临时文件
+rm -f "$COUNTER_FILE"
 '''
         
         # 执行脚本
-        result = sandbox.run_code(tree_script, language='python')
+        result = sandbox.run_code(tree_script, language='sh')
+        
+        print(f"   脚本执行完成, 退出码: {result['exit_code']}", flush=True)
+        if result['stdout']:
+            print(f"   stdout前100字符: {result['stdout'][:100]}", flush=True)
+        if result['stderr']:
+            print(f"   stderr: {result['stderr']}", flush=True)
         
         if result['exit_code'] != 0:
             print(f"❌ [GET /file/tree] 生成文件树失败: {result['stderr']}", flush=True)
