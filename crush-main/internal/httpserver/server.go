@@ -76,9 +76,9 @@ type UserInfo struct {
 type ProjectRequest struct {
 	Name             string  `json:"name" binding:"required"`
 	Description      string  `json:"description"`
-	ExternalIP       string  `json:"external_ip" binding:"required"`
-	FrontendPort     int32   `json:"frontend_port" binding:"required"`
-	WorkspacePath    string  `json:"workspace_path" binding:"required"`
+	ExternalIP       string  `json:"external_ip"`
+	FrontendPort     int32   `json:"frontend_port"`
+	WorkspacePath    string  `json:"workspace_path"`
 	ContainerName    *string `json:"container_name,omitempty"`
 	WorkdirPath      *string `json:"workdir_path,omitempty"`
 	DbHost           *string `json:"db_host,omitempty"`
@@ -91,6 +91,7 @@ type ProjectRequest struct {
 	FrontendLanguage *string `json:"frontend_language,omitempty"`
 	BackendCommand   *string `json:"backend_command,omitempty"`
 	BackendLanguage  *string `json:"backend_language,omitempty"`
+	NeedDatabase     bool    `json:"need_database"`
 }
 
 type ProjectResponse struct {
@@ -180,6 +181,14 @@ func ptrToNullInt32(i *int32) sql.NullInt32 {
 		return sql.NullInt32{Valid: false}
 	}
 	return sql.NullInt32{Int32: *i, Valid: true}
+}
+
+// Helper function to convert *string to string value
+func stringPtrToValue(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 func (s *Server) Start() error {
@@ -324,11 +333,90 @@ func (s *Server) handleCreateProject(c *gin.Context) {
 		return
 	}
 
-	proj, err := s.projectService.Create(c.Request.Context(), userID, req.Name, req.Description, req.ExternalIP, req.WorkspacePath, req.FrontendPort)
+	slog.Info("Creating project", "name", req.Name, "backend_language", req.BackendLanguage, "need_database", req.NeedDatabase)
+
+	// 调用沙箱服务创建容器
+	sandboxResp, err := s.sandboxClient.CreateProject(c.Request.Context(), sandbox.CreateProjectRequest{
+		ProjectName:     req.Name,
+		BackendLanguage: stringPtrToValue(req.BackendLanguage),
+		NeedDatabase:    req.NeedDatabase,
+	})
 	if err != nil {
+		slog.Error("Failed to create project container", "error", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: fmt.Sprintf("Failed to create container: %v", err)})
+		return
+	}
+
+	slog.Info("Container created",
+		"container_id", sandboxResp.ContainerID,
+		"container_name", sandboxResp.ContainerName,
+		"frontend_port", sandboxResp.FrontendPort,
+		"backend_port", sandboxResp.BackendPort,
+		"workdir", sandboxResp.Workdir)
+
+	// 设置默认值
+	externalIP := req.ExternalIP
+	if externalIP == "" {
+		externalIP = "localhost"
+	}
+	workspacePath := req.WorkspacePath
+	if workspacePath == "" {
+		workspacePath = "/workspace"
+	}
+
+	// 创建项目记录
+	proj, err := s.projectService.Create(
+		c.Request.Context(),
+		userID,
+		req.Name,
+		req.Description,
+		externalIP,
+		workspacePath,
+		sandboxResp.FrontendPort,
+	)
+	if err != nil {
+		slog.Error("Failed to create project in database", "error", err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return
 	}
+
+	// 更新项目，添加容器信息
+	// 存储容器ID（12位短ID）到 container_name 字段
+	proj.ContainerName = sql.NullString{String: sandboxResp.ContainerID, Valid: true}
+	// 工作目录为 /workspace
+	proj.WorkdirPath = sql.NullString{String: sandboxResp.Workdir, Valid: true}
+	if req.BackendLanguage != nil && *req.BackendLanguage != "" {
+		proj.BackendLanguage = sql.NullString{String: *req.BackendLanguage, Valid: true}
+		if sandboxResp.BackendPort != nil {
+			proj.BackendPort = sql.NullInt32{Int32: *sandboxResp.BackendPort, Valid: true}
+		}
+	}
+	proj.FrontendLanguage = sql.NullString{String: "vite", Valid: true}
+
+	slog.Info("Updating project with container info",
+		"container_id", sandboxResp.ContainerID,
+		"workdir", sandboxResp.Workdir,
+		"frontend_port", sandboxResp.FrontendPort,
+		"backend_port", sandboxResp.BackendPort)
+
+	// 如果需要数据库，配置数据库连接信息
+	if req.NeedDatabase {
+		proj.DbHost = sql.NullString{String: "localhost", Valid: true}
+		proj.DbPort = sql.NullInt32{Int32: 5432, Valid: true}
+		proj.DbUser = sql.NullString{String: "postgres", Valid: true}
+		proj.DbPassword = sql.NullString{String: "postgres", Valid: true}
+		proj.DbName = sql.NullString{String: req.Name, Valid: true}
+	}
+
+	// 保存更新后的项目信息
+	proj, err = s.projectService.Update(c.Request.Context(), proj)
+	if err != nil {
+		slog.Error("Failed to update project with container info", "error", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	slog.Info("Project created successfully", "project_id", proj.ID)
 
 	c.JSON(http.StatusOK, ProjectResponse{
 		ID:               proj.ID,

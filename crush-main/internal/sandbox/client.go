@@ -362,6 +362,39 @@ func (c *Client) doRequest(ctx context.Context, method, path string, reqBody, re
 	return nil
 }
 
+// CreateProjectRequest 创建项目请求
+type CreateProjectRequest struct {
+	ProjectName     string `json:"project_name"`
+	BackendLanguage string `json:"backend_language,omitempty"` // "", "go", "java", "python"
+	NeedDatabase    bool   `json:"need_database"`
+}
+
+// CreateProjectResponse 创建项目响应
+type CreateProjectResponse struct {
+	Status        string `json:"status"`
+	ContainerID   string `json:"container_id"`   // 容器ID (12位短ID)
+	ContainerName string `json:"container_name"` // 容器名称
+	FrontendPort  int32  `json:"frontend_port"`
+	BackendPort   *int32 `json:"backend_port,omitempty"`
+	Image         string `json:"image"`
+	Workdir       string `json:"workdir"`  // 工作目录
+	Message       string `json:"message"`
+	Error         string `json:"error,omitempty"`
+}
+
+// CreateProject 创建项目容器
+func (c *Client) CreateProject(ctx context.Context, req CreateProjectRequest) (*CreateProjectResponse, error) {
+	var resp CreateProjectResponse
+	err := c.doRequest(ctx, "POST", "/projects/create", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != "" {
+		return &resp, fmt.Errorf("sandbox error: %s", resp.Error)
+	}
+	return &resp, nil
+}
+
 // GetDefaultClient 获取默认的沙箱客户端（单例）
 var defaultClient *Client
 

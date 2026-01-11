@@ -30,6 +30,10 @@ interface Project {
   external_ip: string;
   frontend_port: number;
   workspace_path: string;
+  backend_language?: string;
+  backend_port?: number;
+  container_name?: string;
+  need_database?: boolean;
   created_at: number;
   updated_at: number;
 }
@@ -50,11 +54,10 @@ export default function ProjectListPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newProject, setNewProject] = useState({ 
     name: '', 
-    description: '', 
-    external_ip: 'localhost', 
-    frontend_port: 8080, 
-    workspace_path: '.' 
+    backend_language: '',  // '', 'go', 'java', 'python'
+    need_database: false 
   });
+  const [creating, setCreating] = useState(false);
   const navigate = useNavigate();
   const username = localStorage.getItem('username') || 'User';
   const email = localStorage.getItem('email') || 'user@example.com';
@@ -97,16 +100,29 @@ export default function ProjectListPage() {
   const createProject = async () => {
     if (!newProject.name.trim()) return;
     
+    setCreating(true);
     try {
       const token = localStorage.getItem('jwt_token');
-      await axios.post(`${API_URL}/projects`, newProject, {
+      
+      // 构建请求数据
+      const projectData: any = {
+        name: newProject.name,
+        backend_language: newProject.backend_language || null,
+        need_database: newProject.need_database
+      };
+      
+      await axios.post(`${API_URL}/projects`, projectData, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      
       setShowCreateModal(false);
-      setNewProject({ name: '', description: '', external_ip: 'localhost', frontend_port: 8080, workspace_path: '.' });
+      setNewProject({ name: '', backend_language: '', need_database: false });
       loadProjects();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create project:', error);
+      alert('创建项目失败: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -404,6 +420,7 @@ export default function ProjectListPage() {
               </div>
 
               <div className="space-y-4">
+                {/* 项目名称 */}
                 <div>
                   <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">
                     Project Name
@@ -418,66 +435,98 @@ export default function ProjectListPage() {
                   />
                 </div>
 
+                {/* 后端语言选择 */}
                 <div>
                   <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">
-                    Description
+                    Backend Language (Optional)
                   </label>
-                  <textarea
-                    placeholder="What is this project about?"
-                    value={newProject.description}
-                    onChange={e => setNewProject({ ...newProject, description: e.target.value })}
-                    className="w-full px-4 py-2.5 bg-[#0A0A0A] border border-[#333] rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all resize-none text-white placeholder-gray-600 text-sm h-24"
-                  />
+                  <div className="grid grid-cols-4 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNewProject({ ...newProject, backend_language: '' })}
+                      className={`px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
+                        newProject.backend_language === '' 
+                          ? 'bg-blue-500 border-blue-500 text-white' 
+                          : 'bg-[#0A0A0A] border-[#333] text-gray-400 hover:border-blue-500'
+                      }`}
+                    >
+                      None
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewProject({ ...newProject, backend_language: 'go' })}
+                      className={`px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
+                        newProject.backend_language === 'go' 
+                          ? 'bg-blue-500 border-blue-500 text-white' 
+                          : 'bg-[#0A0A0A] border-[#333] text-gray-400 hover:border-blue-500'
+                      }`}
+                    >
+                      Go
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewProject({ ...newProject, backend_language: 'java' })}
+                      className={`px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
+                        newProject.backend_language === 'java' 
+                          ? 'bg-blue-500 border-blue-500 text-white' 
+                          : 'bg-[#0A0A0A] border-[#333] text-gray-400 hover:border-blue-500'
+                      }`}
+                    >
+                      Java
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewProject({ ...newProject, backend_language: 'python' })}
+                      className={`px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
+                        newProject.backend_language === 'python' 
+                          ? 'bg-blue-500 border-blue-500 text-white' 
+                          : 'bg-[#0A0A0A] border-[#333] text-gray-400 hover:border-blue-500'
+                      }`}
+                    >
+                      Python
+                    </button>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                {/* 数据库选项 - 仅在选择了后端语言时显示 */}
+                {newProject.backend_language && (
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">External IP</label>
-                    <input
-                      type="text"
-                      placeholder="localhost"
-                      value={newProject.external_ip}
-                      onChange={e => setNewProject({ ...newProject, external_ip: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-[#0A0A0A] border border-[#333] rounded-lg focus:border-blue-500 text-white text-sm"
-                    />
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newProject.need_database}
+                        onChange={e => setNewProject({ ...newProject, need_database: e.target.checked })}
+                        className="w-4 h-4 rounded bg-[#0A0A0A] border-[#333] text-blue-500 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-300">Need Database (PostgreSQL)</span>
+                    </label>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">Frontend Port</label>
-                    <input
-                      type="number"
-                      placeholder="8080"
-                      value={newProject.frontend_port}
-                      onChange={e => setNewProject({ ...newProject, frontend_port: parseInt(e.target.value) || 0 })}
-                      className="w-full px-4 py-2.5 bg-[#0A0A0A] border border-[#333] rounded-lg focus:border-blue-500 text-white text-sm"
-                    />
-                  </div>
+                )}
+
+                {/* 提示信息 */}
+                <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <p className="text-xs text-blue-400">
+                    ✨ A Docker container will be automatically created with frontend (Vite) 
+                    {newProject.backend_language && ` and ${newProject.backend_language.toUpperCase()} backend`}
+                    {newProject.need_database && ' with PostgreSQL database'}
+                  </p>
                 </div>
-                
-                 <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">Workspace Path</label>
-                    <input
-                      type="text"
-                      placeholder="."
-                      value={newProject.workspace_path}
-                      onChange={e => setNewProject({ ...newProject, workspace_path: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-[#0A0A0A] border border-[#333] rounded-lg focus:border-blue-500 text-white text-sm font-mono"
-                    />
-                  </div>
               </div>
 
               <div className="flex gap-3 mt-8">
                 <button
                   onClick={() => setShowCreateModal(false)}
-                  className="flex-1 px-4 py-2.5 bg-[#252525] text-white font-medium rounded-lg hover:bg-[#333] transition-colors text-sm"
+                  disabled={creating}
+                  className="flex-1 px-4 py-2.5 bg-[#252525] text-white font-medium rounded-lg hover:bg-[#333] disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={createProject}
-                  disabled={!newProject.name.trim()}
+                  disabled={!newProject.name.trim() || creating}
                   className="flex-1 px-4 py-2.5 bg-white text-black font-medium rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
                 >
-                  Create Project
+                  {creating ? 'Creating...' : 'Create Project'}
                 </button>
               </div>
             </div>
