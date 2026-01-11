@@ -1,20 +1,19 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { LoginPage } from './components/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ProjectListPage from './pages/ProjectListPage';
 import WorkspacePage from './pages/WorkspacePage';
+import LandingPage from './pages/LandingPage';
 import './App.css';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('jwt_token');
-  return token ? <>{children}</> : <Navigate to="/login" />;
+  return token ? <>{children}</> : <Navigate to="/" />;
 }
 
 function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/login" element={<LoginPage onLoginSuccess={() => {}} />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route
           path="/projects"
@@ -32,7 +31,9 @@ function App() {
             </PrivateRoute>
           }
         />
-        <Route path="/" element={<Navigate to="/projects" />} />
+        <Route path="/" element={<LandingPage />} />
+        {/* Redirect any unknown routes to home */}
+        <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>
   );

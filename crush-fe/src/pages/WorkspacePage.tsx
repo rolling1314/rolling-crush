@@ -93,6 +93,18 @@ export default function WorkspacePage() {
 
   const activeFile = openFiles.find(f => f.id === activeFileId) || null;
 
+  // Refs for accessing latest state in WebSocket callbacks
+  const projectRef = useRef<Project | null>(null);
+  const currentSessionIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    projectRef.current = project;
+  }, [project]);
+
+  useEffect(() => {
+    currentSessionIdRef.current = currentSessionId;
+  }, [currentSessionId]);
+
   useEffect(() => {
     loadProjectInfo();
     loadSessions();
@@ -387,9 +399,13 @@ export default function WorkspacePage() {
       }
       
       // 如果消息包含工具调用结果，刷新文件树（因为工具可能修改了文件）
-      if (convertedMsg.toolResults && convertedMsg.toolResults.length > 0 && project?.workspace_path && currentSessionId) {
+      // Use refs to get latest state inside WebSocket callback closure
+      const currentProject = projectRef.current;
+      const currentSession = currentSessionIdRef.current;
+
+      if (convertedMsg.toolResults && convertedMsg.toolResults.length > 0 && currentProject?.workspace_path && currentSession) {
         console.log('Tool result detected, refreshing file tree...');
-        loadFiles(project.workspace_path, currentSessionId);
+        loadFiles(currentProject.workspace_path, currentSession);
       }
     }
   };
