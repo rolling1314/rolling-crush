@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,6 +36,7 @@ import (
 	"github.com/charmbracelet/crush/internal/server"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/shell"
+	"github.com/charmbracelet/crush/internal/storage"
 	"github.com/charmbracelet/crush/internal/term"
 	"github.com/charmbracelet/crush/internal/tui/components/anim"
 	"github.com/charmbracelet/crush/internal/tui/styles"
@@ -121,6 +124,11 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 
 	app.setupEvents()
 
+	// Initialize MinIO storage client
+	if err := storage.InitGlobalMinIOClient(); err != nil {
+		slog.Warn("Failed to initialize MinIO client, image upload will be unavailable", "error", err)
+	}
+
 	// Initialize LSP clients in the background.
 	app.initLSPClients(ctx)
 
@@ -146,7 +154,7 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 	} else {
 		slog.Warn("No agent configuration found, agent will be initialized when session config is loaded")
 	}
-	
+
 	return app, nil
 }
 
@@ -167,19 +175,27 @@ func (app *App) HandleClientDisconnect() {
 	fmt.Println("Current session ID cleared")
 }
 
+// ImageAttachment represents an image attached to a message
+type ImageAttachment struct {
+	URL      string `json:"url"`
+	MimeType string `json:"mime_type"`
+	Filename string `json:"filename"`
+}
+
 // HandleClientMessage processes messages from the WebSocket client
 func (app *App) HandleClientMessage(rawMsg []byte) {
 	fmt.Println("=== HandleClientMessage called ===")
 	fmt.Println("Raw message:", string(rawMsg))
-	
+
 	type ClientMsg struct {
-		Type       string `json:"type"`
-		Content    string `json:"content"`
-		SessionID  string `json:"sessionID"` // Optional: if frontend sends it
-		ID         string `json:"id"`
-		ToolCallID string `json:"tool_call_id"`
-		Granted    bool   `json:"granted"`
-		Denied     bool   `json:"denied"`
+		Type       string            `json:"type"`
+		Content    string            `json:"content"`
+		SessionID  string            `json:"sessionID"` // Optional: if frontend sends it
+		ID         string            `json:"id"`
+		ToolCallID string            `json:"tool_call_id"`
+		Granted    bool              `json:"granted"`
+		Denied     bool              `json:"denied"`
+		Images     []ImageAttachment `json:"images"` // Image attachments
 	}
 
 	var msg ClientMsg
@@ -234,7 +250,7 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 	// Use existing session or create new one
 	sessionID := msg.SessionID
 	fmt.Println("Processing message, sessionID from message:", sessionID)
-	
+
 	if sessionID == "" {
 		fmt.Println("No sessionID in message, checking currentSessionID:", app.currentSessionID)
 		if app.currentSessionID == "" {
@@ -272,11 +288,60 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 		fmt.Println("AgentCoordinator already initialized")
 	}
 
+	// Fetch image attachments if any
+	var attachments []message.Attachment
+	if len(msg.Images) > 0 {
+		fmt.Printf("Processing %d image attachments\n", len(msg.Images))
+		minioClient := storage.GetMinIOClient()
+
+		for _, img := range msg.Images {
+			fmt.Printf("Fetching image: %s\n", img.URL)
+
+			var imageData []byte
+			var mimeType string
+			var err error
+
+			// Check if it's a MinIO URL and fetch accordingly
+			if minioClient != nil && minioClient.IsMinIOURL(img.URL) {
+				imageData, mimeType, err = minioClient.GetFile(context.Background(), img.URL)
+			} else {
+				// Fetch from external URL
+				imageData, mimeType, err = fetchImageFromURL(img.URL)
+			}
+
+			if err != nil {
+				fmt.Printf("Failed to fetch image %s: %v\n", img.URL, err)
+				slog.Error("Failed to fetch image", "url", img.URL, "error", err)
+				continue
+			}
+
+			// Use provided mime type if available
+			if img.MimeType != "" {
+				mimeType = img.MimeType
+			}
+
+			filename := img.Filename
+			if filename == "" {
+				// Extract filename from URL
+				parts := strings.Split(img.URL, "/")
+				filename = parts[len(parts)-1]
+			}
+
+			attachments = append(attachments, message.Attachment{
+				FilePath: img.URL,
+				FileName: filename,
+				MimeType: mimeType,
+				Content:  imageData,
+			})
+			fmt.Printf("Image attachment added: %s (%s, %d bytes)\n", filename, mimeType, len(imageData))
+		}
+	}
+
 	fmt.Println("About to call AgentCoordinator.Run in goroutine")
 	// Run the agent asynchronously
 	go func() {
 		fmt.Println("Inside goroutine, calling AgentCoordinator.Run")
-		_, err := app.AgentCoordinator.Run(context.Background(), sessionID, msg.Content)
+		_, err := app.AgentCoordinator.Run(context.Background(), sessionID, msg.Content, attachments...)
 		if err != nil {
 			fmt.Println("Agent run error:", err)
 			slog.Error("Agent run error", "error", err)
@@ -285,6 +350,31 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 		}
 	}()
 	fmt.Println("Goroutine started, HandleClientMessage returning")
+}
+
+// fetchImageFromURL fetches an image from an external URL
+func fetchImageFromURL(url string) ([]byte, string, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to fetch image: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("failed to fetch image: status %d", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to read image data: %w", err)
+	}
+
+	mimeType := resp.Header.Get("Content-Type")
+	if mimeType == "" {
+		mimeType = http.DetectContentType(data)
+	}
+
+	return data, mimeType, nil
 }
 
 // Config returns the application configuration.
@@ -487,20 +577,20 @@ func setupSubscriber[T any](
 
 func (app *App) InitCoderAgent(ctx context.Context) error {
 	fmt.Println("=== InitCoderAgent called ===")
-	
+
 	// Ensure agent configuration exists (for Web mode)
 	if app.config.Agents == nil {
 		app.config.Agents = make(map[string]config.Agent)
 	}
-	
+
 	coderAgentCfg, ok := app.config.Agents[config.AgentCoder]
 	if !ok || coderAgentCfg.ID == "" {
 		fmt.Println("No coder agent config found, creating default config")
 		// Create a default coder agent config for Web mode
 		coderAgentCfg = config.Agent{
-			ID:           config.AgentCoder,
-			Name:         "Coder",
-			Model:        config.SelectedModelTypeLarge,
+			ID:    config.AgentCoder,
+			Name:  "Coder",
+			Model: config.SelectedModelTypeLarge,
 			AllowedTools: []string{
 				"agent",
 				"agentic_fetch",
@@ -524,7 +614,7 @@ func (app *App) InitCoderAgent(ctx context.Context) error {
 		app.config.Agents[config.AgentCoder] = coderAgentCfg
 		fmt.Println("Default coder agent config created")
 	}
-	
+
 	var err error
 	fmt.Println("Creating coordinator with dbReader:", app.db != nil)
 	app.AgentCoordinator, err = agent.NewCoordinator(
