@@ -3,6 +3,7 @@ import RegisterPage from './pages/RegisterPage';
 import ProjectListPage from './pages/ProjectListPage';
 import WorkspacePage from './pages/WorkspacePage';
 import LandingPage from './pages/LandingPage';
+import GitHubCallbackPage from './pages/GitHubCallbackPage';
 import './App.css';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -32,6 +33,8 @@ function App() {
           }
         />
         <Route path="/" element={<LandingPage />} />
+        {/* GitHub OAuth callback */}
+        <Route path="/auth/github/callback" element={<GitHubCallbackPage />} />
         {/* Redirect any unknown routes to home */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
