@@ -42,7 +42,7 @@ export function SessionConfigPanel({ sessionId, compact = false }: SessionConfig
     try {
       setLoading(true);
       const token = localStorage.getItem('jwt_token');
-      const response = await fetch(`http://localhost:8001/api/sessions/${sessionId}/config`, {
+      const response = await fetch(`/api/sessions/${sessionId}/config`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -217,7 +217,7 @@ function EditConfigModal({ sessionId, currentConfig, onClose, onSave }: EditConf
       setError(null);
 
       const token = localStorage.getItem('jwt_token');
-      const response = await fetch(`http://localhost:8001/api/sessions/${sessionId}/config`, {
+      const response = await fetch(`/api/sessions/${sessionId}/config`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

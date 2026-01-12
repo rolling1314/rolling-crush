@@ -9,8 +9,8 @@ import { ModelSelector } from '../components/ModelSelector';
 import { SessionConfigPanel } from '../components/SessionConfigPanel';
 import { type FileNode, type Message, type PermissionRequest, type ToolCall, type ToolResult } from '../types';
 
-const API_URL = 'http://localhost:8001/api';
-const WS_URL = 'ws://localhost:8002/ws';
+const API_URL = '/api';
+const WS_URL = '/ws';
 
 interface Session {
   id: string;
@@ -514,7 +514,7 @@ export default function WorkspacePage() {
       }
       
       const token = localStorage.getItem('jwt_token');
-      const url = `http://localhost:8001/api/files?session_id=${encodeURIComponent(effectiveSessionId)}&path=${encodeURIComponent(workspacePath)}`;
+      const url = `/api/files?session_id=${encodeURIComponent(effectiveSessionId)}&path=${encodeURIComponent(workspacePath)}`;
       console.log('Loading file tree:', { sessionId: effectiveSessionId, path: workspacePath, url, isBackground });
       
       const response = await fetch(url, {
