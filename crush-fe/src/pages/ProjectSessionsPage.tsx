@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8081/api';
+const API_URL = 'http://localhost:8001/api';
 
 interface Session {
   id: string;

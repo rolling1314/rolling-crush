@@ -85,19 +85,19 @@ crush -y
 		// Start background subscription (replaces TUI event loop)
 		go app.Subscribe()
 
-		// Start HTTP server on 8081 for authentication and API requests
+		// Start HTTP server on 8001 for authentication and API requests
 		go func() {
 			if err := app.HTTPServer.Start(); err != nil {
 				slog.Error("HTTP server error", "error", err)
 			}
 		}()
 
-		// Start WebSocket server on 8080 for chat communication with frontend
-		go app.WSServer.Start("8080")
+		// Start WebSocket server on 8002 for chat communication with frontend
+		go app.WSServer.Start("8002")
 
 		slog.Info("Crush servers are running")
-		slog.Info("HTTP Server: http://localhost:8081")
-		slog.Info("WebSocket Server: ws://localhost:8080")
+		slog.Info("HTTP Server: http://localhost:8001")
+		slog.Info("WebSocket Server: ws://localhost:8002")
 		slog.Info("Press Ctrl+C to stop.")
 
 		// Wait for interrupt signal to gracefully shutdown

@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8081/api';
+const API_URL = 'http://localhost:8001/api';
 
 interface Project {
   id: string;
