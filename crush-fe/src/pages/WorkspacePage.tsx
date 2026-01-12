@@ -665,7 +665,7 @@ export default function WorkspacePage() {
     }
   };
 
-  const handleSendMessage = (content: string, contextFiles: FileNode[] = []) => {
+  const handleSendMessage = (content: string, contextFiles: FileNode[] = [], images: { url: string; filename: string; mime_type: string }[] = []) => {
     if (!currentSessionId) {
       console.error('No session selected');
       return;
@@ -705,12 +705,27 @@ export default function WorkspacePage() {
     // 不在前端预先添加用户消息，后端会广播回来
     // 这样避免消息重复显示
 
-    // 通过 WebSocket 发送消息
-    const messageData = {
+    // 通过 WebSocket 发送消息，包含图片附件
+    const messageData: {
+      type: string;
+      content: string;
+      sessionID: string;
+      images?: { url: string; filename: string; mime_type: string }[];
+    } = {
       type: 'message',
       content: messageContent,
       sessionID: currentSessionId,
     };
+    
+    // Add images if any
+    if (images.length > 0) {
+      messageData.images = images.map(img => ({
+        url: img.url,
+        filename: img.filename,
+        mime_type: img.mime_type,
+      }));
+      console.log('Sending message with images:', messageData.images);
+    }
     
     wsRef.current.send(JSON.stringify(messageData));
     console.log('Message sent via WebSocket:', messageData);

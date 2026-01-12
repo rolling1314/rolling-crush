@@ -86,5 +86,23 @@ export type Message = {
   toolCalls?: ToolCall[];
   toolResults?: ToolResult[];
   finishInfo?: FinishInfo;
+  images?: ImageAttachment[];
 };
 
+// Image attachment type
+export interface ImageAttachment {
+  url: string;
+  filename: string;
+  mime_type: string;
+  size?: number;
+  // For local preview before upload
+  localPreview?: string;
+}
+
+// Image upload response from the server
+export interface ImageUploadResponse {
+  url: string;
+  filename: string;
+  mime_type: string;
+  size: number;
+}

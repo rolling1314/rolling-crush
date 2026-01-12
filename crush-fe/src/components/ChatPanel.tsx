@@ -1,16 +1,18 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, History, X, File as FileIcon, Folder as FolderIcon, ChevronDown, ChevronRight, Sparkles, Square, Copy, Check } from 'lucide-react';
+import { Send, History, X, File as FileIcon, Folder as FolderIcon, ChevronDown, ChevronRight, Sparkles, Square, Copy, Check, ImagePlus, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { type Message, type PermissionRequest, type FileNode } from '../types';
+import { type Message, type PermissionRequest, type FileNode, type ImageAttachment, type ImageUploadResponse } from '../types';
 import { ToolCallDisplay } from './ToolCallDisplay';
 import { cn } from '../lib/utils';
 import 'highlight.js/styles/github-dark.css';
 
+const API_URL = '/api';
+
 interface ChatPanelProps {
   messages: Message[];
-  onSendMessage: (content: string, files?: FileNode[]) => void;
+  onSendMessage: (content: string, files?: FileNode[], images?: ImageAttachment[]) => void;
   pendingPermissions: Map<string, PermissionRequest>;
   onPermissionApprove: (toolCallId: string) => void;
   onPermissionDeny: (toolCallId: string) => void;
@@ -76,7 +78,55 @@ const ThinkingProcess = ({ reasoning, isStreaming, hasContent }: { reasoning: st
   );
 };
 
-const UserMessageRenderer = ({ content }: { content: string }) => {
+// Component to display images in a message
+const MessageImages = ({ images }: { images: ImageAttachment[] }) => {
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  
+  if (!images || images.length === 0) return null;
+  
+  return (
+    <>
+      <div className="flex flex-wrap gap-2 mt-2">
+        {images.map((img, idx) => (
+          <div key={idx} className="relative group cursor-pointer" onClick={() => setSelectedImage(img.url)}>
+            <img 
+              src={img.url} 
+              alt={img.filename}
+              className="max-h-40 max-w-[200px] object-contain rounded border border-green-500/30 hover:border-green-400 transition-colors"
+            />
+            <span className="absolute bottom-0 left-0 right-0 bg-black/70 text-[10px] text-green-300 truncate px-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {img.filename}
+            </span>
+          </div>
+        ))}
+      </div>
+      
+      {/* Full-size image modal */}
+      {selectedImage && (
+        <div 
+          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+          onClick={() => setSelectedImage(null)}
+        >
+          <div className="relative max-w-full max-h-full">
+            <img 
+              src={selectedImage} 
+              alt="Full size"
+              className="max-w-full max-h-[90vh] object-contain rounded"
+            />
+            <button
+              onClick={() => setSelectedImage(null)}
+              className="absolute top-2 right-2 p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+const UserMessageRenderer = ({ content, images }: { content: string; images?: ImageAttachment[] }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   
   const { text, files } = useMemo(() => {
@@ -122,7 +172,7 @@ const UserMessageRenderer = ({ content }: { content: string }) => {
     return { text, files };
   }, [content]);
 
-  if (files.length === 0) {
+  if (files.length === 0 && (!images || images.length === 0)) {
     return <span className="whitespace-pre-wrap">{text}</span>;
   }
 
@@ -130,6 +180,12 @@ const UserMessageRenderer = ({ content }: { content: string }) => {
     <div className="flex flex-col gap-2">
       <span className="whitespace-pre-wrap">{text}</span>
       
+      {/* Display attached images */}
+      {images && images.length > 0 && (
+        <MessageImages images={images} />
+      )}
+      
+      {files.length > 0 && (
       <div className="bg-blue-900/20 border border-blue-700/30 rounded-md overflow-hidden">
         <button 
           onClick={() => setIsExpanded(!isExpanded)}
@@ -191,6 +247,7 @@ const UserMessageRenderer = ({ content }: { content: string }) => {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 };
@@ -209,8 +266,11 @@ export const ChatPanel = ({
 }: ChatPanelProps) => {
   const [input, setInput] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<FileNode[]>([]);
+  const [attachedImages, setAttachedImages] = useState<ImageAttachment[]>([]);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -255,10 +315,11 @@ export const ChatPanel = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() && attachedFiles.length === 0) return;
-    onSendMessage(input, attachedFiles);
+    if (!input.trim() && attachedFiles.length === 0 && attachedImages.length === 0) return;
+    onSendMessage(input, attachedFiles, attachedImages);
     setInput('');
     setAttachedFiles([]);
+    setAttachedImages([]);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -291,6 +352,16 @@ export const ChatPanel = ({
         inputContainerRef.current.style.borderColor = '#4b5563'; // gray-600
     }
 
+    // Check for image files first
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const hasImages = Array.from(e.dataTransfer.files).some(f => f.type.startsWith('image/'));
+      if (hasImages) {
+        handleImageDrop(e.dataTransfer.files);
+        return;
+      }
+    }
+
+    // Handle JSON file nodes
     try {
       const data = e.dataTransfer.getData('application/json');
       if (data) {
@@ -307,6 +378,16 @@ export const ChatPanel = ({
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
+    // Check for image paste first
+    const items = e.clipboardData.items;
+    const hasImage = Array.from(items).some(item => item.type.startsWith('image/'));
+    if (hasImage) {
+      e.preventDefault();
+      handleImagePaste(items);
+      return;
+    }
+
+    // Handle JSON file nodes
     const data = e.clipboardData.getData('application/json');
     if (data) {
       try {
@@ -330,6 +411,124 @@ export const ChatPanel = ({
 
   const removeAttachedFile = (fileId: string) => {
     setAttachedFiles(prev => prev.filter(f => f.id !== fileId));
+  };
+
+  const removeAttachedImage = (url: string) => {
+    setAttachedImages(prev => prev.filter(img => img.url !== url));
+  };
+
+  // Upload image to server
+  const uploadImage = async (file: File): Promise<ImageAttachment | null> => {
+    const token = localStorage.getItem('jwt_token');
+    if (!token) {
+      console.error('No JWT token for image upload');
+      return null;
+    }
+
+    const formData = new FormData();
+    formData.append('image', file);
+
+    try {
+      const response = await fetch(`${API_URL}/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Image upload failed:', error);
+        return null;
+      }
+
+      const result: ImageUploadResponse = await response.json();
+      return {
+        url: result.url,
+        filename: result.filename,
+        mime_type: result.mime_type,
+        size: result.size,
+      };
+    } catch (error) {
+      console.error('Image upload error:', error);
+      return null;
+    }
+  };
+
+  // Handle file input change for images
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploadingImage(true);
+    
+    for (const file of Array.from(files)) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        console.warn('Skipping non-image file:', file.name);
+        continue;
+      }
+
+      // Create local preview
+      const localPreview = URL.createObjectURL(file);
+      
+      // Upload to server
+      const uploaded = await uploadImage(file);
+      if (uploaded) {
+        uploaded.localPreview = localPreview;
+        setAttachedImages(prev => [...prev, uploaded]);
+      } else {
+        URL.revokeObjectURL(localPreview);
+      }
+    }
+
+    setIsUploadingImage(false);
+    // Reset input
+    if (imageInputRef.current) {
+      imageInputRef.current.value = '';
+    }
+  };
+
+  // Handle image paste from clipboard
+  const handleImagePaste = async (items: DataTransferItemList) => {
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          setIsUploadingImage(true);
+          const localPreview = URL.createObjectURL(file);
+          const uploaded = await uploadImage(file);
+          if (uploaded) {
+            uploaded.localPreview = localPreview;
+            setAttachedImages(prev => [...prev, uploaded]);
+          } else {
+            URL.revokeObjectURL(localPreview);
+          }
+          setIsUploadingImage(false);
+        }
+      }
+    }
+  };
+
+  // Handle image drop
+  const handleImageDrop = async (files: FileList) => {
+    setIsUploadingImage(true);
+    
+    for (const file of Array.from(files)) {
+      if (file.type.startsWith('image/')) {
+        const localPreview = URL.createObjectURL(file);
+        const uploaded = await uploadImage(file);
+        if (uploaded) {
+          uploaded.localPreview = localPreview;
+          setAttachedImages(prev => [...prev, uploaded]);
+        } else {
+          URL.revokeObjectURL(localPreview);
+        }
+      }
+    }
+    
+    setIsUploadingImage(false);
   };
 
   return (
@@ -504,7 +703,7 @@ export const ChatPanel = ({
                             {msg.content}
                           </ReactMarkdown>
                         ) : (
-                          <UserMessageRenderer content={msg.content} />
+                          <UserMessageRenderer content={msg.content} images={msg.images} />
                         )}
                         {msg.isStreaming && (
                           <span className="inline-block w-1.5 h-4 ml-1 bg-green-500 animate-pulse align-middle"></span>
@@ -528,8 +727,10 @@ export const ChatPanel = ({
             onDrop={handleDrop}
             className="relative bg-[#111] border border-[#333] rounded-lg flex flex-col focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 transition-colors"
         >
-          {attachedFiles.length > 0 && (
+          {/* Attached files and images */}
+          {(attachedFiles.length > 0 || attachedImages.length > 0) && (
             <div className="flex flex-wrap gap-2 p-2 border-b border-[#333]/50">
+                {/* Attached files */}
                 {attachedFiles.map(file => (
                     <div key={file.id} className="flex items-center gap-1.5 px-2 py-1 bg-black/50 rounded text-xs text-blue-300 border border-blue-500/30">
                         {file.type === 'folder' ? <FolderIcon size={12} /> : <FileIcon size={12} />}
@@ -549,6 +750,26 @@ export const ChatPanel = ({
                         </button>
                     </div>
                 ))}
+                
+                {/* Attached images */}
+                {attachedImages.map(img => (
+                    <div key={img.url} className="relative group">
+                        <img 
+                            src={img.localPreview || img.url} 
+                            alt={img.filename}
+                            className="h-16 w-16 object-cover rounded border border-green-500/30"
+                        />
+                        <button 
+                            onClick={() => removeAttachedImage(img.url)}
+                            className="absolute -top-1 -right-1 p-0.5 bg-red-600 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                            <X size={10} />
+                        </button>
+                        <span className="absolute bottom-0 left-0 right-0 bg-black/70 text-[10px] text-green-300 truncate px-1">
+                            {img.filename}
+                        </span>
+                    </div>
+                ))}
             </div>
           )}
           
@@ -563,8 +784,30 @@ export const ChatPanel = ({
           />
           
           <div className="flex justify-between items-center px-2 pb-2">
-            <div className="flex items-center">
+            <div className="flex items-center gap-2">
                {sessionConfigComponent}
+               
+               {/* Image upload button */}
+               <input
+                 ref={imageInputRef}
+                 type="file"
+                 accept="image/jpeg,image/png,image/gif,image/webp"
+                 multiple
+                 onChange={handleImageSelect}
+                 className="hidden"
+               />
+               <button
+                 onClick={() => imageInputRef.current?.click()}
+                 disabled={isUploadingImage}
+                 className="p-1.5 text-gray-400 hover:text-green-400 hover:bg-green-500/10 rounded-md transition-colors disabled:opacity-50"
+                 title="上传图片"
+               >
+                 {isUploadingImage ? (
+                   <Loader2 size={16} className="animate-spin" />
+                 ) : (
+                   <ImagePlus size={16} />
+                 )}
+               </button>
             </div>
             
             {isProcessing ? (
@@ -581,7 +824,7 @@ export const ChatPanel = ({
             ) : (
               <button
                 onClick={handleSubmit}
-                disabled={!input.trim() && attachedFiles.length === 0}
+                disabled={!input.trim() && attachedFiles.length === 0 && attachedImages.length === 0}
                 className="p-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <Send size={16} />
