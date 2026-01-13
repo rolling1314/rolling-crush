@@ -123,7 +123,15 @@ func NewCoordinator(
 
 // Run implements Coordinator.
 func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, attachments ...message.Attachment) (*fantasy.AgentResult, error) {
-	fmt.Println("=== Run method called ===", "sessionID:", sessionID)
+	fmt.Println("\n=== Coordinator.Run 方法调用 ===")
+	fmt.Printf("SessionID: %s\n", sessionID)
+	fmt.Printf("Prompt: %s\n", prompt)
+	fmt.Printf("接收到的附件数量: %d\n", len(attachments))
+	for i, att := range attachments {
+		fmt.Printf("  [附件 %d] FileName: %s, MimeType: %s, Size: %d bytes\n", 
+			i+1, att.FileName, att.MimeType, len(att.Content))
+	}
+	fmt.Println("=== Coordinator.Run 开始处理 ===\n")
 
 	if err := c.readyWg.Wait(); err != nil {
 		fmt.Println("readyWg.Wait failed:", err)
@@ -218,9 +226,18 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 		maxTokens = model.ModelCfg.MaxTokens
 	}
 
+	fmt.Printf("\n=== Coordinator: 检查模型图片支持 ===\n")
+	fmt.Printf("模型: %s\n", model.Model.Model())
+	fmt.Printf("支持图片: %v\n", model.CatwalkCfg.SupportsImages)
+	fmt.Printf("接收到的附件数量: %d\n", len(attachments))
+	
 	if !model.CatwalkCfg.SupportsImages && attachments != nil {
+		fmt.Printf("⚠️  警告：模型不支持图片，移除 %d 个附件！\n", len(attachments))
 		attachments = nil
+	} else if len(attachments) > 0 {
+		fmt.Printf("✅ 模型支持图片，保留 %d 个附件\n", len(attachments))
 	}
+	fmt.Printf("=== Coordinator: 检查完成 ===\n\n")
 
 	providerCfg, ok := sessionCfg.Providers.Get(model.ModelCfg.Provider)
 	if !ok {
@@ -229,6 +246,14 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 
 	mergedOptions, temp, topP, topK, freqPenalty, presPenalty := mergeCallOptions(model, providerCfg)
 
+	fmt.Printf("\n=== Coordinator: 调用 currentAgent.Run ===\n")
+	fmt.Printf("最终传递给 Agent 的附件数量: %d\n", len(attachments))
+	for i, att := range attachments {
+		fmt.Printf("  [附件 %d] FileName: %s, MimeType: %s, Size: %d bytes\n", 
+			i+1, att.FileName, att.MimeType, len(att.Content))
+	}
+	fmt.Println("=== Coordinator: 开始调用 Agent ===\n")
+	
 	return c.currentAgent.Run(ctx, SessionAgentCall{
 		SessionID:        sessionID,
 		Prompt:           prompt,

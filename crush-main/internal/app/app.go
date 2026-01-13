@@ -290,11 +290,17 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 
 	// Fetch image attachments if any
 	var attachments []message.Attachment
+	fmt.Println("=== 开始检查图片附件 ===")
+	fmt.Printf("收到的消息中包含图片数量: %d\n", len(msg.Images))
 	if len(msg.Images) > 0 {
 		fmt.Printf("Processing %d image attachments\n", len(msg.Images))
 		minioClient := storage.GetMinIOClient()
 
-		for _, img := range msg.Images {
+		for i, img := range msg.Images {
+			fmt.Printf("\n[图片 %d/%d] 开始处理\n", i+1, len(msg.Images))
+			fmt.Printf("  - URL: %s\n", img.URL)
+			fmt.Printf("  - Filename: %s\n", img.Filename)
+			fmt.Printf("  - MimeType: %s\n", img.MimeType)
 			fmt.Printf("Fetching image: %s\n", img.URL)
 
 			var imageData []byte
@@ -303,20 +309,24 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 
 			// Check if it's a MinIO URL and fetch accordingly
 			if minioClient != nil && minioClient.IsMinIOURL(img.URL) {
+				fmt.Println("  - 检测到 MinIO URL，从 MinIO 获取图片")
 				imageData, mimeType, err = minioClient.GetFile(context.Background(), img.URL)
 			} else {
 				// Fetch from external URL
+				fmt.Println("  - 检测到外部 URL，开始下载图片")
 				imageData, mimeType, err = fetchImageFromURL(img.URL)
 			}
 
 			if err != nil {
-				fmt.Printf("Failed to fetch image %s: %v\n", img.URL, err)
+				fmt.Printf("  ❌ Failed to fetch image %s: %v\n", img.URL, err)
 				slog.Error("Failed to fetch image", "url", img.URL, "error", err)
 				continue
 			}
+			fmt.Printf("  ✅ 图片下载成功！大小: %d bytes, MIME类型: %s\n", len(imageData), mimeType)
 
 			// Use provided mime type if available
 			if img.MimeType != "" {
+				fmt.Printf("  - 使用客户端提供的 MIME 类型: %s\n", img.MimeType)
 				mimeType = img.MimeType
 			}
 
@@ -325,6 +335,9 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 				// Extract filename from URL
 				parts := strings.Split(img.URL, "/")
 				filename = parts[len(parts)-1]
+				fmt.Printf("  - 从 URL 提取文件名: %s\n", filename)
+			} else {
+				fmt.Printf("  - 使用客户端提供的文件名: %s\n", filename)
 			}
 
 			attachments = append(attachments, message.Attachment{
@@ -333,14 +346,24 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 				MimeType: mimeType,
 				Content:  imageData,
 			})
-			fmt.Printf("Image attachment added: %s (%s, %d bytes)\n", filename, mimeType, len(imageData))
+			fmt.Printf("  ✅ Image attachment added: %s (%s, %d bytes)\n", filename, mimeType, len(imageData))
+			fmt.Printf("[图片 %d/%d] 处理完成\n", i+1, len(msg.Images))
 		}
+	} else {
+		fmt.Println("  - 没有图片附件")
 	}
+	fmt.Printf("\n=== 图片处理完成，共添加 %d 个附件 ===\n\n", len(attachments))
 
-	fmt.Println("About to call AgentCoordinator.Run in goroutine")
+	fmt.Println("\n=== About to call AgentCoordinator.Run in goroutine ===")
+	fmt.Printf("准备传递的附件数量: %d\n", len(attachments))
+	for i, att := range attachments {
+		fmt.Printf("  [附件 %d] FileName: %s, MimeType: %s, Size: %d bytes\n",
+			i+1, att.FileName, att.MimeType, len(att.Content))
+	}
 	// Run the agent asynchronously
 	go func() {
-		fmt.Println("Inside goroutine, calling AgentCoordinator.Run")
+		fmt.Println("\n=== Inside goroutine, calling AgentCoordinator.Run ===")
+		fmt.Printf("Goroutine 中的附件数量: %d\n", len(attachments))
 		_, err := app.AgentCoordinator.Run(context.Background(), sessionID, msg.Content, attachments...)
 		if err != nil {
 			fmt.Println("Agent run error:", err)
@@ -354,24 +377,34 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 
 // fetchImageFromURL fetches an image from an external URL
 func fetchImageFromURL(url string) ([]byte, string, error) {
+	fmt.Printf("    → 开始 HTTP GET 请求: %s\n", url)
 	resp, err := http.Get(url)
 	if err != nil {
+		fmt.Printf("    ❌ HTTP 请求失败: %v\n", err)
 		return nil, "", fmt.Errorf("failed to fetch image: %w", err)
 	}
 	defer resp.Body.Close()
 
+	fmt.Printf("    → HTTP 状态码: %d\n", resp.StatusCode)
 	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("    ❌ HTTP 状态码错误: %d\n", resp.StatusCode)
 		return nil, "", fmt.Errorf("failed to fetch image: status %d", resp.StatusCode)
 	}
 
+	fmt.Println("    → 开始读取响应数据...")
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
+		fmt.Printf("    ❌ 读取数据失败: %v\n", err)
 		return nil, "", fmt.Errorf("failed to read image data: %w", err)
 	}
+	fmt.Printf("    → 读取完成，数据大小: %d bytes\n", len(data))
 
 	mimeType := resp.Header.Get("Content-Type")
 	if mimeType == "" {
 		mimeType = http.DetectContentType(data)
+		fmt.Printf("    → 自动检测 MIME 类型: %s\n", mimeType)
+	} else {
+		fmt.Printf("    → 从响应头获取 MIME 类型: %s\n", mimeType)
 	}
 
 	return data, mimeType, nil

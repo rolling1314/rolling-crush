@@ -715,23 +715,38 @@ func (a *sessionAgent) getCacheControlOptions() fantasy.ProviderOptions {
 }
 
 func (a *sessionAgent) createUserMessage(ctx context.Context, call SessionAgentCall) (message.Message, error) {
+	fmt.Println("\n=== Agent: 创建用户消息 ===")
+	fmt.Printf("接收到的附件数量: %d\n", len(call.Attachments))
+
 	var attachmentParts []message.ContentPart
-	for _, attachment := range call.Attachments {
+	for i, attachment := range call.Attachments {
+		fmt.Printf("[附件 %d/%d]\n", i+1, len(call.Attachments))
+		fmt.Printf("  - FilePath: %s\n", attachment.FilePath)
+		fmt.Printf("  - FileName: %s\n", attachment.FileName)
+		fmt.Printf("  - MimeType: %s\n", attachment.MimeType)
+		fmt.Printf("  - Content Size: %d bytes\n", len(attachment.Content))
 		attachmentParts = append(attachmentParts, message.BinaryContent{Path: attachment.FilePath, MIMEType: attachment.MimeType, Data: attachment.Content})
 	}
+
 	parts := []message.ContentPart{message.TextContent{Text: call.Prompt}}
 	parts = append(parts, attachmentParts...)
+	fmt.Printf("总共创建 %d 个内容部分 (1 文本 + %d 附件)\n", len(parts), len(attachmentParts))
+
 	msg, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
 		Role:  message.User,
 		Parts: parts,
 	})
 	if err != nil {
+		fmt.Printf("❌ 创建消息失败: %v\n", err)
 		return message.Message{}, fmt.Errorf("failed to create user message: %w", err)
 	}
+	fmt.Printf("✅ 用户消息创建成功，消息ID: %s\n", msg.ID)
+	fmt.Println("=== Agent: 用户消息创建完成 ===\n")
 	return msg, nil
 }
 
 func (a *sessionAgent) preparePrompt(msgs []message.Message, attachments ...message.Attachment) ([]fantasy.Message, []fantasy.FilePart) {
+	fmt.Println("\n=== Agent: 准备 Prompt ===")
 	var history []fantasy.Message
 	for _, m := range msgs {
 		if len(m.Parts) == 0 {
@@ -744,15 +759,23 @@ func (a *sessionAgent) preparePrompt(msgs []message.Message, attachments ...mess
 		}
 		history = append(history, m.ToAIMessage()...)
 	}
+	fmt.Printf("历史消息数量: %d\n", len(history))
 
+	fmt.Printf("当前请求的附件数量: %d\n", len(attachments))
 	var files []fantasy.FilePart
-	for _, attachment := range attachments {
+	for i, attachment := range attachments {
+		fmt.Printf("[附件 %d/%d] 转换为 FilePart\n", i+1, len(attachments))
+		fmt.Printf("  - Filename: %s\n", attachment.FileName)
+		fmt.Printf("  - MediaType: %s\n", attachment.MimeType)
+		fmt.Printf("  - Data Size: %d bytes\n", len(attachment.Content))
 		files = append(files, fantasy.FilePart{
 			Filename:  attachment.FileName,
 			Data:      attachment.Content,
 			MediaType: attachment.MimeType,
 		})
 	}
+	fmt.Printf("✅ Prompt 准备完成：%d 条历史消息 + %d 个文件附件\n", len(history), len(files))
+	fmt.Println("=== Agent: Prompt 准备完成 ===\n")
 
 	return history, files
 }

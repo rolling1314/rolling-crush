@@ -3,6 +3,7 @@ package message
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -430,17 +431,31 @@ func (m *Message) ToAIMessage() []fantasy.Message {
 	var messages []fantasy.Message
 	switch m.Role {
 	case User:
+		binaryContents := m.BinaryContent()
+		if len(binaryContents) > 0 {
+			fmt.Printf("\n=== Message: 转换用户消息为 AI 消息 (ID: %s) ===\n", m.ID)
+			fmt.Printf("消息包含 %d 个二进制内容\n", len(binaryContents))
+		}
+
 		var parts []fantasy.MessagePart
 		text := strings.TrimSpace(m.Content().Text)
 		if text != "" {
 			parts = append(parts, fantasy.TextPart{Text: text})
 		}
-		for _, content := range m.BinaryContent() {
+		for i, content := range binaryContents {
+			fmt.Printf("[二进制内容 %d/%d] 转换为 FilePart\n", i+1, len(binaryContents))
+			fmt.Printf("  - Path: %s\n", content.Path)
+			fmt.Printf("  - MIMEType: %s\n", content.MIMEType)
+			fmt.Printf("  - Data Size: %d bytes\n", len(content.Data))
 			parts = append(parts, fantasy.FilePart{
 				Filename:  content.Path,
 				Data:      content.Data,
 				MediaType: content.MIMEType,
 			})
+		}
+		if len(binaryContents) > 0 {
+			fmt.Printf("✅ 用户消息转换完成：%d 个部分\n", len(parts))
+			fmt.Println("=== Message: 转换完成 ===\n")
 		}
 		messages = append(messages, fantasy.Message{
 			Role:    fantasy.MessageRoleUser,
