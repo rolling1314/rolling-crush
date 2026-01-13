@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
-	"github.com/charmbracelet/crush/config"
+	"github.com/charmbracelet/crush/pkg/config"
 	"github.com/gin-gonic/gin"
 )
 

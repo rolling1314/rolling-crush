@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/config"
+	"github.com/charmbracelet/crush/pkg/config"
 	"github.com/charmbracelet/crush/internal/pkg/filepathext"
 	"github.com/charmbracelet/crush/internal/pkg/fsext"
 	"github.com/charmbracelet/crush/domain/permission"

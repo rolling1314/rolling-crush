@@ -14,7 +14,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
-	"github.com/charmbracelet/crush/config"
+	"github.com/charmbracelet/crush/pkg/config"
 	"github.com/charmbracelet/crush/internal/pkg/csync"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/tui/components/chat"

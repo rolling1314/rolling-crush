@@ -6,7 +6,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/app"
-	"github.com/charmbracelet/crush/config"
+	"github.com/charmbracelet/crush/pkg/config"
 	"github.com/charmbracelet/crush/internal/pkg/csync"
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/tui/components/core"

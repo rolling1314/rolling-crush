@@ -4,7 +4,7 @@ import (
 	"log/slog"
 
 	"github.com/charmbracelet/crush/auth"
-	"github.com/charmbracelet/crush/config"
+	"github.com/charmbracelet/crush/pkg/config"
 	"github.com/charmbracelet/crush/store/postgres"
 	"github.com/charmbracelet/crush/domain/message"
 	"github.com/charmbracelet/crush/domain/project"

@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/crush/config"
+	"github.com/charmbracelet/crush/pkg/config"
 	"github.com/charmbracelet/crush/internal/pkg/csync"
 	"github.com/charmbracelet/crush/internal/pkg/home"
 	"github.com/charmbracelet/crush/domain/permission"

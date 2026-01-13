@@ -40,7 +40,7 @@ import (
 	"github.com/charmbracelet/crush/internal/tui/styles"
 	"github.com/charmbracelet/crush/internal/update"
 	"github.com/charmbracelet/crush/internal/version"
-	"github.com/charmbracelet/crush/config"
+	"github.com/charmbracelet/crush/pkg/config"
 	"github.com/charmbracelet/crush/sandbox"
 	"github.com/charmbracelet/crush/store/postgres"
 	"github.com/charmbracelet/crush/store/storage"

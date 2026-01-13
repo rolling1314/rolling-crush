@@ -18,7 +18,7 @@ import (
 	"github.com/charmbracelet/crush/internal/app"
 	"github.com/charmbracelet/crush/internal/event"
 	termutil "github.com/charmbracelet/crush/internal/pkg/term"
-	"github.com/charmbracelet/crush/config"
+	"github.com/charmbracelet/crush/pkg/config"
 	"github.com/charmbracelet/crush/store/postgres"
 	"github.com/charmbracelet/crush/internal/version"
 	"github.com/charmbracelet/fang"

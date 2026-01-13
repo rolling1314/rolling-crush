@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/colorprofile"
-	"github.com/charmbracelet/crush/config"
+	"github.com/charmbracelet/crush/pkg/config"
 	"github.com/charmbracelet/log/v2"
 	"github.com/charmbracelet/x/term"
 	"github.com/nxadm/tail"

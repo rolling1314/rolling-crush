@@ -18,7 +18,7 @@ import (
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
 	agentprompt "github.com/charmbracelet/crush/internal/agent/prompt"
 	"github.com/charmbracelet/crush/internal/agent/tools"
-	"github.com/charmbracelet/crush/config"
+	"github.com/charmbracelet/crush/pkg/config"
 	"github.com/charmbracelet/crush/internal/pkg/csync"
 	"github.com/charmbracelet/crush/store/postgres"
 	"github.com/charmbracelet/crush/domain/history"
