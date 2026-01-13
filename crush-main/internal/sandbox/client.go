@@ -401,7 +401,7 @@ var defaultClient *Client
 func GetDefaultClient() *Client {
 	if defaultClient == nil {
 		// 默认连接到本地沙箱服务
-		defaultClient = NewClient("http://localhost:8888")
+		defaultClient = NewClient("http://106.54.34.243:8888")
 	}
 	return defaultClient
 }

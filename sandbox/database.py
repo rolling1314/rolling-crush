@@ -13,7 +13,7 @@ class DatabaseManager:
     
     def __init__(self):
         """初始化数据库连接，使用与 Go 代码相同的环境变量"""
-        self.host = os.getenv("POSTGRES_HOST", "localhost")
+        self.host = os.getenv("POSTGRES_HOST", "120.26.101.52")
         self.port = os.getenv("POSTGRES_PORT", "5432")
         self.user = os.getenv("POSTGRES_USER", "crush")
         self.password = os.getenv("POSTGRES_PASSWORD", "123456")
