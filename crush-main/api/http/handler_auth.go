@@ -11,15 +11,15 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/rolling1314/rolling-crush/auth"
 	"github.com/gin-gonic/gin"
+	"github.com/rolling1314/rolling-crush/auth"
 )
 
 // GitHub OAuth configuration
 var (
 	githubClientID     = getEnvOrDefault("GITHUB_CLIENT_ID", "Ov23liHJsgAHhcbppKO3")
 	githubClientSecret = getEnvOrDefault("GITHUB_CLIENT_SECRET", "35e742c45cae57f001c5a3a6f6cf058a4338d1b4")
-	githubRedirectURI  = getEnvOrDefault("GITHUB_REDIRECT_URI", "http://localhost:8081/api/auth/github/callback")
+	githubRedirectURI  = getEnvOrDefault("GITHUB_REDIRECT_URI", "http://localhost:8001/auth/github/callback")
 	frontendURL        = getEnvOrDefault("FRONTEND_URL", "http://localhost:8080")
 )
 
@@ -138,6 +138,9 @@ func (s *Server) handleGitHubLogin(c *gin.Context) {
 func (s *Server) handleGitHubCallback(c *gin.Context) {
 	code := c.Query("code")
 	state := c.Query("state")
+	fmt.Println("------------------github auth code")
+	fmt.Println(code)
+	fmt.Println("------------------github auth code")
 
 	if code == "" {
 		c.Redirect(http.StatusTemporaryRedirect, frontendURL+"?error=missing_code")

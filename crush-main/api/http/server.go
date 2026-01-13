@@ -52,6 +52,9 @@ func (s *Server) Start() error {
 	// Health check
 	s.engine.GET("/health", s.handleHealth)
 
+	// GitHub OAuth callback (must be at root level to match GitHub OAuth app configuration)
+	s.engine.GET("/auth/github/callback", s.handleGitHubCallback)
+
 	// API routes
 	apiGroup := s.engine.Group("/api")
 	{
@@ -63,7 +66,7 @@ func (s *Server) Start() error {
 			authGroup.GET("/verify", auth.GinAuthMiddleware(), s.handleVerify)
 			// GitHub OAuth routes
 			authGroup.GET("/github", s.handleGitHubLogin)
-			authGroup.GET("/github/callback", s.handleGitHubCallback)
+			authGroup.GET("/github/callback", s.handleGitHubCallback) // Also keep this for consistency
 		}
 
 		// Project routes
