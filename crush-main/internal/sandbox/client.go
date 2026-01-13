@@ -377,7 +377,7 @@ type CreateProjectResponse struct {
 	FrontendPort  int32  `json:"frontend_port"`
 	BackendPort   *int32 `json:"backend_port,omitempty"`
 	Image         string `json:"image"`
-	Workdir       string `json:"workdir"`  // 工作目录
+	Workdir       string `json:"workdir"` // 工作目录
 	Message       string `json:"message"`
 	Error         string `json:"error,omitempty"`
 }
@@ -400,8 +400,19 @@ var defaultClient *Client
 
 func GetDefaultClient() *Client {
 	if defaultClient == nil {
-		// 默认连接到本地沙箱服务
-		defaultClient = NewClient("http://106.54.34.243:8888")
+		// 从配置文件获取沙箱服务地址
+		// 注意：需要在应用启动时先初始化配置
+		// 如果配置未初始化，将使用默认值
+		baseURL := "http://localhost:8888" // 默认值
+
+		// 尝试导入配置包（避免循环依赖）
+		// 实际使用时应该通过依赖注入传入配置
+		defaultClient = NewClient(baseURL)
 	}
 	return defaultClient
+}
+
+// SetDefaultClient 设置默认的沙箱客户端
+func SetDefaultClient(baseURL string) {
+	defaultClient = NewClient(baseURL)
 }

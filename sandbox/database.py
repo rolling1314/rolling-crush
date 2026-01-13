@@ -6,19 +6,30 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from typing import Optional, Dict
+from config_loader import ConfigLoader
 
 
 class DatabaseManager:
     """PostgreSQL 数据库管理器 - 查询会话和项目信息"""
     
-    def __init__(self):
-        """初始化数据库连接，使用与 Go 代码相同的环境变量"""
-        self.host = os.getenv("POSTGRES_HOST", "120.26.101.52")
-        self.port = os.getenv("POSTGRES_PORT", "5432")
-        self.user = os.getenv("POSTGRES_USER", "crush")
-        self.password = os.getenv("POSTGRES_PASSWORD", "123456")
-        self.database = os.getenv("POSTGRES_DB", "crush")
-        self.sslmode = os.getenv("POSTGRES_SSLMODE", "disable")
+    def __init__(self, config: Optional[ConfigLoader] = None):
+        """初始化数据库连接
+        
+        Args:
+            config: 配置加载器，如果为 None 则创建新实例
+        """
+        # 加载配置
+        if config is None:
+            config = ConfigLoader()
+        
+        db_config = config.get_database_config()
+        
+        self.host = db_config['host']
+        self.port = db_config['port']
+        self.user = db_config['user']
+        self.password = db_config['password']
+        self.database = db_config['database']
+        self.sslmode = db_config['sslmode']
         self.conn = None
         self._connect()
     

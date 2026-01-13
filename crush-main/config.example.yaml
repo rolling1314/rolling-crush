@@ -1,0 +1,76 @@
+# Crush 应用配置文件示例
+# 复制此文件为 config.yaml 并根据实际情况修改配置
+# 通过环境变量 APP_ENV 来指定使用哪个环境（development 或 production）
+# 例如: export APP_ENV=production
+
+# 开发环境配置
+development:
+  # 数据库配置
+  database:
+    host: "localhost"
+    port: 5432
+    user: "crush"
+    password: "123456"
+    database: "crush"
+    sslmode: "disable"
+    max_open_conns: 25
+    max_idle_conns: 5
+  
+  # 沙箱服务配置
+  sandbox:
+    base_url: "http://localhost:8888"
+    timeout: 300  # 超时时间（秒）
+  
+  # 对象存储配置（MinIO/OSS）
+  storage:
+    type: "minio"  # minio 或 oss
+    # MinIO 配置
+    minio:
+      endpoint: "localhost:9000"
+      access_key: "minioadmin"
+      secret_key: "minioadmin123"
+      bucket: "crush-images"
+      use_ssl: false
+      public_endpoint: ""  # 可选：公开访问的端点
+    # 阿里云 OSS 配置（如果 type 为 oss）
+    oss:
+      endpoint: "oss-cn-hangzhou.aliyuncs.com"
+      access_key_id: "your-access-key-id"
+      access_key_secret: "your-access-key-secret"
+      bucket: "crush-images"
+      use_ssl: true
+
+# 生产环境配置
+production:
+  # 数据库配置
+  database:
+    host: "your-production-db-host"
+    port: 5432
+    user: "crush"
+    password: "your-secure-password"
+    database: "crush"
+    sslmode: "require"
+    max_open_conns: 50
+    max_idle_conns: 10
+  
+  # 沙箱服务配置
+  sandbox:
+    base_url: "http://your-sandbox-host:8888"
+    timeout: 300
+  
+  # 对象存储配置
+  storage:
+    type: "minio"
+    minio:
+      endpoint: "your-minio-host:9000"
+      access_key: "your-access-key"
+      secret_key: "your-secret-key"
+      bucket: "crush-images"
+      use_ssl: false
+      public_endpoint: "your-public-endpoint"
+    oss:
+      endpoint: "oss-cn-hangzhou.aliyuncs.com"
+      access_key_id: "your-access-key-id"
+      access_key_secret: "your-access-key-secret"
+      bucket: "crush-images-prod"
+      use_ssl: true

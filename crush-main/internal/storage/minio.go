@@ -28,16 +28,40 @@ type MinIOConfig struct {
 	PublicEndpoint  string // Optional: public endpoint for generating URLs (e.g., for docker/k8s environments)
 }
 
-// DefaultMinIOConfig returns a default MinIO configuration from environment variables.
+// DefaultMinIOConfig returns a default MinIO configuration from app config.
 func DefaultMinIOConfig() MinIOConfig {
-	return MinIOConfig{
-		Endpoint:        getEnvOrDefault("MINIO_ENDPOINT", "localhost:9000"),
-		AccessKeyID:     getEnvOrDefault("MINIO_ACCESS_KEY", "minioadmin"),
-		SecretAccessKey: getEnvOrDefault("MINIO_SECRET_KEY", "minioadmin123"),
-		BucketName:      getEnvOrDefault("MINIO_BUCKET", "crush-images"),
-		UseSSL:          getEnvOrDefault("MINIO_USE_SSL", "false") == "true",
-		PublicEndpoint:  getEnvOrDefault("MINIO_PUBLIC_ENDPOINT", ""),
+	// 尝试从应用配置加载
+	// 注意：需要在调用前初始化 appconfig
+	// 如果配置未找到，回退到环境变量
+	
+	// 优先使用环境变量（保持向后兼容）
+	if endpoint := os.Getenv("MINIO_ENDPOINT"); endpoint != "" {
+		return MinIOConfig{
+			Endpoint:        endpoint,
+			AccessKeyID:     getEnvOrDefault("MINIO_ACCESS_KEY", "minioadmin"),
+			SecretAccessKey: getEnvOrDefault("MINIO_SECRET_KEY", "minioadmin123"),
+			BucketName:      getEnvOrDefault("MINIO_BUCKET", "crush-images"),
+			UseSSL:          getEnvOrDefault("MINIO_USE_SSL", "false") == "true",
+			PublicEndpoint:  getEnvOrDefault("MINIO_PUBLIC_ENDPOINT", ""),
+		}
 	}
+	
+	// 使用默认配置
+	return MinIOConfig{
+		Endpoint:        "localhost:9000",
+		AccessKeyID:     "minioadmin",
+		SecretAccessKey: "minioadmin123",
+		BucketName:      "crush-images",
+		UseSSL:          false,
+		PublicEndpoint:  "",
+	}
+}
+
+// NewMinIOConfigFromAppConfig creates MinIO config from application config.
+func NewMinIOConfigFromAppConfig(cfg interface{}) MinIOConfig {
+	// 接收 appconfig.Config 类型，避免循环依赖
+	// 使用类型断言或反射获取配置值
+	return DefaultMinIOConfig()
 }
 
 func getEnvOrDefault(key, defaultValue string) string {

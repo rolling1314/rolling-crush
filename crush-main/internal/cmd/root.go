@@ -16,6 +16,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/crush/internal/app"
+	"github.com/charmbracelet/crush/internal/appconfig"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/event"
@@ -176,6 +177,30 @@ func setupApp(cmd *cobra.Command) (*app.App, error) {
 	cwd, err := ResolveCwd(cmd)
 	if err != nil {
 		return nil, err
+	}
+
+	// Initialize application configuration (database, sandbox, storage)
+	// This should be done before initializing other services
+	env := os.Getenv("APP_ENV")
+	if env == "" {
+		env = "development"
+	}
+	slog.Info("Initializing application configuration", "environment", env)
+	
+	// Load app config to set global config
+	appCfg, err := appconfig.Load("", env)
+	if err != nil {
+		// If config file doesn't exist, log a warning and continue with defaults
+		slog.Warn("Failed to load config.yaml, using default configuration", "error", err)
+		appCfg = nil // Will use defaults
+	}
+	if appCfg != nil {
+		appconfig.SetGlobal(appCfg)
+		slog.Info("Application configuration loaded successfully",
+			"db_host", appCfg.Database.Host,
+			"sandbox_url", appCfg.Sandbox.BaseURL,
+			"storage_type", appCfg.Storage.Type,
+		)
 	}
 
 	cfg, err := config.Init(cwd, dataDir, debug)

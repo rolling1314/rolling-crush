@@ -14,9 +14,21 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
+# 检查配置文件
+if [ ! -f config.yaml ]; then
+    echo "⚠️  未找到 config.yaml，从示例文件复制..."
+    if [ -f config.example.yaml ]; then
+        cp config.example.yaml config.yaml
+        echo "✅ 已创建 config.yaml，请根据需要修改配置"
+    else
+        echo "❌ 未找到 config.example.yaml"
+        exit 1
+    fi
+fi
+
 # 检查依赖
 echo "📦 检查 Python 依赖..."
-if ! python3 -c "import flask, docker, psycopg2" 2>/dev/null; then
+if ! python3 -c "import flask, docker, psycopg2, yaml" 2>/dev/null; then
     echo "⚠️ 缺少依赖，正在安装..."
     pip install -r requirements.txt
 fi
@@ -36,18 +48,21 @@ if ! docker info &> /dev/null; then
     exit 1
 fi
 
-# 加载环境变量（如果存在）
+# 设置环境（默认为 development）
+export SANDBOX_ENV=${SANDBOX_ENV:-development}
+
+# 加载环境变量（如果存在 .env 文件）
 if [ -f .env ]; then
-    echo "📝 加载环境变量..."
+    echo "📝 加载 .env 环境变量..."
     export $(cat .env | grep -v '^#' | xargs)
 fi
 
 # 打印配置信息
 echo ""
 echo "⚙️ 配置信息:"
-echo "   数据库: ${POSTGRES_HOST:-localhost}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-crush}"
-echo "   用户: ${POSTGRES_USER:-crush}"
-echo "   服务地址: ${SANDBOX_HOST:-0.0.0.0}:${SANDBOX_PORT:-8888}"
+echo "   环境: $SANDBOX_ENV"
+echo "   配置文件: config.yaml"
+echo "   环境变量优先级: .env > config.yaml"
 echo ""
 
 # 启动服务

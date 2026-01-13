@@ -21,6 +21,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
+	"github.com/charmbracelet/crush/internal/appconfig"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/db"
@@ -33,6 +34,7 @@ import (
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/project"
 	"github.com/charmbracelet/crush/internal/pubsub"
+	"github.com/charmbracelet/crush/internal/sandbox"
 	"github.com/charmbracelet/crush/internal/server"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/shell"
@@ -124,9 +126,20 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 
 	app.setupEvents()
 
-	// Initialize MinIO storage client
-	if err := storage.InitGlobalMinIOClient(); err != nil {
-		slog.Warn("Failed to initialize MinIO client, image upload will be unavailable", "error", err)
+	// Initialize storage client from app config
+	appCfg := appconfig.GetGlobal()
+	if err := storage.InitGlobalClientFromConfig(appCfg); err != nil {
+		slog.Warn("Failed to initialize storage client from config, trying default config", "error", err)
+		// Fallback to default initialization
+		if err := storage.InitGlobalMinIOClient(); err != nil {
+			slog.Warn("Failed to initialize storage client, image upload will be unavailable", "error", err)
+		}
+	}
+
+	// Initialize sandbox client from app config
+	if appCfg.Sandbox.BaseURL != "" {
+		sandbox.SetDefaultClient(appCfg.Sandbox.BaseURL)
+		slog.Info("Sandbox client configured", "base_url", appCfg.Sandbox.BaseURL)
 	}
 
 	// Initialize LSP clients in the background.
