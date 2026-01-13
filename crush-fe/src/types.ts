@@ -106,3 +106,16 @@ export interface ImageUploadResponse {
   mime_type: string;
   size: number;
 }
+
+export interface Session {
+  id: string;
+  project_id?: string;
+  title: string;
+  message_count: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  cost: number;
+  context_window: number;
+  created_at: number;
+  updated_at: number;
+}

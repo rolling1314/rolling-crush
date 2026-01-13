@@ -7,17 +7,10 @@ import { FileTree } from '../components/FileTree';
 import { CodeEditor } from '../components/CodeEditor';
 import { ModelSelector } from '../components/ModelSelector';
 import { SessionConfigPanel } from '../components/SessionConfigPanel';
-import { type FileNode, type Message, type PermissionRequest, type ToolCall, type ToolResult } from '../types';
+import { type FileNode, type Message, type PermissionRequest, type ToolCall, type ToolResult, type Session } from '../types';
 
 const API_URL = '/api';
 const WS_URL = '/ws';
-
-interface Session {
-  id: string;
-  title: string;
-  message_count: number;
-  created_at: number;
-}
 
 interface Project {
   id: string;
@@ -356,6 +349,41 @@ export default function WorkspacePage() {
       return; // 立即返回
     }
     
+    // 处理 Session 更新 - 实时更新上下文和费用（复用 TUI 的 PubSub 机制）
+    if (data.Type === 'session_update' || data.type === 'session_update') {
+      console.log('=== Session update received ===');
+      console.log('Full data:', data);
+      console.log('Session ID:', data.id);
+      console.log('Prompt tokens:', data.prompt_tokens);
+      console.log('Completion tokens:', data.completion_tokens);
+      console.log('Total tokens:', data.prompt_tokens + data.completion_tokens);
+      console.log('Context window:', data.context_window);
+      console.log('Cost:', data.cost);
+      console.log('Percentage:', ((data.prompt_tokens + data.completion_tokens) / data.context_window * 100).toFixed(2) + '%');
+      
+      setSessions(prev => {
+        const updated = prev.map(s => {
+          if (s.id === data.id) {
+            // 更新session信息（像 TUI 的 header/sidebar 组件一样）
+            const updatedSession = {
+              ...s,
+              prompt_tokens: data.prompt_tokens,
+              completion_tokens: data.completion_tokens,
+              cost: data.cost,
+              context_window: data.context_window,
+              message_count: data.message_count,
+              updated_at: data.updated_at
+            };
+            console.log('Updated session:', updatedSession);
+            return updatedSession;
+          }
+          return s;
+        });
+        return updated;
+      });
+      return; // 立即返回
+    }
+    
     // 后端直接广播 message.Message 对象
     // 支持大写和小写字段名（ID/id, Role/role, Parts/parts）
     const msgId = data.ID || data.id;
@@ -485,6 +513,13 @@ export default function WorkspacePage() {
         headers: { Authorization: `Bearer ${token}` }
       });
       const sessionList = response.data || [];
+      
+      // 调试：打印每个session的context_window
+      console.log('=== Loaded sessions ===');
+      sessionList.forEach((s: Session) => {
+        console.log(`Session: ${s.title}, context_window: ${s.context_window}, tokens: ${s.prompt_tokens + s.completion_tokens}`);
+      });
+      
       setSessions(sessionList);
       
       // 自动选择第一个会话
@@ -1069,8 +1104,9 @@ export default function WorkspacePage() {
         style={{ width: chatPanelWidth }}
       >
         <div className="flex-1 overflow-hidden flex flex-col">
-          <ChatPanel 
+            <ChatPanel 
             messages={messages} 
+            session={sessions.find(s => s.id === currentSessionId)}
             onSendMessage={handleSendMessage}
             pendingPermissions={pendingPermissions}
             onPermissionApprove={(toolCallId) => handlePermissionResponse(toolCallId, true)}
@@ -1128,7 +1164,11 @@ export default function WorkspacePage() {
                       <MessageSquare size={16} className="text-gray-400 mt-1 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <div className="text-white text-sm truncate">{session.title}</div>
-                        <div className="text-gray-500 text-xs">{session.message_count} messages</div>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <span>{session.message_count} msgs</span>
+                          <span>•</span>
+                          <span>${session.cost?.toFixed(4) || '0.0000'}</span>
+                        </div>
                       </div>
                     </div>
                     <button

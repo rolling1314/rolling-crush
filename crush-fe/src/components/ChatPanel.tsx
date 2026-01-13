@@ -3,7 +3,7 @@ import { Send, History, X, File as FileIcon, Folder as FolderIcon, ChevronDown, 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { type Message, type PermissionRequest, type FileNode, type ImageAttachment, type ImageUploadResponse } from '../types';
+import { type Message, type PermissionRequest, type FileNode, type ImageAttachment, type ImageUploadResponse, type Session } from '../types';
 import { ToolCallDisplay } from './ToolCallDisplay';
 import { cn } from '../lib/utils';
 import 'highlight.js/styles/github-dark.css';
@@ -12,6 +12,7 @@ const API_URL = '/api';
 
 interface ChatPanelProps {
   messages: Message[];
+  session?: Session;
   onSendMessage: (content: string, files?: FileNode[], images?: ImageAttachment[]) => void;
   pendingPermissions: Map<string, PermissionRequest>;
   onPermissionApprove: (toolCallId: string) => void;
@@ -254,6 +255,7 @@ const UserMessageRenderer = ({ content, images }: { content: string; images?: Im
 
 export const ChatPanel = ({ 
   messages, 
+  session,
   onSendMessage,
   pendingPermissions,
   onPermissionApprove,
@@ -534,7 +536,40 @@ export const ChatPanel = ({
   return (
     <div className="flex flex-col h-full bg-black">
       <div className="p-4 border-b border-[#222] bg-[#0A0A0A] flex justify-between items-center">
-        <h2 className="text-sm font-semibold text-gray-200"></h2>
+        <div className="flex items-center gap-4">
+          <h2 className="text-sm font-semibold text-gray-200">
+            {session?.title || 'Chat'}
+          </h2>
+          {session && (
+            <>
+              {session.context_window > 0 ? (
+                <div className="flex items-center gap-2 text-xs text-gray-500" title={`Used: ${session.prompt_tokens + session.completion_tokens} / ${session.context_window} tokens`}>
+                  <span className="text-gray-400">Context:</span>
+                  <div className="w-20 bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          ((session.prompt_tokens + session.completion_tokens) / session.context_window) > 0.9 ? 'bg-red-500' :
+                          ((session.prompt_tokens + session.completion_tokens) / session.context_window) > 0.7 ? 'bg-yellow-500' :
+                          'bg-blue-500'
+                        }`}
+                        style={{ width: `${Math.min(100, ((session.prompt_tokens + session.completion_tokens) / session.context_window) * 100)}%` }}
+                      />
+                  </div>
+                  <span>{Math.round(((session.prompt_tokens + session.completion_tokens) / session.context_window) * 100)}%</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-xs text-gray-500" title="Context window not configured">
+                  <span className="text-gray-400">Context:</span>
+                  <span className="text-gray-500">--</span>
+                </div>
+              )}
+              <div className="flex items-center gap-1 text-xs text-gray-500">
+                  <span className="text-gray-400">Cost:</span>
+                  <span>${session.cost?.toFixed(4) || '0.0000'}</span>
+              </div>
+            </>
+          )}
+        </div>
         {onToggleHistory && (
           <button 
             onClick={onToggleHistory}

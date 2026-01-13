@@ -4,14 +4,7 @@ import axios from 'axios';
 
 const API_URL = '/api';
 
-interface Session {
-  id: string;
-  project_id: string;
-  title: string;
-  message_count: number;
-  created_at: number;
-  updated_at: number;
-}
+import { type Session } from '../types';
 
 interface Project {
   id: string;
@@ -127,9 +120,28 @@ export default function ProjectSessionsPage() {
               className="bg-white p-6 rounded-lg shadow-sm hover:shadow-md cursor-pointer transition border border-gray-200"
             >
               <h3 className="text-lg font-semibold mb-2">{session.title}</h3>
-              <div className="flex gap-4 text-sm text-gray-500">
-                <span>💬 {session.message_count} messages</span>
-                <span>📅 {new Date(session.created_at).toLocaleDateString()}</span>
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-4 text-sm text-gray-500">
+                  <span>💬 {session.message_count} messages</span>
+                  <span>💰 ${session.cost?.toFixed(4) || '0.0000'}</span>
+                  <span>📅 {new Date(session.created_at).toLocaleDateString()}</span>
+                </div>
+                {session.context_window > 0 && (
+                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                    <span className="shrink-0 w-12">Context:</span>
+                    <div className="flex-1 bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                      <div 
+                        className={`h-1.5 rounded-full transition-all duration-500 ${
+                            ((session.prompt_tokens + session.completion_tokens) / session.context_window) > 0.9 ? 'bg-red-500' :
+                            ((session.prompt_tokens + session.completion_tokens) / session.context_window) > 0.7 ? 'bg-yellow-500' :
+                            'bg-blue-500'
+                        }`}
+                        style={{ width: `${Math.min(100, ((session.prompt_tokens + session.completion_tokens) / session.context_window) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="shrink-0 w-12 text-right">{Math.round(((session.prompt_tokens + session.completion_tokens) / session.context_window) * 100)}%</span>
+                  </div>
+                )}
               </div>
             </div>
           ))}
