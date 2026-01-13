@@ -13,7 +13,7 @@ import (
 
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/catwalk/pkg/embedded"
-	"github.com/charmbracelet/crush/internal/pkg/home"
+	"github.com/rolling1314/rolling-crush/internal/pkg/home"
 )
 
 type ProviderClient interface {

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/charmbracelet/crush/pkg/config"
+	"github.com/rolling1314/rolling-crush/pkg/config"
 	_ "github.com/lib/pq"
 	"github.com/pressly/goose/v3"
 )

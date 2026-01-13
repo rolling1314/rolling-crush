@@ -7,7 +7,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 
-	"github.com/charmbracelet/crush/cmd"
+	"github.com/rolling1314/rolling-crush/cmd"
 	_ "github.com/joho/godotenv/autoload"
 )
 

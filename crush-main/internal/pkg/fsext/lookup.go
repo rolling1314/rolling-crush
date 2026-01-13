@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/charmbracelet/crush/internal/pkg/home"
+	"github.com/rolling1314/rolling-crush/internal/pkg/home"
 )
 
 // Lookup searches for a target files or directories starting from dir

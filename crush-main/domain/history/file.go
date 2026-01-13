@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/crush/store/postgres"
-	"github.com/charmbracelet/crush/internal/pubsub"
+	"github.com/rolling1314/rolling-crush/store/postgres"
+	"github.com/rolling1314/rolling-crush/internal/pubsub"
 	"github.com/google/uuid"
 )
 

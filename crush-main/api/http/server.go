@@ -3,14 +3,14 @@ package http
 import (
 	"log/slog"
 
-	"github.com/charmbracelet/crush/auth"
-	"github.com/charmbracelet/crush/pkg/config"
-	"github.com/charmbracelet/crush/store/postgres"
-	"github.com/charmbracelet/crush/domain/message"
-	"github.com/charmbracelet/crush/domain/project"
-	"github.com/charmbracelet/crush/sandbox"
-	"github.com/charmbracelet/crush/domain/session"
-	"github.com/charmbracelet/crush/domain/user"
+	"github.com/rolling1314/rolling-crush/auth"
+	"github.com/rolling1314/rolling-crush/pkg/config"
+	"github.com/rolling1314/rolling-crush/store/postgres"
+	"github.com/rolling1314/rolling-crush/domain/message"
+	"github.com/rolling1314/rolling-crush/domain/project"
+	"github.com/rolling1314/rolling-crush/sandbox"
+	"github.com/rolling1314/rolling-crush/domain/session"
+	"github.com/rolling1314/rolling-crush/domain/user"
 	"github.com/gin-gonic/gin"
 )
 

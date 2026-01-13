@@ -8,8 +8,8 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/lipgloss/v2"
 	"github.com/alecthomas/chroma/v2"
-	"github.com/charmbracelet/crush/internal/tui/exp/diffview"
-	"github.com/charmbracelet/crush/internal/tui/styles"
+	"github.com/rolling1314/rolling-crush/internal/tui/exp/diffview"
+	"github.com/rolling1314/rolling-crush/internal/tui/styles"
 	"github.com/charmbracelet/x/ansi"
 )
 

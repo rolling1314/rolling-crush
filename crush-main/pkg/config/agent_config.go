@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
-	"github.com/charmbracelet/crush/internal/pkg/csync"
-	"github.com/charmbracelet/crush/internal/pkg/env"
-	"github.com/charmbracelet/crush/internal/oauth"
+	"github.com/rolling1314/rolling-crush/internal/pkg/csync"
+	"github.com/rolling1314/rolling-crush/internal/pkg/env"
+	"github.com/rolling1314/rolling-crush/internal/oauth"
 	"github.com/invopop/jsonschema"
 	"github.com/tidwall/sjson"
 )

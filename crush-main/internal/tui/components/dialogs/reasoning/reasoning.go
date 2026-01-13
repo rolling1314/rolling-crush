@@ -8,12 +8,12 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
-	"github.com/charmbracelet/crush/pkg/config"
-	"github.com/charmbracelet/crush/internal/tui/components/core"
-	"github.com/charmbracelet/crush/internal/tui/components/dialogs"
-	"github.com/charmbracelet/crush/internal/tui/exp/list"
-	"github.com/charmbracelet/crush/internal/tui/styles"
-	"github.com/charmbracelet/crush/internal/tui/util"
+	"github.com/rolling1314/rolling-crush/pkg/config"
+	"github.com/rolling1314/rolling-crush/internal/tui/components/core"
+	"github.com/rolling1314/rolling-crush/internal/tui/components/dialogs"
+	"github.com/rolling1314/rolling-crush/internal/tui/exp/list"
+	"github.com/rolling1314/rolling-crush/internal/tui/styles"
+	"github.com/rolling1314/rolling-crush/internal/tui/util"
 )
 
 const (

@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/charmbracelet/crush/internal/pkg/csync"
-	"github.com/charmbracelet/crush/domain/history"
-	"github.com/charmbracelet/crush/internal/lsp"
-	"github.com/charmbracelet/crush/domain/permission"
-	"github.com/charmbracelet/crush/internal/pubsub"
+	"github.com/rolling1314/rolling-crush/internal/pkg/csync"
+	"github.com/rolling1314/rolling-crush/domain/history"
+	"github.com/rolling1314/rolling-crush/internal/lsp"
+	"github.com/rolling1314/rolling-crush/domain/permission"
+	"github.com/rolling1314/rolling-crush/internal/pubsub"
 	"github.com/stretchr/testify/require"
 )
 

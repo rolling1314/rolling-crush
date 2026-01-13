@@ -8,10 +8,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
-	"github.com/charmbracelet/crush/pkg/config"
-	"github.com/charmbracelet/crush/internal/tui/exp/list"
-	"github.com/charmbracelet/crush/internal/tui/styles"
-	"github.com/charmbracelet/crush/internal/tui/util"
+	"github.com/rolling1314/rolling-crush/pkg/config"
+	"github.com/rolling1314/rolling-crush/internal/tui/exp/list"
+	"github.com/rolling1314/rolling-crush/internal/tui/styles"
+	"github.com/rolling1314/rolling-crush/internal/tui/util"
 )
 
 type listModel = list.FilterableGroupList[list.CompletionItem[ModelOption]]

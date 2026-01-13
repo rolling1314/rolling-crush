@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/charmbracelet/crush/pkg/config"
+	"github.com/rolling1314/rolling-crush/pkg/config"
 )
 
 // NewClientFromConfig creates a storage client based on application configuration.

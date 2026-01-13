@@ -4,9 +4,9 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/crush/internal/tui/components/dialogs"
-	"github.com/charmbracelet/crush/internal/tui/styles"
-	"github.com/charmbracelet/crush/internal/tui/util"
+	"github.com/rolling1314/rolling-crush/internal/tui/components/dialogs"
+	"github.com/rolling1314/rolling-crush/internal/tui/styles"
+	"github.com/rolling1314/rolling-crush/internal/tui/util"
 )
 
 const (

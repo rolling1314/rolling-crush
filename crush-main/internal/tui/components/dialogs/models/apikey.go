@@ -7,10 +7,10 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/crush/pkg/config"
-	"github.com/charmbracelet/crush/internal/pkg/home"
-	"github.com/charmbracelet/crush/internal/tui/styles"
-	"github.com/charmbracelet/crush/internal/tui/util"
+	"github.com/rolling1314/rolling-crush/pkg/config"
+	"github.com/rolling1314/rolling-crush/internal/pkg/home"
+	"github.com/rolling1314/rolling-crush/internal/tui/styles"
+	"github.com/rolling1314/rolling-crush/internal/tui/util"
 )
 
 type APIKeyInputState int

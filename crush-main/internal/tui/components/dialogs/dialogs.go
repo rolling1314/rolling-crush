@@ -5,7 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/crush/internal/tui/util"
+	"github.com/rolling1314/rolling-crush/internal/tui/util"
 )
 
 type DialogID string

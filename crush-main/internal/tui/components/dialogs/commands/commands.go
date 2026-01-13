@@ -12,17 +12,17 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
 
-	"github.com/charmbracelet/crush/internal/agent"
-	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
-	"github.com/charmbracelet/crush/pkg/config"
-	"github.com/charmbracelet/crush/internal/pkg/csync"
-	"github.com/charmbracelet/crush/internal/pubsub"
-	"github.com/charmbracelet/crush/internal/tui/components/chat"
-	"github.com/charmbracelet/crush/internal/tui/components/core"
-	"github.com/charmbracelet/crush/internal/tui/components/dialogs"
-	"github.com/charmbracelet/crush/internal/tui/exp/list"
-	"github.com/charmbracelet/crush/internal/tui/styles"
-	"github.com/charmbracelet/crush/internal/tui/util"
+	"github.com/rolling1314/rolling-crush/internal/agent"
+	"github.com/rolling1314/rolling-crush/internal/agent/tools/mcp"
+	"github.com/rolling1314/rolling-crush/pkg/config"
+	"github.com/rolling1314/rolling-crush/internal/pkg/csync"
+	"github.com/rolling1314/rolling-crush/internal/pubsub"
+	"github.com/rolling1314/rolling-crush/internal/tui/components/chat"
+	"github.com/rolling1314/rolling-crush/internal/tui/components/core"
+	"github.com/rolling1314/rolling-crush/internal/tui/components/dialogs"
+	"github.com/rolling1314/rolling-crush/internal/tui/exp/list"
+	"github.com/rolling1314/rolling-crush/internal/tui/styles"
+	"github.com/rolling1314/rolling-crush/internal/tui/util"
 )
 
 const (

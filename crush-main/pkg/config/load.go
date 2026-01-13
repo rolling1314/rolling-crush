@@ -17,13 +17,13 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
-	"github.com/charmbracelet/crush/internal/pkg/csync"
-	"github.com/charmbracelet/crush/internal/pkg/env"
-	"github.com/charmbracelet/crush/internal/event"
-	"github.com/charmbracelet/crush/internal/pkg/fsext"
-	"github.com/charmbracelet/crush/internal/pkg/home"
-	"github.com/charmbracelet/crush/internal/pkg/log"
-	"github.com/charmbracelet/crush/internal/oauth/claude"
+	"github.com/rolling1314/rolling-crush/internal/pkg/csync"
+	"github.com/rolling1314/rolling-crush/internal/pkg/env"
+	"github.com/rolling1314/rolling-crush/internal/event"
+	"github.com/rolling1314/rolling-crush/internal/pkg/fsext"
+	"github.com/rolling1314/rolling-crush/internal/pkg/home"
+	"github.com/rolling1314/rolling-crush/internal/pkg/log"
+	"github.com/rolling1314/rolling-crush/internal/oauth/claude"
 	powernapConfig "github.com/charmbracelet/x/powernap/pkg/config"
 )
 

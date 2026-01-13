@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/charmbracelet/crush/domain/project"
-	"github.com/charmbracelet/crush/sandbox"
+	"github.com/rolling1314/rolling-crush/domain/project"
+	"github.com/rolling1314/rolling-crush/sandbox"
 	"github.com/gin-gonic/gin"
 )
 

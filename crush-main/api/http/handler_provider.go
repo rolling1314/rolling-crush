@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
-	"github.com/charmbracelet/crush/pkg/config"
+	"github.com/rolling1314/rolling-crush/pkg/config"
 	"github.com/gin-gonic/gin"
 )
 

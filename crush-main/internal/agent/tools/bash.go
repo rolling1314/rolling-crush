@@ -14,10 +14,10 @@ import (
 	"time"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/pkg/config"
-	"github.com/charmbracelet/crush/domain/permission"
-	"github.com/charmbracelet/crush/sandbox"
-	"github.com/charmbracelet/crush/internal/shell"
+	"github.com/rolling1314/rolling-crush/pkg/config"
+	"github.com/rolling1314/rolling-crush/domain/permission"
+	"github.com/rolling1314/rolling-crush/sandbox"
+	"github.com/rolling1314/rolling-crush/internal/shell"
 )
 
 type BashParams struct {

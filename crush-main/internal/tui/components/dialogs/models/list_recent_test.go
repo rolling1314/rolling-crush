@@ -10,9 +10,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
-	"github.com/charmbracelet/crush/pkg/config"
-	"github.com/charmbracelet/crush/internal/pkg/log"
-	"github.com/charmbracelet/crush/internal/tui/exp/list"
+	"github.com/rolling1314/rolling-crush/pkg/config"
+	"github.com/rolling1314/rolling-crush/internal/pkg/log"
+	"github.com/rolling1314/rolling-crush/internal/tui/exp/list"
 	"github.com/stretchr/testify/require"
 )
 

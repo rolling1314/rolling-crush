@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/charmbracelet/crush/internal/pkg/home"
+	"github.com/rolling1314/rolling-crush/internal/pkg/home"
 	"github.com/stretchr/testify/require"
 )
 

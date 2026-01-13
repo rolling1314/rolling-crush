@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/internal/pkg/fsext"
-	"github.com/charmbracelet/crush/sandbox"
+	"github.com/rolling1314/rolling-crush/internal/pkg/fsext"
+	"github.com/rolling1314/rolling-crush/sandbox"
 )
 
 // regexCache provides thread-safe caching of compiled regex patterns

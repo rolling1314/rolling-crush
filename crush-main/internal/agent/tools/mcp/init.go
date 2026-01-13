@@ -17,12 +17,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/crush/pkg/config"
-	"github.com/charmbracelet/crush/internal/pkg/csync"
-	"github.com/charmbracelet/crush/internal/pkg/home"
-	"github.com/charmbracelet/crush/domain/permission"
-	"github.com/charmbracelet/crush/internal/pubsub"
-	"github.com/charmbracelet/crush/internal/version"
+	"github.com/rolling1314/rolling-crush/pkg/config"
+	"github.com/rolling1314/rolling-crush/internal/pkg/csync"
+	"github.com/rolling1314/rolling-crush/internal/pkg/home"
+	"github.com/rolling1314/rolling-crush/domain/permission"
+	"github.com/rolling1314/rolling-crush/internal/pubsub"
+	"github.com/rolling1314/rolling-crush/internal/version"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

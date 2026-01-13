@@ -9,15 +9,15 @@ import (
 	"strings"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/internal/pkg/csync"
-	"github.com/charmbracelet/crush/internal/pkg/diff"
-	"github.com/charmbracelet/crush/internal/pkg/filepathext"
-	"github.com/charmbracelet/crush/internal/pkg/fsext"
-	"github.com/charmbracelet/crush/domain/history"
+	"github.com/rolling1314/rolling-crush/internal/pkg/csync"
+	"github.com/rolling1314/rolling-crush/internal/pkg/diff"
+	"github.com/rolling1314/rolling-crush/internal/pkg/filepathext"
+	"github.com/rolling1314/rolling-crush/internal/pkg/fsext"
+	"github.com/rolling1314/rolling-crush/domain/history"
 
-	"github.com/charmbracelet/crush/internal/lsp"
-	"github.com/charmbracelet/crush/domain/permission"
-	"github.com/charmbracelet/crush/sandbox"
+	"github.com/rolling1314/rolling-crush/internal/lsp"
+	"github.com/rolling1314/rolling-crush/domain/permission"
+	"github.com/rolling1314/rolling-crush/sandbox"
 )
 
 type EditParams struct {

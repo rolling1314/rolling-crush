@@ -27,14 +27,14 @@ import (
 	"charm.land/fantasy/providers/openai"
 	"charm.land/fantasy/providers/openrouter"
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
-	"github.com/charmbracelet/crush/internal/agent/tools"
-	"github.com/charmbracelet/crush/pkg/config"
-	"github.com/charmbracelet/crush/internal/pkg/csync"
-	"github.com/charmbracelet/crush/store/postgres"
-	"github.com/charmbracelet/crush/domain/message"
-	"github.com/charmbracelet/crush/domain/permission"
-	"github.com/charmbracelet/crush/domain/session"
-	"github.com/charmbracelet/crush/internal/pkg/stringext"
+	"github.com/rolling1314/rolling-crush/internal/agent/tools"
+	"github.com/rolling1314/rolling-crush/pkg/config"
+	"github.com/rolling1314/rolling-crush/internal/pkg/csync"
+	"github.com/rolling1314/rolling-crush/store/postgres"
+	"github.com/rolling1314/rolling-crush/domain/message"
+	"github.com/rolling1314/rolling-crush/domain/permission"
+	"github.com/rolling1314/rolling-crush/domain/session"
+	"github.com/rolling1314/rolling-crush/internal/pkg/stringext"
 )
 
 //go:embed templates/title.md
