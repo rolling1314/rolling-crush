@@ -10,8 +10,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/log"
+	"github.com/charmbracelet/crush/config"
+	"github.com/charmbracelet/crush/internal/pkg/log"
 	"github.com/charmbracelet/crush/internal/tui/exp/list"
 	"github.com/stretchr/testify/require"
 )

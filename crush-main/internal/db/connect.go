@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/charmbracelet/crush/internal/appconfig"
+	"github.com/charmbracelet/crush/config"
 	_ "github.com/lib/pq"
 	"github.com/pressly/goose/v3"
 )
 
 func Connect(ctx context.Context, dataDir string) (*sql.DB, error) {
 	// Get configuration
-	cfg := appconfig.GetGlobal()
+	cfg := config.GetGlobalAppConfig()
 	dbCfg := cfg.Database
 
 	// Build PostgreSQL connection string
@@ -41,7 +41,7 @@ func Connect(ctx context.Context, dataDir string) (*sql.DB, error) {
 	)
 
 	// Verify connection
-	if err = db.PingContext(ctx); err != nil {
+	if err = postgres.PingContext(ctx); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}

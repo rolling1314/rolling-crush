@@ -28,13 +28,13 @@ import (
 	"charm.land/fantasy/providers/openrouter"
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent/tools"
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/csync"
-	"github.com/charmbracelet/crush/internal/db"
-	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/permission"
-	"github.com/charmbracelet/crush/internal/session"
-	"github.com/charmbracelet/crush/internal/stringext"
+	"github.com/charmbracelet/crush/config"
+	"github.com/charmbracelet/crush/internal/pkg/csync"
+	"github.com/charmbracelet/crush/store/postgres"
+	"github.com/charmbracelet/crush/domain/message"
+	"github.com/charmbracelet/crush/domain/permission"
+	"github.com/charmbracelet/crush/domain/session"
+	"github.com/charmbracelet/crush/internal/pkg/stringext"
 )
 
 //go:embed templates/title.md
@@ -86,7 +86,7 @@ type sessionAgent struct {
 	messages             message.Service
 	disableAutoSummarize bool
 	isYolo               bool
-	dbQuerier            db.Querier // For querying project info
+	dbQuerier            postgres.Querier // For querying project info
 
 	messageQueue   *csync.Map[string, []SessionAgentCall]
 	activeRequests *csync.Map[string, context.CancelFunc]
@@ -102,7 +102,7 @@ type SessionAgentOptions struct {
 	Sessions             session.Service
 	Messages             message.Service
 	Tools                []fantasy.AgentTool
-	DBQuerier            db.Querier
+	DBQuerier            postgres.Querier
 }
 
 func NewSessionAgent(

@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/crush/internal/sandbox"
-	"github.com/charmbracelet/crush/internal/storage"
+	"github.com/charmbracelet/crush/sandbox"
+	"github.com/charmbracelet/crush/store/storage"
 	"github.com/gin-gonic/gin"
 )
 

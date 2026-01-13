@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/charmbracelet/crush/internal/auth"
+	"github.com/charmbracelet/crush/auth"
 	"github.com/gin-gonic/gin"
 )
 

@@ -3,14 +3,14 @@ package httpserver
 import (
 	"log/slog"
 
-	"github.com/charmbracelet/crush/internal/auth"
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/db"
-	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/project"
-	"github.com/charmbracelet/crush/internal/sandbox"
-	"github.com/charmbracelet/crush/internal/session"
-	"github.com/charmbracelet/crush/internal/user"
+	"github.com/charmbracelet/crush/auth"
+	"github.com/charmbracelet/crush/config"
+	"github.com/charmbracelet/crush/store/postgres"
+	"github.com/charmbracelet/crush/domain/message"
+	"github.com/charmbracelet/crush/domain/project"
+	"github.com/charmbracelet/crush/sandbox"
+	"github.com/charmbracelet/crush/domain/session"
+	"github.com/charmbracelet/crush/domain/user"
 	"github.com/gin-gonic/gin"
 )
 
@@ -22,13 +22,13 @@ type Server struct {
 	projectService project.Service
 	sessionService session.Service
 	messageService message.Service
-	db             *db.Queries
+	db             *postgres.Queries
 	config         *config.Config
 	sandboxClient  *sandbox.Client
 }
 
 // New creates a new HTTP server instance
-func New(port string, userService user.Service, projectService project.Service, sessionService session.Service, messageService message.Service, queries *db.Queries, cfg *config.Config) *Server {
+func New(port string, userService user.Service, projectService project.Service, sessionService session.Service, messageService message.Service, queries *postgres.Queries, cfg *config.Config) *Server {
 	gin.SetMode(gin.DebugMode)
 	engine := gin.Default()
 

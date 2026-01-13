@@ -16,11 +16,11 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/crush/internal/app"
-	"github.com/charmbracelet/crush/internal/appconfig"
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/db"
+	"github.com/charmbracelet/crush/config"
+	"github.com/charmbracelet/crush/config"
+	"github.com/charmbracelet/crush/store/postgres"
 	"github.com/charmbracelet/crush/internal/event"
-	termutil "github.com/charmbracelet/crush/internal/term"
+	termutil "github.com/charmbracelet/crush/internal/pkg/term"
 	"github.com/charmbracelet/crush/internal/version"
 	"github.com/charmbracelet/fang"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -195,7 +195,7 @@ func setupApp(cmd *cobra.Command) (*app.App, error) {
 		appCfg = nil // Will use defaults
 	}
 	if appCfg != nil {
-		appconfig.SetGlobal(appCfg)
+		config.SetGlobalAppConfig(appCfg)
 		slog.Info("Application configuration loaded successfully",
 			"db_host", appCfg.Database.Host,
 			"sandbox_url", appCfg.Sandbox.BaseURL,
@@ -218,7 +218,7 @@ func setupApp(cmd *cobra.Command) (*app.App, error) {
 	}
 
 	// Connect to DB; this will also run migrations.
-	conn, err := db.Connect(ctx, cfg.Options.DataDirectory)
+	conn, err := postgres.Connect(ctx, cfg.Options.DataDirectory)
 	if err != nil {
 		return nil, err
 	}

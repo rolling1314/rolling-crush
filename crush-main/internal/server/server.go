@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/charmbracelet/crush/internal/auth"
+	"github.com/charmbracelet/crush/auth"
 	"github.com/gorilla/websocket"
 )
 

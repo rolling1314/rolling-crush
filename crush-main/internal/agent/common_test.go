@@ -17,14 +17,14 @@ import (
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent/prompt"
 	"github.com/charmbracelet/crush/internal/agent/tools"
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/csync"
-	"github.com/charmbracelet/crush/internal/db"
-	"github.com/charmbracelet/crush/internal/history"
+	"github.com/charmbracelet/crush/config"
+	"github.com/charmbracelet/crush/internal/pkg/csync"
+	"github.com/charmbracelet/crush/store/postgres"
+	"github.com/charmbracelet/crush/domain/history"
 	"github.com/charmbracelet/crush/internal/lsp"
-	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/permission"
-	"github.com/charmbracelet/crush/internal/session"
+	"github.com/charmbracelet/crush/domain/message"
+	"github.com/charmbracelet/crush/domain/permission"
+	"github.com/charmbracelet/crush/domain/session"
 	"github.com/stretchr/testify/require"
 
 	_ "github.com/joho/godotenv/autoload"
@@ -108,10 +108,10 @@ func testEnv(t *testing.T) fakeEnv {
 	err := os.MkdirAll(workingDir, 0o755)
 	require.NoError(t, err)
 
-	conn, err := db.Connect(t.Context(), t.TempDir())
+	conn, err := postgres.Connect(t.Context(), t.TempDir())
 	require.NoError(t, err)
 
-	q := db.New(conn)
+	q := postgres.New(conn)
 	sessions := session.NewService(q)
 	messages := message.NewService(q)
 

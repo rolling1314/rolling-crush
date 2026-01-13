@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/csync"
+	"github.com/charmbracelet/crush/internal/pkg/csync"
 )
 
 const (

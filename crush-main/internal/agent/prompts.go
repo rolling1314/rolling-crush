@@ -5,7 +5,7 @@ import (
 	_ "embed"
 
 	"github.com/charmbracelet/crush/internal/agent/prompt"
-	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/config"
 )
 
 //go:embed templates/coder.md.tpl

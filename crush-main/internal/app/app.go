@@ -19,32 +19,31 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/fantasy"
 	"charm.land/lipgloss/v2"
+	apihttp "github.com/charmbracelet/crush/api/http"
+	apiws "github.com/charmbracelet/crush/api/ws"
+	"github.com/charmbracelet/crush/domain/history"
+	"github.com/charmbracelet/crush/domain/message"
+	"github.com/charmbracelet/crush/domain/permission"
+	"github.com/charmbracelet/crush/domain/project"
+	"github.com/charmbracelet/crush/domain/session"
+	"github.com/charmbracelet/crush/domain/user"
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
-	"github.com/charmbracelet/crush/internal/appconfig"
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/csync"
-	"github.com/charmbracelet/crush/internal/db"
-	"github.com/charmbracelet/crush/internal/format"
-	"github.com/charmbracelet/crush/internal/history"
-	"github.com/charmbracelet/crush/internal/httpserver"
-	"github.com/charmbracelet/crush/internal/log"
 	"github.com/charmbracelet/crush/internal/lsp"
-	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/permission"
-	"github.com/charmbracelet/crush/internal/project"
+	"github.com/charmbracelet/crush/internal/pkg/csync"
+	"github.com/charmbracelet/crush/internal/pkg/format"
+	"github.com/charmbracelet/crush/internal/pkg/log"
+	"github.com/charmbracelet/crush/internal/pkg/term"
 	"github.com/charmbracelet/crush/internal/pubsub"
-	"github.com/charmbracelet/crush/internal/sandbox"
-	"github.com/charmbracelet/crush/internal/server"
-	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/shell"
-	"github.com/charmbracelet/crush/internal/storage"
-	"github.com/charmbracelet/crush/internal/term"
 	"github.com/charmbracelet/crush/internal/tui/components/anim"
 	"github.com/charmbracelet/crush/internal/tui/styles"
 	"github.com/charmbracelet/crush/internal/update"
-	"github.com/charmbracelet/crush/internal/user"
 	"github.com/charmbracelet/crush/internal/version"
+	"github.com/charmbracelet/crush/config"
+	"github.com/charmbracelet/crush/sandbox"
+	"github.com/charmbracelet/crush/store/postgres"
+	"github.com/charmbracelet/crush/store/storage"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/charmtone"
 )
@@ -62,15 +61,15 @@ type App struct {
 	LSPClients *csync.Map[string, *lsp.Client]
 
 	config *config.Config
-	db     *db.Queries // Add DB queries for session config loading
+	db     *postgres.Queries // Add DB queries for session config loading
 
 	serviceEventsWG *sync.WaitGroup
 	eventsCtx       context.Context
 	events          chan tea.Msg
 	tuiWG           *sync.WaitGroup
 
-	WSServer   *server.Server
-	HTTPServer *httpserver.Server
+	WSServer   *apiws.Server
+	HTTPServer *apihttp.Server
 
 	// Track the current active session for the single-user mode
 	currentSessionID string
@@ -82,7 +81,7 @@ type App struct {
 
 // New initializes a new applcation instance.
 func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
-	q := db.New(conn)
+	q := postgres.New(conn)
 	sessions := session.NewService(q)
 	messages := message.NewService(q)
 	files := history.NewService(q, conn)
@@ -112,8 +111,8 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 		serviceEventsWG: &sync.WaitGroup{},
 		tuiWG:           &sync.WaitGroup{},
 
-		WSServer:   server.New(),
-		HTTPServer: httpserver.New("8001", users, projects, sessions, messages, q, cfg),
+		WSServer:   apiws.New(),
+		HTTPServer: apihttp.New("8001", users, projects, sessions, messages, q, cfg),
 	}
 
 	// Register the handler for incoming WebSocket messages
@@ -127,7 +126,7 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 	app.setupEvents()
 
 	// Initialize storage client from app config
-	appCfg := appconfig.GetGlobal()
+	appCfg := config.GetGlobalAppConfig()
 	if err := storage.InitGlobalClientFromConfig(appCfg); err != nil {
 		slog.Warn("Failed to initialize storage client from config, trying default config", "error", err)
 		// Fallback to default initialization

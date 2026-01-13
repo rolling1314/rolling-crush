@@ -13,7 +13,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/agent/prompt"
 	"github.com/charmbracelet/crush/internal/agent/tools"
-	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/domain/permission"
 )
 
 //go:embed templates/agentic_fetch.md

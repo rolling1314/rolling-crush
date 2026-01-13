@@ -24,103 +24,103 @@ func New(db DBTX) *Queries {
 func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	q := Queries{db: db}
 	var err error
-	if q.createFileStmt, err = db.PrepareContext(ctx, createFile); err != nil {
+	if q.createFileStmt, err = postgres.PrepareContext(ctx, createFile); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateFile: %w", err)
 	}
-	if q.createMessageStmt, err = db.PrepareContext(ctx, createMessage); err != nil {
+	if q.createMessageStmt, err = postgres.PrepareContext(ctx, createMessage); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateMessage: %w", err)
 	}
-	if q.createProjectStmt, err = db.PrepareContext(ctx, createProject); err != nil {
+	if q.createProjectStmt, err = postgres.PrepareContext(ctx, createProject); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateProject: %w", err)
 	}
-	if q.createSessionStmt, err = db.PrepareContext(ctx, createSession); err != nil {
+	if q.createSessionStmt, err = postgres.PrepareContext(ctx, createSession); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateSession: %w", err)
 	}
-	if q.createUserStmt, err = db.PrepareContext(ctx, createUser); err != nil {
+	if q.createUserStmt, err = postgres.PrepareContext(ctx, createUser); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateUser: %w", err)
 	}
-	if q.deleteFileStmt, err = db.PrepareContext(ctx, deleteFile); err != nil {
+	if q.deleteFileStmt, err = postgres.PrepareContext(ctx, deleteFile); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteFile: %w", err)
 	}
-	if q.deleteMessageStmt, err = db.PrepareContext(ctx, deleteMessage); err != nil {
+	if q.deleteMessageStmt, err = postgres.PrepareContext(ctx, deleteMessage); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteMessage: %w", err)
 	}
-	if q.deleteProjectStmt, err = db.PrepareContext(ctx, deleteProject); err != nil {
+	if q.deleteProjectStmt, err = postgres.PrepareContext(ctx, deleteProject); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteProject: %w", err)
 	}
-	if q.deleteSessionStmt, err = db.PrepareContext(ctx, deleteSession); err != nil {
+	if q.deleteSessionStmt, err = postgres.PrepareContext(ctx, deleteSession); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteSession: %w", err)
 	}
-	if q.deleteSessionFilesStmt, err = db.PrepareContext(ctx, deleteSessionFiles); err != nil {
+	if q.deleteSessionFilesStmt, err = postgres.PrepareContext(ctx, deleteSessionFiles); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteSessionFiles: %w", err)
 	}
-	if q.deleteSessionMessagesStmt, err = db.PrepareContext(ctx, deleteSessionMessages); err != nil {
+	if q.deleteSessionMessagesStmt, err = postgres.PrepareContext(ctx, deleteSessionMessages); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteSessionMessages: %w", err)
 	}
-	if q.deleteUserStmt, err = db.PrepareContext(ctx, deleteUser); err != nil {
+	if q.deleteUserStmt, err = postgres.PrepareContext(ctx, deleteUser); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteUser: %w", err)
 	}
-	if q.getFileStmt, err = db.PrepareContext(ctx, getFile); err != nil {
+	if q.getFileStmt, err = postgres.PrepareContext(ctx, getFile); err != nil {
 		return nil, fmt.Errorf("error preparing query GetFile: %w", err)
 	}
-	if q.getFileByPathAndSessionStmt, err = db.PrepareContext(ctx, getFileByPathAndSession); err != nil {
+	if q.getFileByPathAndSessionStmt, err = postgres.PrepareContext(ctx, getFileByPathAndSession); err != nil {
 		return nil, fmt.Errorf("error preparing query GetFileByPathAndSession: %w", err)
 	}
-	if q.getMessageStmt, err = db.PrepareContext(ctx, getMessage); err != nil {
+	if q.getMessageStmt, err = postgres.PrepareContext(ctx, getMessage); err != nil {
 		return nil, fmt.Errorf("error preparing query GetMessage: %w", err)
 	}
-	if q.getProjectByIDStmt, err = db.PrepareContext(ctx, getProjectByID); err != nil {
+	if q.getProjectByIDStmt, err = postgres.PrepareContext(ctx, getProjectByID); err != nil {
 		return nil, fmt.Errorf("error preparing query GetProjectByID: %w", err)
 	}
-	if q.getProjectSessionsStmt, err = db.PrepareContext(ctx, getProjectSessions); err != nil {
+	if q.getProjectSessionsStmt, err = postgres.PrepareContext(ctx, getProjectSessions); err != nil {
 		return nil, fmt.Errorf("error preparing query GetProjectSessions: %w", err)
 	}
-	if q.getSessionByIDStmt, err = db.PrepareContext(ctx, getSessionByID); err != nil {
+	if q.getSessionByIDStmt, err = postgres.PrepareContext(ctx, getSessionByID); err != nil {
 		return nil, fmt.Errorf("error preparing query GetSessionByID: %w", err)
 	}
-	if q.getUserByEmailStmt, err = db.PrepareContext(ctx, getUserByEmail); err != nil {
+	if q.getUserByEmailStmt, err = postgres.PrepareContext(ctx, getUserByEmail); err != nil {
 		return nil, fmt.Errorf("error preparing query GetUserByEmail: %w", err)
 	}
-	if q.getUserByIDStmt, err = db.PrepareContext(ctx, getUserByID); err != nil {
+	if q.getUserByIDStmt, err = postgres.PrepareContext(ctx, getUserByID); err != nil {
 		return nil, fmt.Errorf("error preparing query GetUserByID: %w", err)
 	}
-	if q.getUserByUsernameStmt, err = db.PrepareContext(ctx, getUserByUsername); err != nil {
+	if q.getUserByUsernameStmt, err = postgres.PrepareContext(ctx, getUserByUsername); err != nil {
 		return nil, fmt.Errorf("error preparing query GetUserByUsername: %w", err)
 	}
-	if q.listFilesByPathStmt, err = db.PrepareContext(ctx, listFilesByPath); err != nil {
+	if q.listFilesByPathStmt, err = postgres.PrepareContext(ctx, listFilesByPath); err != nil {
 		return nil, fmt.Errorf("error preparing query ListFilesByPath: %w", err)
 	}
-	if q.listFilesBySessionStmt, err = db.PrepareContext(ctx, listFilesBySession); err != nil {
+	if q.listFilesBySessionStmt, err = postgres.PrepareContext(ctx, listFilesBySession); err != nil {
 		return nil, fmt.Errorf("error preparing query ListFilesBySession: %w", err)
 	}
-	if q.listLatestSessionFilesStmt, err = db.PrepareContext(ctx, listLatestSessionFiles); err != nil {
+	if q.listLatestSessionFilesStmt, err = postgres.PrepareContext(ctx, listLatestSessionFiles); err != nil {
 		return nil, fmt.Errorf("error preparing query ListLatestSessionFiles: %w", err)
 	}
-	if q.listMessagesBySessionStmt, err = db.PrepareContext(ctx, listMessagesBySession); err != nil {
+	if q.listMessagesBySessionStmt, err = postgres.PrepareContext(ctx, listMessagesBySession); err != nil {
 		return nil, fmt.Errorf("error preparing query ListMessagesBySession: %w", err)
 	}
-	if q.listNewFilesStmt, err = db.PrepareContext(ctx, listNewFiles); err != nil {
+	if q.listNewFilesStmt, err = postgres.PrepareContext(ctx, listNewFiles); err != nil {
 		return nil, fmt.Errorf("error preparing query ListNewFiles: %w", err)
 	}
-	if q.listProjectsByUserStmt, err = db.PrepareContext(ctx, listProjectsByUser); err != nil {
+	if q.listProjectsByUserStmt, err = postgres.PrepareContext(ctx, listProjectsByUser); err != nil {
 		return nil, fmt.Errorf("error preparing query ListProjectsByUser: %w", err)
 	}
-	if q.listSessionsStmt, err = db.PrepareContext(ctx, listSessions); err != nil {
+	if q.listSessionsStmt, err = postgres.PrepareContext(ctx, listSessions); err != nil {
 		return nil, fmt.Errorf("error preparing query ListSessions: %w", err)
 	}
-	if q.updateMessageStmt, err = db.PrepareContext(ctx, updateMessage); err != nil {
+	if q.updateMessageStmt, err = postgres.PrepareContext(ctx, updateMessage); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateMessage: %w", err)
 	}
-	if q.updateProjectStmt, err = db.PrepareContext(ctx, updateProject); err != nil {
+	if q.updateProjectStmt, err = postgres.PrepareContext(ctx, updateProject); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateProject: %w", err)
 	}
-	if q.updateSessionStmt, err = db.PrepareContext(ctx, updateSession); err != nil {
+	if q.updateSessionStmt, err = postgres.PrepareContext(ctx, updateSession); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateSession: %w", err)
 	}
-	if q.updateUserStmt, err = db.PrepareContext(ctx, updateUser); err != nil {
+	if q.updateUserStmt, err = postgres.PrepareContext(ctx, updateUser); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateUser: %w", err)
 	}
-	if q.updateUserPasswordStmt, err = db.PrepareContext(ctx, updateUserPassword); err != nil {
+	if q.updateUserPasswordStmt, err = postgres.PrepareContext(ctx, updateUserPassword); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateUserPassword: %w", err)
 	}
 	return &q, nil

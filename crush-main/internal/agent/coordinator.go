@@ -18,15 +18,15 @@ import (
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
 	agentprompt "github.com/charmbracelet/crush/internal/agent/prompt"
 	"github.com/charmbracelet/crush/internal/agent/tools"
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/csync"
-	"github.com/charmbracelet/crush/internal/db"
-	"github.com/charmbracelet/crush/internal/history"
-	"github.com/charmbracelet/crush/internal/log"
+	"github.com/charmbracelet/crush/config"
+	"github.com/charmbracelet/crush/internal/pkg/csync"
+	"github.com/charmbracelet/crush/store/postgres"
+	"github.com/charmbracelet/crush/domain/history"
+	"github.com/charmbracelet/crush/internal/pkg/log"
 	"github.com/charmbracelet/crush/internal/lsp"
-	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/permission"
-	"github.com/charmbracelet/crush/internal/session"
+	"github.com/charmbracelet/crush/domain/message"
+	"github.com/charmbracelet/crush/domain/permission"
+	"github.com/charmbracelet/crush/domain/session"
 	"golang.org/x/sync/errgroup"
 
 	"charm.land/fantasy/providers/anthropic"
@@ -63,7 +63,7 @@ type coordinator struct {
 	history     history.Service
 	lspClients  *csync.Map[string, *lsp.Client]
 	dbReader    config.DBReader // For loading session-specific config from DB
-	dbQuerier   db.Querier      // For querying session and project info
+	dbQuerier   postgres.Querier      // For querying session and project info
 
 	currentAgent SessionAgent
 	agents       map[string]SessionAgent
@@ -81,10 +81,10 @@ func NewCoordinator(
 	lspClients *csync.Map[string, *lsp.Client],
 	dbReader config.DBReader, // Add dbReader parameter
 ) (Coordinator, error) {
-	// dbReader also implements db.Querier (it's the same db.Queries instance)
-	var dbQuerier db.Querier
+	// dbReader also implements postgres.Querier (it's the same postgres.Queries instance)
+	var dbQuerier postgres.Querier
 	if dbReader != nil {
-		if q, ok := dbReader.(db.Querier); ok {
+		if q, ok := dbReader.(postgres.Querier); ok {
 			dbQuerier = q
 		}
 	}

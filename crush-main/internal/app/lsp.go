@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/config"
 	"github.com/charmbracelet/crush/internal/lsp"
 )
 
