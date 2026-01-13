@@ -19,6 +19,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/fantasy"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/exp/charmtone"
 	apihttp "github.com/rolling1314/rolling-crush/api/http"
 	apiws "github.com/rolling1314/rolling-crush/api/ws"
 	"github.com/rolling1314/rolling-crush/domain/history"
@@ -44,8 +46,6 @@ import (
 	"github.com/rolling1314/rolling-crush/sandbox"
 	"github.com/rolling1314/rolling-crush/store/postgres"
 	"github.com/rolling1314/rolling-crush/store/storage"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/charmbracelet/x/exp/charmtone"
 )
 
 type App struct {
@@ -587,6 +587,88 @@ func (app *App) setupEvents() {
 	app.cleanupFuncs = append(app.cleanupFuncs, cleanupFunc)
 }
 
+// getSessionContextWindow retrieves the context window size for a session from its config
+// This mirrors the logic in HTTP handler and TUI components
+func (app *App) getSessionContextWindow(ctx context.Context, sessionID string) int64 {
+	// Debug: Check if app.config has providers loaded
+	if app.config.Providers == nil {
+		slog.Error("app.config.Providers is nil!", "session_id", sessionID)
+		return 0
+	}
+
+	providerCount := 0
+	for range app.config.Providers.Seq() {
+		providerCount++
+	}
+	slog.Debug("app.config has providers", "session_id", sessionID, "provider_count", providerCount)
+
+	configJSON, err := app.db.GetSessionConfigJSON(ctx, sessionID)
+	slog.Info("getSessionContextWindow called", "session_id", sessionID, "config_json_length", len(configJSON), "error", err)
+
+	if err != nil || configJSON == "" || configJSON == "{}" {
+		slog.Warn("No session config found", "session_id", sessionID, "config_json", configJSON, "error", err)
+		return 0
+	}
+
+	var configData map[string]interface{}
+	if err := json.Unmarshal([]byte(configJSON), &configData); err != nil {
+		slog.Error("Failed to parse session config JSON", "session_id", sessionID, "error", err)
+		return 0
+	}
+
+	slog.Info("Parsed config data", "session_id", sessionID, "has_models", configData["models"] != nil, "has_providers", configData["providers"] != nil)
+
+	if models, ok := configData["models"].(map[string]interface{}); ok {
+		slog.Info("Found models in config", "session_id", sessionID, "models_keys", getKeys(models))
+
+		if largeModel, ok := models["large"].(map[string]interface{}); ok {
+			provider, _ := largeModel["provider"].(string)
+			modelID, _ := largeModel["model"].(string)
+
+			slog.Info("Found large model config", "session_id", sessionID, "provider", provider, "model", modelID)
+
+			if provider != "" && modelID != "" {
+				// Debug: List all models from this provider
+				if providerConfig, ok := app.config.Providers.Get(provider); ok {
+					slog.Info("Provider found in config", "provider", provider, "model_count", len(providerConfig.Models))
+					for i, m := range providerConfig.Models {
+						if i < 3 { // Only log first 3 models to avoid spam
+							slog.Debug("Available model", "provider", provider, "model_id", m.ID, "model_name", m.Name, "context_window", m.ContextWindow)
+						}
+					}
+				} else {
+					slog.Warn("Provider not found in app.config.Providers", "provider", provider)
+				}
+
+				modelInfo := app.config.GetModel(provider, modelID)
+				if modelInfo != nil {
+					slog.Info("✅ Found model info", "session_id", sessionID, "provider", provider, "model", modelID, "context_window", modelInfo.ContextWindow)
+					return int64(modelInfo.ContextWindow)
+				} else {
+					slog.Warn("❌ Model not found in config", "session_id", sessionID, "provider", provider, "model", modelID)
+				}
+			} else {
+				slog.Warn("Provider or model ID is empty", "session_id", sessionID, "provider", provider, "model", modelID)
+			}
+		} else {
+			slog.Warn("No large model config found in models", "session_id", sessionID)
+		}
+	} else {
+		slog.Warn("No models section in config", "session_id", sessionID)
+	}
+
+	return 0
+}
+
+// Helper function to get map keys for logging
+func getKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 func setupSubscriber[T any](
 	ctx context.Context,
 	wg *sync.WaitGroup,
@@ -744,6 +826,33 @@ func (app *App) Subscribe() {
 					"granted":      event.Payload.Granted,
 					"denied":       event.Payload.Denied,
 				})
+			}
+
+			// Send session updates to specific session via WebSocket (like TUI does)
+			if event, ok := msg.(pubsub.Event[session.Session]); ok {
+				if event.Type == pubsub.UpdatedEvent {
+					slog.Info("Session updated event received", "session_id", event.Payload.ID, "prompt_tokens", event.Payload.PromptTokens, "completion_tokens", event.Payload.CompletionTokens, "cost", event.Payload.Cost)
+
+					// Get context window for this session
+					ctx := context.Background()
+					contextWindow := app.getSessionContextWindow(ctx, event.Payload.ID)
+
+					slog.Info("Sending session update to WebSocket clients", "session_id", event.Payload.ID, "context_window", contextWindow, "total_tokens", event.Payload.PromptTokens+event.Payload.CompletionTokens)
+
+					app.WSServer.SendToSession(event.Payload.ID, map[string]interface{}{
+						"Type":              "session_update",
+						"id":                event.Payload.ID,
+						"project_id":        event.Payload.ProjectID,
+						"title":             event.Payload.Title,
+						"message_count":     event.Payload.MessageCount,
+						"prompt_tokens":     event.Payload.PromptTokens,
+						"completion_tokens": event.Payload.CompletionTokens,
+						"cost":              event.Payload.Cost,
+						"context_window":    contextWindow,
+						"created_at":        event.Payload.CreatedAt,
+						"updated_at":        event.Payload.UpdatedAt,
+					})
+				}
 			}
 		}
 	}

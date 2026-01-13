@@ -84,6 +84,7 @@ type SessionResponse struct {
 	PromptTokens     int64   `json:"prompt_tokens"`
 	CompletionTokens int64   `json:"completion_tokens"`
 	Cost             float64 `json:"cost"`
+	ContextWindow    int64   `json:"context_window"`
 	CreatedAt        int64   `json:"created_at"`
 	UpdatedAt        int64   `json:"updated_at"`
 }

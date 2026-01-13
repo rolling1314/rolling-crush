@@ -196,6 +196,7 @@ func (s *Server) handleGetProjectSessions(c *gin.Context) {
 
 	response := make([]SessionResponse, len(sessions))
 	for i, sess := range sessions {
+		contextWindow := s.getSessionContextWindow(c.Request.Context(), sess.ID)
 		response[i] = SessionResponse{
 			ID:               sess.ID,
 			ProjectID:        sess.ProjectID,
@@ -204,6 +205,7 @@ func (s *Server) handleGetProjectSessions(c *gin.Context) {
 			PromptTokens:     sess.PromptTokens,
 			CompletionTokens: sess.CompletionTokens,
 			Cost:             sess.Cost,
+			ContextWindow:    contextWindow,
 			CreatedAt:        sess.CreatedAt,
 			UpdatedAt:        sess.UpdatedAt,
 		}

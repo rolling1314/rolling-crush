@@ -7,8 +7,8 @@ import (
 	"net/http"
 
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
-	"github.com/rolling1314/rolling-crush/pkg/config"
 	"github.com/gin-gonic/gin"
+	"github.com/rolling1314/rolling-crush/pkg/config"
 )
 
 // handleCreateSession handles session creation
@@ -92,6 +92,9 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 		}
 	}
 
+	// Get context window for the newly created session
+	contextWindow := s.getSessionContextWindow(c.Request.Context(), sess.ID)
+
 	c.JSON(http.StatusOK, SessionResponse{
 		ID:               sess.ID,
 		ProjectID:        sess.ProjectID,
@@ -100,6 +103,7 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 		PromptTokens:     sess.PromptTokens,
 		CompletionTokens: sess.CompletionTokens,
 		Cost:             sess.Cost,
+		ContextWindow:    contextWindow,
 		CreatedAt:        sess.CreatedAt,
 		UpdatedAt:        sess.UpdatedAt,
 	})

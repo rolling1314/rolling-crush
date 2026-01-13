@@ -1,7 +1,9 @@
 package http
 
 import (
+	"encoding/json"
 	"log/slog"
+	"context"
 
 	"github.com/rolling1314/rolling-crush/auth"
 	"github.com/rolling1314/rolling-crush/pkg/config"
@@ -107,4 +109,32 @@ func (s *Server) Start() error {
 
 	slog.Info("HTTP server starting", "port", s.port)
 	return s.engine.Run(":" + s.port)
+}
+
+// getSessionContextWindow helper
+func (s *Server) getSessionContextWindow(ctx context.Context, sessionID string) int64 {
+	configJSON, err := s.db.GetSessionConfigJSON(ctx, sessionID)
+	if err != nil || configJSON == "" || configJSON == "{}" {
+		return 0
+	}
+
+	var configData map[string]interface{}
+	if err := json.Unmarshal([]byte(configJSON), &configData); err != nil {
+		return 0
+	}
+
+	if models, ok := configData["models"].(map[string]interface{}); ok {
+		if largeModel, ok := models["large"].(map[string]interface{}); ok {
+			provider, _ := largeModel["provider"].(string)
+			modelID, _ := largeModel["model"].(string)
+
+			if provider != "" && modelID != "" {
+				modelInfo := s.config.GetModel(provider, modelID)
+				if modelInfo != nil {
+					return int64(modelInfo.ContextWindow)
+				}
+			}
+		}
+	}
+	return 0
 }
