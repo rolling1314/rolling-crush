@@ -335,7 +335,7 @@ export const ChatPanel = ({
     e.preventDefault();
     e.stopPropagation();
     if (inputContainerRef.current) {
-        inputContainerRef.current.style.borderColor = '#3b82f6'; // blue-500
+        inputContainerRef.current.style.borderColor = '#a855f7'; // purple-500
     }
   };
 
@@ -590,7 +590,7 @@ export const ChatPanel = ({
             </div>
             <h3 className="text-lg font-medium text-gray-200 mb-2">开始新对话</h3>
             <p className="text-sm text-gray-500 max-w-sm">
-              选择模型后发送消息开始对话。Auto 模式将使用智谱 GLM 模型。
+              选择模型后发送消息开始对话。Auto 模式将使用 Z.AI GLM-4.5 模型。
             </p>
           </div>
         )}
@@ -772,7 +772,7 @@ export const ChatPanel = ({
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className="relative bg-[#111] border border-[#333] rounded-lg flex flex-col focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 transition-colors"
+            className="relative bg-[#111] border border-[#333] rounded-lg flex flex-col focus-within:ring-1 focus-within:ring-purple-500 focus-within:border-purple-500 transition-colors"
         >
           {/* Attached files and images */}
           {(attachedFiles.length > 0 || attachedImages.length > 0) && (
@@ -872,7 +872,7 @@ export const ChatPanel = ({
               <button
                 onClick={handleSubmit}
                 disabled={!input.trim() && attachedFiles.length === 0 && attachedImages.length === 0}
-                className="p-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="p-1.5 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-md hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <Send size={16} />
               </button>

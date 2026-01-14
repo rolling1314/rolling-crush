@@ -6,7 +6,6 @@ import { ChatPanel } from '../components/ChatPanel';
 import { FileTree } from '../components/FileTree';
 import { CodeEditor } from '../components/CodeEditor';
 import { InlineChatModelSelector } from '../components/InlineChatModelSelector';
-import { SessionConfigPanel } from '../components/SessionConfigPanel';
 import { type FileNode, type Message, type PermissionRequest, type ToolCall, type ToolResult, type Session } from '../types';
 
 const API_URL = '/api';
@@ -1192,7 +1191,12 @@ export default function WorkspacePage() {
                   disabled={isProcessing}
                 />
               ) : currentSessionId ? (
-                <SessionConfigPanel sessionId={currentSessionId} compact={true} />
+                <InlineChatModelSelector
+                  selectedConfig={pendingModelConfig}
+                  onConfigChange={setPendingModelConfig}
+                  sessionId={currentSessionId}
+                  disabled={isProcessing}
+                />
               ) : null
             }
             isProcessing={isProcessing}

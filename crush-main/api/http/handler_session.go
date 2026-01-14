@@ -55,12 +55,21 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 		tempConfig.EnableDBStorage(sess.ID, s.db)
 		fmt.Println("Enabled DB storage for session:", sess.ID)
 
-		// 2. Set API Key following TUI logic (writes to database automatically)
+		// 2. Set API Key and Base URL following TUI logic (writes to database automatically)
 		if modelConfig.APIKey != "" {
 			if err := tempConfig.SetProviderAPIKey(modelConfig.Provider, modelConfig.APIKey); err != nil {
 				slog.Error("Failed to set provider API key", "error", err, "session_id", sess.ID)
 			} else {
 				slog.Info("Saved API key to database", "provider", modelConfig.Provider, "session_id", sess.ID)
+			}
+		}
+
+		// Set custom base_url if provided (important for providers like zhipu)
+		if modelConfig.BaseURL != "" {
+			if err := tempConfig.SetConfigField(fmt.Sprintf("providers.%s.base_url", modelConfig.Provider), modelConfig.BaseURL); err != nil {
+				slog.Error("Failed to set provider base_url", "error", err, "session_id", sess.ID)
+			} else {
+				slog.Info("Saved base_url to database", "provider", modelConfig.Provider, "base_url", modelConfig.BaseURL, "session_id", sess.ID)
 			}
 		}
 
@@ -80,14 +89,24 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 		}
 
 		// 4. Auto-set small model following TUI logic (writes to database automatically)
+		smallModelSet := false
 		knownProviders, err := config.Providers(&tempConfig)
+		fmt.Println("=== Setting small model ===")
+		fmt.Println("config.Providers error:", err)
+
 		if err == nil {
 			var providerInfo *catwalk.Provider
 			for _, p := range knownProviders {
+				fmt.Printf("Checking provider: %s vs %s\n", string(p.ID), modelConfig.Provider)
 				if string(p.ID) == modelConfig.Provider {
 					providerInfo = &p
 					break
 				}
+			}
+
+			fmt.Println("providerInfo found:", providerInfo != nil)
+			if providerInfo != nil {
+				fmt.Println("DefaultSmallModelID:", providerInfo.DefaultSmallModelID)
 			}
 
 			if providerInfo != nil && providerInfo.DefaultSmallModelID != "" {
@@ -103,8 +122,32 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 						slog.Error("Failed to update preferred small model", "error", err, "session_id", sess.ID)
 					} else {
 						slog.Info("Saved small model to database", "model", smallModelInfo.ID, "session_id", sess.ID)
+						smallModelSet = true
 					}
 				}
+			}
+		}
+
+		// If no default small model found, use the same model as large model for small model
+		// This ensures the agent coordinator can run properly
+		fmt.Println("smallModelSet:", smallModelSet)
+		if !smallModelSet {
+			fmt.Println("Setting fallback small model (same as large)")
+			smallModel := config.SelectedModel{
+				Model:           modelConfig.Model,
+				Provider:        modelConfig.Provider,
+				ReasoningEffort: modelConfig.ReasoningEffort,
+			}
+			if modelConfig.MaxTokens != nil {
+				smallModel.MaxTokens = *modelConfig.MaxTokens
+			}
+			fmt.Printf("Small model to save: %+v\n", smallModel)
+			if err := tempConfig.UpdatePreferredModel(config.SelectedModelTypeSmall, smallModel); err != nil {
+				slog.Error("Failed to set fallback small model", "error", err, "session_id", sess.ID)
+				fmt.Println("Error setting fallback small model:", err)
+			} else {
+				slog.Info("Using large model as fallback small model", "model", modelConfig.Model, "session_id", sess.ID)
+				fmt.Println("Fallback small model saved successfully")
 			}
 		}
 	}
@@ -242,6 +285,15 @@ func (s *Server) handleUpdateSessionConfig(c *gin.Context) {
 		slog.Info("Updated API key in database", "provider", req.Provider, "session_id", sessionID)
 	}
 
+	// Set custom base_url if provided
+	if req.BaseURL != "" {
+		if err := tempConfig.SetConfigField(fmt.Sprintf("providers.%s.base_url", req.Provider), req.BaseURL); err != nil {
+			slog.Error("Failed to set provider base_url", "error", err, "session_id", sessionID)
+		} else {
+			slog.Info("Updated base_url in database", "provider", req.Provider, "base_url", req.BaseURL, "session_id", sessionID)
+		}
+	}
+
 	// Update preferred large model using TUI logic
 	largeModel := config.SelectedModel{
 		Model:           req.Model,
@@ -259,6 +311,7 @@ func (s *Server) handleUpdateSessionConfig(c *gin.Context) {
 	slog.Info("Updated large model in database", "model", req.Model, "session_id", sessionID)
 
 	// Auto-set small model using TUI logic
+	smallModelSet := false
 	knownProviders, err := config.Providers(&tempConfig)
 	if err == nil {
 		var providerInfo *catwalk.Provider
@@ -282,8 +335,26 @@ func (s *Server) handleUpdateSessionConfig(c *gin.Context) {
 					slog.Error("Failed to update preferred small model", "error", err, "session_id", sessionID)
 				} else {
 					slog.Info("Updated small model in database", "model", smallModelInfo.ID, "session_id", sessionID)
+					smallModelSet = true
 				}
 			}
+		}
+	}
+
+	// If no default small model found, use the same model as large model for small model
+	if !smallModelSet {
+		smallModel := config.SelectedModel{
+			Model:           req.Model,
+			Provider:        req.Provider,
+			ReasoningEffort: req.ReasoningEffort,
+		}
+		if req.MaxTokens != nil {
+			smallModel.MaxTokens = *req.MaxTokens
+		}
+		if err := tempConfig.UpdatePreferredModel(config.SelectedModelTypeSmall, smallModel); err != nil {
+			slog.Error("Failed to set fallback small model", "error", err, "session_id", sessionID)
+		} else {
+			slog.Info("Using large model as fallback small model", "model", req.Model, "session_id", sessionID)
 		}
 	}
 
