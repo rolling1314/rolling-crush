@@ -132,3 +132,63 @@ def create_project():
         print(f"❌ [POST /projects/create] 异常: {str(e)}", flush=True)
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+
+@project_bp.route('/projects/delete', methods=['POST'])
+def delete_project():
+    """删除项目容器 - 停止并删除Docker容器"""
+    try:
+        data = request.json
+        container_id = data.get('container_id')
+        
+        print(f"\n📨 [POST /projects/delete] 收到删除项目请求", flush=True)
+        print(f"   容器ID: {container_id}", flush=True)
+        
+        if not container_id:
+            print(f"❌ [POST /projects/delete] 容器ID不能为空")
+            return jsonify({"error": "container_id is required"}), 400
+        
+        # 连接Docker
+        docker_socket = Sandbox._detect_docker_socket()
+        if docker_socket:
+            client = docker.DockerClient(base_url=docker_socket)
+            print(f"   使用 Docker socket: {docker_socket}", flush=True)
+        else:
+            client = docker.from_env()
+            print(f"   使用默认 Docker 连接", flush=True)
+        
+        try:
+            # 查找容器（支持短ID和完整ID）
+            container = client.containers.get(container_id)
+            container_name = container.name
+            print(f"   找到容器: {container_name} (状态: {container.status})", flush=True)
+            
+            # 停止容器（如果正在运行）
+            if container.status == 'running':
+                print(f"   正在停止容器...", flush=True)
+                container.stop(timeout=10)
+                print(f"   容器已停止", flush=True)
+            
+            # 删除容器
+            print(f"   正在删除容器...", flush=True)
+            container.remove(force=True)
+            
+            print(f"✅ [POST /projects/delete] 容器删除成功: {container_name}", flush=True)
+            
+            return jsonify({
+                "status": "ok",
+                "message": f"Container {container_name} deleted successfully"
+            })
+            
+        except docker.errors.NotFound:
+            print(f"⚠️ [POST /projects/delete] 容器不存在: {container_id}", flush=True)
+            # 容器不存在，视为删除成功
+            return jsonify({
+                "status": "ok",
+                "message": f"Container {container_id} not found, considered deleted"
+            })
+            
+    except Exception as e:
+        print(f"❌ [POST /projects/delete] 异常: {str(e)}", flush=True)
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500

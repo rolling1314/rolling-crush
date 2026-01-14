@@ -39,6 +39,8 @@ export default function WorkspacePage() {
   const navigate = useNavigate();
   
   const [project, setProject] = useState<Project | null>(null);
+  const [projectLoading, setProjectLoading] = useState(true);
+  const [projectError, setProjectError] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
@@ -89,6 +91,22 @@ export default function WorkspacePage() {
   // WebSocket connection
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
+  
+  // Track last received Redis stream message ID for reconnection
+  // Persist per session in localStorage to survive page refresh
+  const lastStreamIdRef = useRef<string>('');
+  
+  // Helper to get/set last stream ID from localStorage
+  const getLastStreamId = (sessionId: string): string => {
+    return localStorage.getItem(`last_stream_id_${sessionId}`) || '';
+  };
+  
+  const setLastStreamId = (sessionId: string, streamId: string) => {
+    lastStreamIdRef.current = streamId;
+    if (sessionId && streamId) {
+      localStorage.setItem(`last_stream_id_${sessionId}`, streamId);
+    }
+  };
 
   const activeFile = openFiles.find(f => f.id === activeFileId) || null;
 
@@ -241,7 +259,7 @@ export default function WorkspacePage() {
   }, [currentSessionId]);
 
   // WebSocket 连接函数 - 需要在 useEffect 之前定义
-  const connectWebSocket = useCallback((sessionId: string | null) => {
+  const connectWebSocket = useCallback((sessionId: string | null, isReconnect: boolean = false) => {
     const token = localStorage.getItem('jwt_token');
     if (!token) {
       console.error('No JWT token found');
@@ -267,6 +285,21 @@ export default function WorkspacePage() {
     ws.onopen = () => {
       console.log('WebSocket connected', sessionId ? `to session: ${sessionId}` : '(no session)');
       wsRef.current = ws;
+      
+      // 连接到已有会话时，总是发送 reconnect 请求检查是否有错过的消息
+      // 这对于页面刷新时 AI 还在生成的情况很重要
+      if (sessionId) {
+        // 从 localStorage 恢复上次的 stream ID（页面刷新后仍可用）
+        const savedStreamId = getLastStreamId(sessionId);
+        lastStreamIdRef.current = savedStreamId;
+        
+        console.log('Sending reconnect request with lastStreamId:', savedStreamId || '(from beginning)');
+        ws.send(JSON.stringify({
+          type: 'reconnect',
+          sessionID: sessionId,
+          lastMsgId: savedStreamId, // 如果为空，后端会从头读取
+        }));
+      }
     };
 
     ws.onmessage = (event) => {
@@ -286,10 +319,10 @@ export default function WorkspacePage() {
       console.log('WebSocket disconnected, attempting to reconnect...');
       wsRef.current = null;
       
-      // 5秒后重连
+      // 3秒后重连（设置 isReconnect=true 以触发消息恢复）
       reconnectTimeoutRef.current = setTimeout(() => {
-        connectWebSocket(sessionId);
-      }, 5000);
+        connectWebSocket(sessionId, true);
+      }, 3000);
     };
   }, []);
 
@@ -314,6 +347,61 @@ export default function WorkspacePage() {
     console.log('=== WebSocket message received ===');
     console.log('Type:', data.Type || data.type);
     console.log('Data:', data);
+    
+    // 保存 Redis stream ID 用于重连时恢复消息
+    if (data._streamId && currentSessionIdRef.current) {
+      setLastStreamId(currentSessionIdRef.current, data._streamId);
+      console.log('Updated lastStreamId:', data._streamId);
+    }
+    
+    // 处理重放的消息（来自 Redis 缓存）
+    if (data._replay) {
+      console.log('=== Replaying message from Redis ===');
+      console.log('Stream ID:', data._streamId);
+      console.log('Type:', data._type);
+      console.log('Timestamp:', data._timestamp);
+      
+      // 根据原始消息类型处理
+      const originalPayload = data._payload;
+      if (data._type === 'message') {
+        // 这是一个标准消息，直接处理 payload
+        handleReplayedMessage(originalPayload);
+      } else if (data._type === 'permission_request') {
+        // 权限请求
+        handlePermissionRequestMessage(originalPayload);
+      } else if (data._type === 'session_update') {
+        // Session 更新
+        handleSessionUpdateMessage(originalPayload);
+      }
+      return;
+    }
+    
+    // 处理重连状态通知
+    if (data.Type === 'reconnection_status') {
+      console.log('=== Reconnection status ===');
+      console.log('Messages replayed:', data.messages_replayed);
+      console.log('Generation still active:', data.generation_active);
+      console.log('Last stream ID:', data.last_stream_id);
+      
+      if (data.last_stream_id && currentSessionIdRef.current) {
+        setLastStreamId(currentSessionIdRef.current, data.last_stream_id);
+      }
+      
+      // 如果生成仍在进行，保持 isProcessing 状态
+      if (data.generation_active) {
+        setIsProcessing(true);
+      }
+      return;
+    }
+    
+    // 处理生成完成通知
+    if (data.Type === 'generation_complete') {
+      console.log('=== Generation complete ===');
+      console.log('Session ID:', data.session_id);
+      console.log('Has error:', data.error);
+      setIsProcessing(false);
+      return;
+    }
     
     // 处理权限请求 - 优先处理，确保在消息之前
     if (data.Type === 'permission_request' || data.type === 'permission_request') {
@@ -443,6 +531,75 @@ export default function WorkspacePage() {
     }
   };
 
+  // Helper function to handle replayed messages from Redis
+  const handleReplayedMessage = (payload: any) => {
+    // Normalize the payload (it might be the original message format)
+    const msgId = payload.ID || payload.id;
+    const msgRole = payload.Role || payload.role;
+    const msgParts = payload.Parts || payload.parts;
+    
+    if (msgId && msgRole && msgParts) {
+      const normalizedData = {
+        ...payload,
+        ID: msgId,
+        Role: msgRole,
+        Parts: msgParts,
+        CreatedAt: payload.CreatedAt || payload.created_at || Date.now()
+      };
+      
+      const convertedMsg = convertBackendMessageToFrontend(normalizedData);
+      console.log('Replayed message converted:', convertedMsg.id);
+      
+      setMessages(prev => {
+        const existingIndex = prev.findIndex(m => m.id === convertedMsg.id);
+        if (existingIndex !== -1) {
+          const newMessages = [...prev];
+          newMessages[existingIndex] = convertedMsg;
+          return newMessages;
+        } else {
+          return [...prev, convertedMsg];
+        }
+      });
+    }
+  };
+
+  // Helper function to handle permission request messages
+  const handlePermissionRequestMessage = (payload: any) => {
+    const request: PermissionRequest = {
+      id: payload.id,
+      session_id: payload.session_id,
+      tool_call_id: payload.tool_call_id,
+      tool_name: payload.tool_name,
+      action: payload.action
+    };
+    
+    setPendingPermissions(prev => {
+      const next = new Map(prev);
+      next.set(request.tool_call_id, request);
+      return next;
+    });
+  };
+
+  // Helper function to handle session update messages
+  const handleSessionUpdateMessage = (payload: any) => {
+    setSessions(prev => {
+      return prev.map(s => {
+        if (s.id === payload.id) {
+          return {
+            ...s,
+            prompt_tokens: payload.prompt_tokens,
+            completion_tokens: payload.completion_tokens,
+            cost: payload.cost,
+            context_window: payload.context_window,
+            message_count: payload.message_count,
+            updated_at: payload.updated_at
+          };
+        }
+        return s;
+      });
+    });
+  };
+
   const convertBackendMessageToFrontend = (backendMsg: any): Message => {
     let textContent = '';
     let reasoning = '';
@@ -500,14 +657,19 @@ export default function WorkspacePage() {
   };
 
   const loadProjectInfo = async () => {
+    setProjectLoading(true);
+    setProjectError(null);
     try {
       const token = localStorage.getItem('jwt_token');
       const response = await axios.get(`${API_URL}/projects/${projectId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setProject(response.data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load project:', error);
+      setProjectError(error.response?.data?.error || error.message || 'Failed to load project');
+    } finally {
+      setProjectLoading(false);
     }
   };
 
@@ -1017,6 +1179,47 @@ export default function WorkspacePage() {
     localStorage.removeItem('user_id');
     navigate('/login');
   };
+
+  // Loading state
+  if (projectLoading) {
+    return (
+      <div className="flex h-screen w-screen bg-black items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+          <p className="text-gray-400 text-sm">Loading project...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (projectError || (!projectLoading && !project)) {
+    return (
+      <div className="flex h-screen w-screen bg-black items-center justify-center">
+        <div className="flex flex-col items-center gap-4 max-w-md text-center">
+          <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center">
+            <X size={32} className="text-red-500" />
+          </div>
+          <h2 className="text-xl font-medium text-white">Failed to Load Project</h2>
+          <p className="text-gray-400 text-sm">{projectError || 'Project not found'}</p>
+          <div className="flex gap-3 mt-2">
+            <button
+              onClick={() => navigate('/projects')}
+              className="px-4 py-2 bg-[#222] text-white rounded-lg hover:bg-[#333] transition-colors"
+            >
+              Back to Projects
+            </button>
+            <button
+              onClick={() => loadProjectInfo()}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-screen bg-black overflow-hidden">

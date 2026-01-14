@@ -17,7 +17,9 @@ import {
   Gift,
   MessageCircle,
   Terminal,
-  Command
+  Command,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -63,6 +65,9 @@ export default function ProjectListPage() {
   const email = localStorage.getItem('email') || 'user@example.com';
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; project: Project | null }>({ show: false, project: null });
+  const [deleting, setDeleting] = useState(false);
 
   // Helper to get avatar text (first 3 chars of email)
   const getAvatarText = (email: string) => {
@@ -75,13 +80,19 @@ export default function ProjectListPage() {
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showCreateModal) {
-        setShowCreateModal(false);
+      if (e.key === 'Escape') {
+        if (deleteConfirm.show && !deleting) {
+          setDeleteConfirm({ show: false, project: null });
+        } else if (showCreateModal) {
+          setShowCreateModal(false);
+        } else if (openMenuId) {
+          setOpenMenuId(null);
+        }
       }
     };
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
-  }, [showCreateModal]);
+  }, [showCreateModal, deleteConfirm.show, deleting, openMenuId]);
 
   const loadProjects = async () => {
     try {
@@ -135,6 +146,34 @@ export default function ProjectListPage() {
     localStorage.removeItem('username');
     localStorage.removeItem('user_id');
     navigate('/login');
+  };
+
+  const deleteProject = async (project: Project) => {
+    setDeleting(true);
+    try {
+      const token = localStorage.getItem('jwt_token');
+      await axios.delete(`${API_URL}/projects/${project.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setDeleteConfirm({ show: false, project: null });
+      loadProjects();
+    } catch (error: any) {
+      console.error('Failed to delete project:', error);
+      alert('删除项目失败: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleMenuClick = (e: React.MouseEvent, projectId: string) => {
+    e.stopPropagation();
+    setOpenMenuId(openMenuId === projectId ? null : projectId);
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent, project: Project) => {
+    e.stopPropagation();
+    setOpenMenuId(null);
+    setDeleteConfirm({ show: true, project });
   };
 
   if (loading) {
@@ -371,9 +410,40 @@ export default function ProjectListPage() {
                       <h4 className="text-gray-200 font-medium text-sm truncate">{project.name}</h4>
                       <p className="text-gray-500 text-xs truncate">{dateString}</p>
                     </div>
-                    <button className="text-gray-500 hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity p-1">
-                      <MoreHorizontal size={16} />
-                    </button>
+                    <div className="relative">
+                      <button 
+                        onClick={(e) => handleMenuClick(e, project.id)}
+                        className="text-gray-500 hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                      >
+                        <MoreHorizontal size={16} />
+                      </button>
+                      
+                      {/* Dropdown Menu */}
+                      {openMenuId === project.id && (
+                        <>
+                          <div 
+                            className="fixed inset-0 z-40" 
+                            onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); }} 
+                          />
+                          <div className="absolute right-0 top-8 w-36 bg-[#252526] border border-gray-700 rounded-lg shadow-2xl py-1 z-50">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-gray-300 hover:bg-[#3e3e42] text-sm transition-colors"
+                            >
+                              <Pencil size={14} />
+                              <span>重命名</span>
+                            </button>
+                            <button
+                              onClick={(e) => handleDeleteClick(e, project)}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-red-400 hover:bg-[#3e3e42] text-sm transition-colors"
+                            >
+                              <Trash2 size={14} />
+                              <span>删除</span>
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -527,6 +597,57 @@ export default function ProjectListPage() {
                   className="flex-1 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-medium rounded-lg hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
                 >
                   {creating ? 'Creating...' : 'Create Project'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm.show && deleteConfirm.project && (
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !deleting) {
+              setDeleteConfirm({ show: false, project: null });
+            }
+          }}
+        >
+          <div className="bg-[#1A1A1A] rounded-xl border border-[#333] shadow-2xl w-full max-w-[400px] overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-white">删除项目</h2>
+                <button
+                  onClick={() => !deleting && setDeleteConfirm({ show: false, project: null })}
+                  className="p-1 hover:bg-[#333] rounded transition-colors text-gray-400 hover:text-white disabled:opacity-50"
+                  disabled={deleting}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <p className="text-gray-400 text-sm mb-2">
+                确定要删除项目 <span className="text-white font-medium">"{deleteConfirm.project.name}"</span> 吗？
+              </p>
+              <p className="text-red-400 text-xs mb-6">
+                ⚠️ 此操作将同时删除对应的 Docker 容器，且无法恢复。
+              </p>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setDeleteConfirm({ show: false, project: null })}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-2.5 bg-[#252525] text-white font-medium rounded-lg hover:bg-[#333] disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={() => deleteProject(deleteConfirm.project!)}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-2.5 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                >
+                  {deleting ? '删除中...' : '确认删除'}
                 </button>
               </div>
             </div>
