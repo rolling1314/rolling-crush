@@ -45,6 +45,7 @@ import (
 	"github.com/rolling1314/rolling-crush/pkg/config"
 	"github.com/rolling1314/rolling-crush/sandbox"
 	"github.com/rolling1314/rolling-crush/store/postgres"
+	storeredis "github.com/rolling1314/rolling-crush/store/redis"
 	"github.com/rolling1314/rolling-crush/store/storage"
 )
 
@@ -71,8 +72,14 @@ type App struct {
 	WSServer   *apiws.Server
 	HTTPServer *apihttp.Server
 
+	// Redis stream service for message buffering during WebSocket disconnection
+	RedisStream *storeredis.StreamService
+
 	// Track the current active session for the single-user mode
 	currentSessionID string
+
+	// Track connected sessions (session ID -> connected status)
+	connectedSessions *csync.Map[string, bool]
 
 	// global context and cleanup functions
 	globalCtx    context.Context
@@ -107,12 +114,21 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 		config: cfg,
 		db:     q, // Store DB queries for session config loading
 
-		events:          make(chan tea.Msg, 100),
-		serviceEventsWG: &sync.WaitGroup{},
-		tuiWG:           &sync.WaitGroup{},
+		events:            make(chan tea.Msg, 100),
+		serviceEventsWG:   &sync.WaitGroup{},
+		tuiWG:             &sync.WaitGroup{},
+		connectedSessions: csync.NewMap[string, bool](),
 
 		WSServer:   apiws.New(),
 		HTTPServer: apihttp.New("8001", users, projects, sessions, messages, q, cfg),
+	}
+
+	// Initialize Redis client and stream service
+	if err := storeredis.InitGlobalClient(); err != nil {
+		slog.Warn("Failed to initialize Redis client, message buffering will be unavailable", "error", err)
+	} else {
+		app.RedisStream = storeredis.GetGlobalStreamService()
+		slog.Info("Redis stream service initialized")
 	}
 
 	// Register the handler for incoming WebSocket messages
@@ -170,16 +186,28 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 	return app, nil
 }
 
-// HandleClientDisconnect handles WebSocket disconnection by cleaning up agent state
+// HandleClientDisconnect handles WebSocket disconnection
+// Instead of cancelling the agent, we mark the session as disconnected so messages
+// continue to be buffered in Redis for later retrieval
 func (app *App) HandleClientDisconnect() {
 	fmt.Println("=== HandleClientDisconnect called ===")
-	slog.Info("WebSocket client disconnected, cleaning up agent state", "sessionID", app.currentSessionID)
+	slog.Info("WebSocket client disconnected", "sessionID", app.currentSessionID)
 
-	// Cancel the current session's agent request to prevent stuck session
-	if app.AgentCoordinator != nil && app.currentSessionID != "" {
-		fmt.Printf("Cancelling agent request for session: %s\n", app.currentSessionID)
-		app.AgentCoordinator.Cancel(app.currentSessionID)
-		fmt.Println("Agent request cancelled for current session")
+	// Mark session as disconnected but DON'T cancel the agent
+	// The agent will continue running and messages will be buffered in Redis
+	if app.currentSessionID != "" {
+		app.connectedSessions.Set(app.currentSessionID, false)
+		
+		// Update Redis connection status
+		if app.RedisStream != nil {
+			ctx := context.Background()
+			if err := app.RedisStream.SetConnectionStatus(ctx, app.currentSessionID, false); err != nil {
+				slog.Warn("Failed to update Redis connection status", "error", err)
+			}
+		}
+		
+		fmt.Printf("Session %s marked as disconnected, agent continues running\n", app.currentSessionID)
+		slog.Info("Session marked as disconnected, agent continues running", "sessionID", app.currentSessionID)
 	}
 
 	// Clear the current session ID so new connections start fresh
@@ -208,6 +236,7 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 		Granted    bool              `json:"granted"`
 		Denied     bool              `json:"denied"`
 		Images     []ImageAttachment `json:"images"` // Image attachments
+		LastMsgID  string            `json:"lastMsgId"` // For reconnection - last received Redis stream message ID
 	}
 
 	var msg ClientMsg
@@ -217,6 +246,12 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 	}
 
 	fmt.Println("Parsed message type:", msg.Type, "content:", msg.Content, "sessionID:", msg.SessionID)
+
+	// Handle reconnection request - client wants to resume receiving messages
+	if msg.Type == "reconnect" {
+		app.handleReconnection(msg.SessionID, msg.LastMsgID)
+		return
+	}
 
 	// Handle permission responses
 	if msg.Type == "permission_response" {
@@ -281,6 +316,15 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 		sessionID = app.currentSessionID
 	} else {
 		app.currentSessionID = sessionID
+	}
+
+	// Mark session as connected
+	app.connectedSessions.Set(sessionID, true)
+	if app.RedisStream != nil {
+		ctx := context.Background()
+		if err := app.RedisStream.SetConnectionStatus(ctx, sessionID, true); err != nil {
+			slog.Warn("Failed to update Redis connection status", "error", err)
+		}
 	}
 
 	fmt.Println("Final sessionID:", sessionID)
@@ -372,11 +416,48 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 		fmt.Printf("  [附件 %d] FileName: %s, MimeType: %s, Size: %d bytes\n",
 			i+1, att.FileName, att.MimeType, len(att.Content))
 	}
+	
 	// Run the agent asynchronously
 	go func() {
 		fmt.Println("\n=== Inside goroutine, calling AgentCoordinator.Run ===")
 		fmt.Printf("Goroutine 中的附件数量: %d\n", len(attachments))
+		
+		// Mark generation as active in Redis
+		if app.RedisStream != nil {
+			ctx := context.Background()
+			if err := app.RedisStream.SetActiveGeneration(ctx, sessionID, true); err != nil {
+				slog.Warn("Failed to mark generation as active", "error", err)
+			}
+		}
+		
 		_, err := app.AgentCoordinator.Run(context.Background(), sessionID, msg.Content, attachments...)
+		
+		// Mark generation as complete in Redis
+		if app.RedisStream != nil {
+			ctx := context.Background()
+			if err := app.RedisStream.SetActiveGeneration(ctx, sessionID, false); err != nil {
+				slog.Warn("Failed to mark generation as complete", "error", err)
+			}
+			
+			// Publish generation complete event
+			if err := app.RedisStream.PublishMessage(ctx, sessionID, "generation_complete", map[string]interface{}{
+				"session_id": sessionID,
+				"error":      err != nil,
+			}); err != nil {
+				slog.Warn("Failed to publish generation complete event", "error", err)
+			}
+		}
+		
+		// Send generation complete to WebSocket if connected
+		isConnected, _ := app.connectedSessions.Get(sessionID)
+		if isConnected {
+			app.WSServer.SendToSession(sessionID, map[string]interface{}{
+				"Type":       "generation_complete",
+				"session_id": sessionID,
+				"error":      err != nil,
+			})
+		}
+		
 		if err != nil {
 			fmt.Println("Agent run error:", err)
 			slog.Error("Agent run error", "error", err)
@@ -385,6 +466,85 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 		}
 	}()
 	fmt.Println("Goroutine started, HandleClientMessage returning")
+}
+
+// handleReconnection handles client reconnection and sends missed messages
+func (app *App) handleReconnection(sessionID string, lastMsgID string) {
+	fmt.Printf("=== handleReconnection called for session %s, lastMsgID: %s ===\n", sessionID, lastMsgID)
+	slog.Info("Handling reconnection", "sessionID", sessionID, "lastMsgID", lastMsgID)
+
+	if sessionID == "" {
+		slog.Warn("Reconnection request without session ID")
+		return
+	}
+
+	// Mark session as connected
+	app.currentSessionID = sessionID
+	app.connectedSessions.Set(sessionID, true)
+
+	if app.RedisStream == nil {
+		slog.Warn("Redis stream service not available, cannot replay messages")
+		return
+	}
+
+	ctx := context.Background()
+
+	// Update Redis connection status
+	if err := app.RedisStream.SetConnectionStatus(ctx, sessionID, true); err != nil {
+		slog.Warn("Failed to update Redis connection status", "error", err)
+	}
+
+	// Read missed messages from Redis stream
+	messages, newLastID, err := app.RedisStream.ReadMessages(ctx, sessionID, lastMsgID, 0)
+	if err != nil {
+		slog.Error("Failed to read missed messages from Redis", "error", err)
+		return
+	}
+
+	fmt.Printf("Found %d missed messages for session %s\n", len(messages), sessionID)
+	slog.Info("Replaying missed messages", "sessionID", sessionID, "count", len(messages))
+
+	// Send missed messages to the client
+	for _, msg := range messages {
+		var payload interface{}
+		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+			slog.Warn("Failed to unmarshal message payload", "error", err)
+			continue
+		}
+
+		// Send the message with its original type
+		app.WSServer.SendToSession(sessionID, map[string]interface{}{
+			"_replay":     true,
+			"_streamId":   msg.ID,
+			"_type":       msg.Type,
+			"_timestamp":  msg.Timestamp,
+			"_payload":    payload,
+		})
+	}
+
+	// Update last read ID
+	if newLastID != "" {
+		if err := app.RedisStream.SetLastReadID(ctx, sessionID, newLastID); err != nil {
+			slog.Warn("Failed to update last read ID", "error", err)
+		}
+	}
+
+	// Check if generation is still active
+	isActive, err := app.RedisStream.IsGenerationActive(ctx, sessionID)
+	if err != nil {
+		slog.Warn("Failed to check generation status", "error", err)
+	} else {
+		// Notify client about generation status
+		app.WSServer.SendToSession(sessionID, map[string]interface{}{
+			"Type":              "reconnection_status",
+			"session_id":        sessionID,
+			"messages_replayed": len(messages),
+			"generation_active": isActive,
+			"last_stream_id":    newLastID,
+		})
+	}
+
+	fmt.Printf("Reconnection complete for session %s\n", sessionID)
 }
 
 // fetchImageFromURL fetches an image from an external URL
@@ -797,51 +957,100 @@ func (app *App) Subscribe() {
 
 			// Send messages to specific session via WebSocket
 			if event, ok := msg.(pubsub.Event[message.Message]); ok {
-				fmt.Printf("[SEND] Sending message to session: ID=%s, Role=%s, SessionID=%s\n", event.Payload.ID, event.Payload.Role, event.Payload.SessionID)
-				app.WSServer.SendToSession(event.Payload.SessionID, event.Payload)
+				sessionID := event.Payload.SessionID
+				fmt.Printf("[SEND] Sending message to session: ID=%s, Role=%s, SessionID=%s\n", event.Payload.ID, event.Payload.Role, sessionID)
+				
+				// Always publish to Redis stream for buffering
+				if app.RedisStream != nil {
+					ctx := context.Background()
+					if err := app.RedisStream.PublishMessage(ctx, sessionID, "message", event.Payload); err != nil {
+						slog.Warn("Failed to publish message to Redis stream", "error", err)
+					}
+				}
+				
+				// Check if session is connected before sending via WebSocket
+				isConnected, _ := app.connectedSessions.Get(sessionID)
+				if isConnected {
+					app.WSServer.SendToSession(sessionID, event.Payload)
+				} else {
+					slog.Debug("Session disconnected, message buffered in Redis", "sessionID", sessionID)
+				}
 			}
 
 			// Send permission requests to specific session via WebSocket
 			if event, ok := msg.(pubsub.Event[permission.PermissionRequest]); ok {
-				slog.Info("Sending permission request to session", "session_id", event.Payload.SessionID, "tool_call_id", event.Payload.ToolCallID)
-				app.WSServer.SendToSession(event.Payload.SessionID, map[string]interface{}{
+				sessionID := event.Payload.SessionID
+				slog.Info("Sending permission request to session", "session_id", sessionID, "tool_call_id", event.Payload.ToolCallID)
+				
+				permMsg := map[string]interface{}{
 					"Type":         "permission_request",
 					"id":           event.Payload.ID,
-					"session_id":   event.Payload.SessionID,
+					"session_id":   sessionID,
 					"tool_call_id": event.Payload.ToolCallID,
 					"tool_name":    event.Payload.ToolName,
 					"description":  event.Payload.Description,
 					"action":       event.Payload.Action,
 					"params":       event.Payload.Params,
 					"path":         event.Payload.Path,
-				})
+				}
+				
+				// Publish to Redis
+				if app.RedisStream != nil {
+					ctx := context.Background()
+					if err := app.RedisStream.PublishMessage(ctx, sessionID, "permission_request", permMsg); err != nil {
+						slog.Warn("Failed to publish permission request to Redis stream", "error", err)
+					}
+				}
+				
+				// Send via WebSocket if connected
+				isConnected, _ := app.connectedSessions.Get(sessionID)
+				if isConnected {
+					app.WSServer.SendToSession(sessionID, permMsg)
+				}
 			}
 
 			// Send permission notifications to specific session via WebSocket
 			if event, ok := msg.(pubsub.Event[permission.PermissionNotification]); ok {
-				slog.Info("Sending permission notification to session", "session_id", event.Payload.SessionID, "tool_call_id", event.Payload.ToolCallID, "granted", event.Payload.Granted)
-				app.WSServer.SendToSession(event.Payload.SessionID, map[string]interface{}{
+				sessionID := event.Payload.SessionID
+				slog.Info("Sending permission notification to session", "session_id", sessionID, "tool_call_id", event.Payload.ToolCallID, "granted", event.Payload.Granted)
+				
+				notifMsg := map[string]interface{}{
 					"Type":         "permission_notification",
 					"tool_call_id": event.Payload.ToolCallID,
 					"granted":      event.Payload.Granted,
 					"denied":       event.Payload.Denied,
-				})
+				}
+				
+				// Publish to Redis
+				if app.RedisStream != nil {
+					ctx := context.Background()
+					if err := app.RedisStream.PublishMessage(ctx, sessionID, "permission_notification", notifMsg); err != nil {
+						slog.Warn("Failed to publish permission notification to Redis stream", "error", err)
+					}
+				}
+				
+				// Send via WebSocket if connected
+				isConnected, _ := app.connectedSessions.Get(sessionID)
+				if isConnected {
+					app.WSServer.SendToSession(sessionID, notifMsg)
+				}
 			}
 
 			// Send session updates to specific session via WebSocket (like TUI does)
 			if event, ok := msg.(pubsub.Event[session.Session]); ok {
 				if event.Type == pubsub.UpdatedEvent {
-					slog.Info("Session updated event received", "session_id", event.Payload.ID, "prompt_tokens", event.Payload.PromptTokens, "completion_tokens", event.Payload.CompletionTokens, "cost", event.Payload.Cost)
+					sessionID := event.Payload.ID
+					slog.Info("Session updated event received", "session_id", sessionID, "prompt_tokens", event.Payload.PromptTokens, "completion_tokens", event.Payload.CompletionTokens, "cost", event.Payload.Cost)
 
 					// Get context window for this session
 					ctx := context.Background()
-					contextWindow := app.getSessionContextWindow(ctx, event.Payload.ID)
+					contextWindow := app.getSessionContextWindow(ctx, sessionID)
 
-					slog.Info("Sending session update to WebSocket clients", "session_id", event.Payload.ID, "context_window", contextWindow, "total_tokens", event.Payload.PromptTokens+event.Payload.CompletionTokens)
+					slog.Info("Sending session update to WebSocket clients", "session_id", sessionID, "context_window", contextWindow, "total_tokens", event.Payload.PromptTokens+event.Payload.CompletionTokens)
 
-					app.WSServer.SendToSession(event.Payload.ID, map[string]interface{}{
+					sessionMsg := map[string]interface{}{
 						"Type":              "session_update",
-						"id":                event.Payload.ID,
+						"id":                sessionID,
 						"project_id":        event.Payload.ProjectID,
 						"title":             event.Payload.Title,
 						"message_count":     event.Payload.MessageCount,
@@ -851,7 +1060,20 @@ func (app *App) Subscribe() {
 						"context_window":    contextWindow,
 						"created_at":        event.Payload.CreatedAt,
 						"updated_at":        event.Payload.UpdatedAt,
-					})
+					}
+					
+					// Publish to Redis
+					if app.RedisStream != nil {
+						if err := app.RedisStream.PublishMessage(ctx, sessionID, "session_update", sessionMsg); err != nil {
+							slog.Warn("Failed to publish session update to Redis stream", "error", err)
+						}
+					}
+					
+					// Send via WebSocket if connected
+					isConnected, _ := app.connectedSessions.Get(sessionID)
+					if isConnected {
+						app.WSServer.SendToSession(sessionID, sessionMsg)
+					}
 				}
 			}
 		}

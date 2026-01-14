@@ -177,11 +177,40 @@ func (s *Server) handleUpdateProject(c *gin.Context) {
 // handleDeleteProject handles project deletion
 func (s *Server) handleDeleteProject(c *gin.Context) {
 	projectID := c.Param("id")
+
+	// First, get the project to find the container ID
+	proj, err := s.projectService.GetByID(c.Request.Context(), projectID)
+	if err != nil {
+		slog.Error("Failed to get project for deletion", "error", err, "project_id", projectID)
+		c.JSON(http.StatusNotFound, ErrorResponse{Error: "Project not found"})
+		return
+	}
+
+	// If project has a container, delete it from sandbox
+	if proj.ContainerName.Valid && proj.ContainerName.String != "" {
+		containerID := proj.ContainerName.String
+		slog.Info("Deleting project container", "container_id", containerID, "project_id", projectID)
+
+		_, err := s.sandboxClient.DeleteProject(c.Request.Context(), sandbox.DeleteProjectRequest{
+			ContainerID: containerID,
+		})
+		if err != nil {
+			// Log the error but continue with database deletion
+			// Container might already be deleted or not exist
+			slog.Warn("Failed to delete container from sandbox", "error", err, "container_id", containerID)
+		} else {
+			slog.Info("Container deleted successfully", "container_id", containerID)
+		}
+	}
+
+	// Delete the project from database
 	if err := s.projectService.Delete(c.Request.Context(), projectID); err != nil {
+		slog.Error("Failed to delete project from database", "error", err, "project_id", projectID)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return
 	}
 
+	slog.Info("Project deleted successfully", "project_id", projectID)
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 

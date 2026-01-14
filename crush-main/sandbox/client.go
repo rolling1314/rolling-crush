@@ -258,7 +258,7 @@ func (c *Client) GetFileTree(ctx context.Context, req FileTreeRequest) (*FileTre
 	} else {
 		return nil, fmt.Errorf("either SessionID or ProjectID must be provided")
 	}
-	
+
 	if req.Path != "" {
 		url = fmt.Sprintf("%s&path=%s", url, req.Path)
 	}
@@ -405,6 +405,31 @@ func (c *Client) CreateProject(ctx context.Context, req CreateProjectRequest) (*
 	return &resp, nil
 }
 
+// DeleteProjectRequest 删除项目请求
+type DeleteProjectRequest struct {
+	ContainerID string `json:"container_id"`
+}
+
+// DeleteProjectResponse 删除项目响应
+type DeleteProjectResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+	Error   string `json:"error,omitempty"`
+}
+
+// DeleteProject 删除项目容器
+func (c *Client) DeleteProject(ctx context.Context, req DeleteProjectRequest) (*DeleteProjectResponse, error) {
+	var resp DeleteProjectResponse
+	err := c.doRequest(ctx, "POST", "/projects/delete", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != "" {
+		return &resp, fmt.Errorf("sandbox error: %s", resp.Error)
+	}
+	return &resp, nil
+}
+
 // GetDefaultClient 获取默认的沙箱客户端（单例）
 var defaultClient *Client
 
@@ -483,10 +508,10 @@ type LSPDiagnosticsRequest struct {
 
 // LSPDiagnosticsResponse LSP诊断响应
 type LSPDiagnosticsResponse struct {
-	Status           string            `json:"status"`
-	FileDiagnostics  []FileDiagnostics `json:"file_diagnostics"`  // 当前文件的诊断
+	Status             string            `json:"status"`
+	FileDiagnostics    []FileDiagnostics `json:"file_diagnostics"`              // 当前文件的诊断
 	ProjectDiagnostics []FileDiagnostics `json:"project_diagnostics,omitempty"` // 项目级诊断
-	Error            string            `json:"error,omitempty"`
+	Error              string            `json:"error,omitempty"`
 }
 
 // GetLSPDiagnostics 获取LSP诊断信息

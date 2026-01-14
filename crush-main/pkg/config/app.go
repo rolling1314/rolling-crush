@@ -13,9 +13,21 @@ import (
 // AppConfig holds the complete application configuration.
 type AppConfig struct {
 	Database  DatabaseConfig  `yaml:"database"`
+	Redis     RedisConfig     `yaml:"redis"`
 	Sandbox   SandboxConfig   `yaml:"sandbox"`
 	Storage   StorageConfig   `yaml:"storage"`
 	AutoModel AutoModelConfig `yaml:"auto_model"`
+}
+
+// RedisConfig holds Redis connection settings.
+type RedisConfig struct {
+	Host         string `yaml:"host"`
+	Port         int    `yaml:"port"`
+	Password     string `yaml:"password"`
+	DB           int    `yaml:"db"`
+	PoolSize     int    `yaml:"pool_size"`
+	StreamMaxLen int64  `yaml:"stream_max_len"` // Maximum length of each session's stream
+	StreamTTL    int    `yaml:"stream_ttl"`     // Stream expiration time in seconds
 }
 
 // AutoModelConfig holds the default "Auto" model configuration.
@@ -189,6 +201,20 @@ func overrideWithEnvApp(config *AppConfig) {
 	if v := os.Getenv("OSS_BUCKET"); v != "" {
 		config.Storage.OSS.Bucket = v
 	}
+
+	// Redis overrides
+	if v := os.Getenv("REDIS_HOST"); v != "" {
+		config.Redis.Host = v
+	}
+	if v := os.Getenv("REDIS_PORT"); v != "" {
+		fmt.Sscanf(v, "%d", &config.Redis.Port)
+	}
+	if v := os.Getenv("REDIS_PASSWORD"); v != "" {
+		config.Redis.Password = v
+	}
+	if v := os.Getenv("REDIS_DB"); v != "" {
+		fmt.Sscanf(v, "%d", &config.Redis.DB)
+	}
 }
 
 // GetGlobalAppConfig returns the global application configuration instance.
@@ -228,6 +254,15 @@ func getDefaultAppConfig() *AppConfig {
 			SSLMode:      "disable",
 			MaxOpenConns: 25,
 			MaxIdleConns: 5,
+		},
+		Redis: RedisConfig{
+			Host:         "localhost",
+			Port:         6379,
+			Password:     "123456",
+			DB:           0,
+			PoolSize:     10,
+			StreamMaxLen: 1000,
+			StreamTTL:    3600,
 		},
 		Sandbox: SandboxConfig{
 			BaseURL: "http://localhost:8888",
