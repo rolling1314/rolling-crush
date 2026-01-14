@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { X, Plus, MessageSquare, LogOut, ChevronRight, Trash2, GripVertical, Eye, Code2 } from 'lucide-react';
+import { X, GripVertical, Eye, Code2 } from 'lucide-react';
 import axios from 'axios';
 import { ChatPanel } from '../components/ChatPanel';
+import { ChatSidebar } from '../components/ChatSidebar';
 import { FileTree } from '../components/FileTree';
 import { CodeEditor } from '../components/CodeEditor';
 import { InlineChatModelSelector } from '../components/InlineChatModelSelector';
@@ -42,7 +43,9 @@ export default function WorkspacePage() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showSessionHistory, setShowSessionHistory] = useState(false);
+  
+  // Get username from localStorage
+  const username = localStorage.getItem('username') || undefined;
   
   // Pending session state - for new sessions that haven't been created yet
   // When user clicks "New Session", we create a pending session state
@@ -731,7 +734,6 @@ export default function WorkspacePage() {
       model: 'auto',
       is_auto: true,
     });
-    setShowSessionHistory(false);
   };
 
   const handleSendMessage = async (content: string, contextFiles: FileNode[] = [], images: { url: string; filename: string; mime_type: string }[] = []) => {
@@ -1168,21 +1170,21 @@ export default function WorkspacePage() {
         </div>
       </div>
 
-      {/* 3. Right: Chat & Session History */}
+      {/* 3. Right: Chat & Session Sidebar */}
       <div 
         ref={chatPanelDivRef}
-        className="shrink-0 bg-[#0A0A0A] flex flex-col relative"
+        className="shrink-0 bg-[#0A0A0A] flex relative"
         style={{ width: chatPanelWidth }}
       >
-        <div className="flex-1 overflow-hidden flex flex-col">
-            <ChatPanel 
+        {/* Chat Panel */}
+        <div className="flex-1 overflow-hidden flex flex-col min-w-0">
+          <ChatPanel 
             messages={messages} 
             session={isPendingSession ? undefined : sessions.find(s => s.id === currentSessionId)}
             onSendMessage={handleSendMessage}
             pendingPermissions={pendingPermissions}
             onPermissionApprove={(toolCallId) => handlePermissionResponse(toolCallId, true)}
             onPermissionDeny={(toolCallId) => handlePermissionResponse(toolCallId, false)}
-            onToggleHistory={() => setShowSessionHistory(!showSessionHistory)}
             sessionConfigComponent={
               isPendingSession ? (
                 <InlineChatModelSelector
@@ -1205,93 +1207,22 @@ export default function WorkspacePage() {
           />
         </div>
         
-        {/* Session List Overlay */}
-        {showSessionHistory && (
-          <div className="absolute inset-0 bg-[#0A0A0A] z-20 flex flex-col border-l border-[#222] shadow-xl">
-             <div className="p-4 border-b border-[#222] flex justify-between items-center bg-[#111]">
-              <div className="flex items-center gap-2">
-                 <button 
-                   onClick={() => setShowSessionHistory(false)}
-                   className="text-gray-400 hover:text-white"
-                 >
-                   <ChevronRight size={18} />
-                 </button>
-                 <h2 className="text-white font-semibold">Sessions</h2>
-              </div>
-              <button
-                onClick={startNewSession}
-                className="p-1 hover:bg-[#333] rounded"
-                title="New Session"
-              >
-                <Plus size={18} className="text-gray-400" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto">
-              {sessions.map(session => (
-                <div
-                  key={session.id}
-                  className={`group p-3 border-b border-[#222] ${
-                    currentSessionId === session.id ? 'bg-[#222]' : ''
-                  }`}
-                >
-                  <div className="flex items-start gap-2">
-                    <div 
-                      className="flex items-start gap-2 flex-1 min-w-0 cursor-pointer"
-                      onClick={() => {
-                        setCurrentSessionId(session.id);
-                        setShowSessionHistory(false); // Auto close on select? Or keep open? Maybe keep open.
-                      }}
-                    >
-                      <MessageSquare size={16} className="text-gray-400 mt-1 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-white text-sm truncate">{session.title}</div>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <span>{session.message_count} msgs</span>
-                          <span>•</span>
-                          <span>${session.cost?.toFixed(4) || '0.0000'}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        confirmDeleteSession(session.id);
-                      }}
-                      className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-600/20 rounded transition-all"
-                      title="Delete session"
-                    >
-                      <Trash2 size={14} className="text-red-400 hover:text-red-300" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-              
-              {sessions.length === 0 && (
-                <div className="p-4 text-center text-gray-500 text-sm">
-                  No sessions yet.<br/>Click + to create one.
-                </div>
-              )}
-            </div>
-
-            {/* Navigation and Logout in Session Overlay */}
-            <div className="p-3 border-t border-[#222] space-y-2">
-              <button
-                onClick={() => navigate('/projects')}
-                className="w-full flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white hover:bg-[#222] rounded transition-colors"
-              >
-                <span className="text-sm">← Back to Projects</span>
-              </button>
-              <button
-                onClick={handleLogout}
-                className="w-full flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white hover:bg-[#222] rounded transition-colors"
-              >
-                <LogOut size={16} />
-                <span className="text-sm">Logout</span>
-              </button>
-            </div>
-          </div>
-        )}
+        {/* GPT-style Sidebar (Right Side) */}
+        <ChatSidebar
+          sessions={sessions}
+          currentSessionId={currentSessionId}
+          isPendingSession={isPendingSession}
+          onSelectSession={(sessionId) => {
+            setCurrentSessionId(sessionId);
+            setIsPendingSession(false);
+          }}
+          onNewSession={startNewSession}
+          onDeleteSession={confirmDeleteSession}
+          onNavigateToProjects={() => navigate('/projects')}
+          onLogout={handleLogout}
+          username={username}
+          maxWidth={Math.floor(chatPanelWidth / 3)}
+        />
       </div>
 
       {/* 删除确认对话框 */}

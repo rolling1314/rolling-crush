@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, History, X, File as FileIcon, Folder as FolderIcon, ChevronDown, ChevronRight, Sparkles, Square, Copy, Check, ImagePlus, Loader2 } from 'lucide-react';
+import { Send, X, File as FileIcon, Folder as FolderIcon, ChevronDown, ChevronRight, Sparkles, Square, Copy, Check, ImagePlus, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -17,7 +17,6 @@ interface ChatPanelProps {
   pendingPermissions: Map<string, PermissionRequest>;
   onPermissionApprove: (toolCallId: string) => void;
   onPermissionDeny: (toolCallId: string) => void;
-  onToggleHistory?: () => void;
   sessionConfigComponent?: React.ReactNode;
   isProcessing?: boolean;
   onCancelRequest?: () => void;
@@ -260,7 +259,6 @@ export const ChatPanel = ({
   pendingPermissions,
   onPermissionApprove,
   onPermissionDeny,
-  onToggleHistory,
   sessionConfigComponent,
   isProcessing = false,
   onCancelRequest,
@@ -535,49 +533,31 @@ export const ChatPanel = ({
 
   return (
     <div className="flex flex-col h-full bg-black">
-      <div className="p-4 border-b border-[#222] bg-[#0A0A0A] flex justify-between items-center">
-        <div className="flex items-center gap-4">
-          <h2 className="text-sm font-semibold text-gray-200">
-            {session?.title || (messages.length === 0 ? 'New Chat' : 'Chat')}
-          </h2>
-          {session && (
-            <>
-              {session.context_window > 0 ? (
-                <div className="flex items-center gap-2 text-xs text-gray-500" title={`Used: ${session.prompt_tokens + session.completion_tokens} / ${session.context_window} tokens`}>
-                  <span className="text-gray-400">Context:</span>
-                  <div className="w-20 bg-gray-800 rounded-full h-1.5 overflow-hidden">
-                      <div 
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          ((session.prompt_tokens + session.completion_tokens) / session.context_window) > 0.9 ? 'bg-red-500' :
-                          ((session.prompt_tokens + session.completion_tokens) / session.context_window) > 0.7 ? 'bg-yellow-500' :
-                          'bg-blue-500'
-                        }`}
-                        style={{ width: `${Math.min(100, ((session.prompt_tokens + session.completion_tokens) / session.context_window) * 100)}%` }}
-                      />
-                  </div>
-                  <span>{Math.round(((session.prompt_tokens + session.completion_tokens) / session.context_window) * 100)}%</span>
+      <div className="h-12 px-4 border-b border-[#1a1a1a] bg-[#0A0A0A] flex items-center gap-4">
+        <h2 className="text-sm font-medium text-gray-200 truncate">
+          {session?.title || (messages.length === 0 ? '新对话' : '对话')}
+        </h2>
+        {session && (
+          <div className="flex items-center gap-3 ml-auto">
+            {session.context_window > 0 ? (
+              <div className="flex items-center gap-2 text-xs text-gray-500" title={`已使用: ${session.prompt_tokens + session.completion_tokens} / ${session.context_window} tokens`}>
+                <div className="w-16 bg-[#1a1a1a] rounded-full h-1 overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        ((session.prompt_tokens + session.completion_tokens) / session.context_window) > 0.9 ? 'bg-red-500' :
+                        ((session.prompt_tokens + session.completion_tokens) / session.context_window) > 0.7 ? 'bg-yellow-500' :
+                        'bg-emerald-500'
+                      }`}
+                      style={{ width: `${Math.min(100, ((session.prompt_tokens + session.completion_tokens) / session.context_window) * 100)}%` }}
+                    />
                 </div>
-              ) : (
-                <div className="flex items-center gap-2 text-xs text-gray-500" title="Context window not configured">
-                  <span className="text-gray-400">Context:</span>
-                  <span className="text-gray-500">--</span>
-                </div>
-              )}
-              <div className="flex items-center gap-1 text-xs text-gray-500">
-                  <span className="text-gray-400">Cost:</span>
-                  <span>${session.cost?.toFixed(4) || '0.0000'}</span>
+                <span className="text-gray-500">{Math.round(((session.prompt_tokens + session.completion_tokens) / session.context_window) * 100)}%</span>
               </div>
-            </>
-          )}
-        </div>
-        {onToggleHistory && (
-          <button 
-            onClick={onToggleHistory}
-            className="p-1 hover:bg-gray-700 rounded text-gray-400 hover:text-white transition-colors"
-            title="Session History"
-          >
-            <History size={18} />
-          </button>
+            ) : null}
+            <div className="flex items-center gap-1 text-xs">
+                <span className="text-gray-500">${session.cost?.toFixed(4) || '0.0000'}</span>
+            </div>
+          </div>
         )}
       </div>
       
