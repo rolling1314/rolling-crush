@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ChevronDown, Sparkles, Key, Settings, X, Loader2, Check, AlertCircle } from 'lucide-react';
+import { ChevronDown, ChevronRight, Sparkles, Key, X, Loader2, Check, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 
 const API_URL = '/api';
@@ -50,7 +50,9 @@ export function InlineChatModelSelector({
 }: InlineChatModelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [providers, setProviders] = useState<Provider[]>([]);
-  const [models, setModels] = useState<Model[]>([]);
+  const [modelsMap, setModelsMap] = useState<Record<string, Model[]>>({}); // 每个 provider 的 models
+  const [loadingModels, setLoadingModels] = useState<Record<string, boolean>>({}); // 每个 provider 的加载状态
+  const [expandedProviders, setExpandedProviders] = useState<Set<string>>(new Set()); // 展开的 providers
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [tempApiKey, setTempApiKey] = useState('');
   const [autoModelAvailable, setAutoModelAvailable] = useState(false);
@@ -76,12 +78,17 @@ export function InlineChatModelSelector({
     }
   }, [sessionId]);
 
+  // 当有 sessionConfig 时，自动展开当前 provider
   useEffect(() => {
     const provider = sessionConfig?.provider || selectedConfig.provider;
     if (provider && provider !== 'auto' && !selectedConfig.is_auto) {
-      loadModels(provider);
+      setExpandedProviders(prev => new Set(prev).add(provider));
+      // 预加载当前 provider 的 models
+      if (!modelsMap[provider]) {
+        loadModels(provider);
+      }
     }
-  }, [selectedConfig.provider, sessionConfig?.provider]);
+  }, [sessionConfig?.provider]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -149,14 +156,21 @@ export function InlineChatModelSelector({
   };
 
   const loadModels = async (providerId: string) => {
+    // 如果已经加载过，直接返回
+    if (modelsMap[providerId]) return;
+    
     try {
+      setLoadingModels(prev => ({ ...prev, [providerId]: true }));
       const token = localStorage.getItem('jwt_token');
       const response = await axios.get(`${API_URL}/providers/${providerId}/models`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setModels(response.data || []);
+      setModelsMap(prev => ({ ...prev, [providerId]: response.data || [] }));
     } catch (error) {
       console.error('Failed to load models:', error);
+      setModelsMap(prev => ({ ...prev, [providerId]: [] }));
+    } finally {
+      setLoadingModels(prev => ({ ...prev, [providerId]: false }));
     }
   };
 
@@ -169,32 +183,32 @@ export function InlineChatModelSelector({
     setIsOpen(false);
   };
 
-  const handleSelectProvider = (providerId: string) => {
-    onConfigChange({
-      provider: providerId,
-      model: '',
-      is_auto: false
+  const handleToggleProvider = (providerId: string) => {
+    setExpandedProviders(prev => {
+      const next = new Set(prev);
+      if (next.has(providerId)) {
+        next.delete(providerId);
+      } else {
+        next.add(providerId);
+        // 展开时加载 models
+        if (!modelsMap[providerId]) {
+          loadModels(providerId);
+        }
+      }
+      return next;
     });
-    loadModels(providerId);
   };
 
-  const handleSelectModel = (modelId: string) => {
+  const handleSelectModel = (modelId: string, providerId: string) => {
     onConfigChange({
       ...selectedConfig,
+      provider: providerId,
       model: modelId,
       is_auto: false
     });
-    // 对于老会话，选完模型显示 API key 输入
-    // 对于新会话，检查是否需要 API key
-    const hasApiKey = isExistingSession 
-      ? sessionConfig?.api_key 
-      : selectedConfig.api_key;
-    
-    if (!hasApiKey) {
-      setShowApiKeyInput(true);
-    } else {
-      setIsOpen(false);
-    }
+    // 选完模型后总是显示 API key 输入界面
+    // 用户可以修改或确认 key
+    setShowApiKeyInput(true);
   };
 
   const testApiKey = async () => {
@@ -271,8 +285,9 @@ export function InlineChatModelSelector({
     const modelId = selectedConfig.model || sessionConfig?.model;
     const providerId = selectedConfig.provider || sessionConfig?.provider;
     
-    if (modelId) {
-      const model = models.find(m => m.id === modelId);
+    if (modelId && providerId) {
+      const providerModels = modelsMap[providerId] || [];
+      const model = providerModels.find(m => m.id === modelId);
       return model?.name || modelId;
     }
     if (providerId) {
@@ -393,26 +408,23 @@ export function InlineChatModelSelector({
                   'Save & Continue'
                 )}
               </button>
+              
+              {/* 如果已有 Key，显示"使用现有 Key"按钮 */}
+              {hasApiKey && (
+                <button
+                  onClick={() => {
+                    setShowApiKeyInput(false);
+                    setIsOpen(false);
+                    setTempApiKey('');
+                  }}
+                  className="w-full mt-2 px-2 py-1.5 border border-gray-600 text-gray-400 text-xs rounded hover:bg-gray-800 hover:text-gray-300 transition-colors"
+                >
+                  使用现有 Key
+                </button>
+              )}
             </div>
           ) : (
             <div className="overflow-y-auto max-h-80">
-              {/* 老会话显示当前配置信息 */}
-              {isExistingSession && sessionConfig && (
-                <div className="p-2 border-b border-purple-500/20 bg-purple-500/5">
-                  <div className="text-[10px] text-purple-300 mb-1">当前配置</div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-300">{sessionConfig.provider} / {sessionConfig.model}</span>
-                    <button
-                      onClick={() => setShowApiKeyInput(true)}
-                      className="text-[10px] text-purple-400 hover:text-purple-300 flex items-center gap-1"
-                    >
-                      <Key className="w-3 h-3" />
-                      修改 Key
-                    </button>
-                  </div>
-                </div>
-              )}
-              
               {/* Auto option */}
               {autoModelAvailable && (
                 <div className="p-1 border-b border-purple-500/20">
@@ -438,42 +450,68 @@ export function InlineChatModelSelector({
                 <div className="px-2 py-1 text-[10px] text-purple-400 uppercase tracking-wider">
                   选择模型
                 </div>
-                {providers.map(provider => (
-                  <div key={provider.id}>
-                    <button
-                      onClick={() => handleSelectProvider(provider.id)}
-                      className={`w-full flex items-center gap-2 px-3 py-2 rounded text-left text-sm transition-colors ${
-                        currentProvider === provider.id && !selectedConfig.is_auto
-                          ? 'bg-purple-500/20 text-purple-300'
-                          : 'text-gray-300 hover:bg-purple-500/10'
-                      }`}
-                    >
-                      <div className="w-4 h-4 rounded bg-purple-500/20 flex items-center justify-center text-[10px] font-bold text-purple-300">
-                        {provider.name.charAt(0)}
-                      </div>
-                      <span>{provider.name}</span>
-                    </button>
-                    
-                    {/* Show models for selected provider */}
-                    {currentProvider === provider.id && !selectedConfig.is_auto && (
-                      <div className="ml-6 border-l border-purple-500/20 pl-2">
-                        {models.map(model => (
-                          <button
-                            key={model.id}
-                            onClick={() => handleSelectModel(model.id)}
-                            className={`w-full px-3 py-1.5 rounded text-left text-xs transition-colors ${
-                              currentModel === model.id
-                                ? 'bg-purple-500/20 text-purple-300'
-                                : 'text-gray-400 hover:bg-purple-500/10 hover:text-purple-200'
-                            }`}
-                          >
-                            {model.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                {providers.map(provider => {
+                  const isExpanded = expandedProviders.has(provider.id);
+                  const isCurrentProvider = currentProvider === provider.id && !selectedConfig.is_auto;
+                  const providerModels = modelsMap[provider.id] || [];
+                  const isLoadingModels = loadingModels[provider.id];
+                  
+                  return (
+                    <div key={provider.id}>
+                      <button
+                        onClick={() => handleToggleProvider(provider.id)}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded text-left text-sm transition-colors ${
+                          isCurrentProvider
+                            ? 'bg-purple-500/20 text-purple-300'
+                            : 'text-gray-300 hover:bg-purple-500/10'
+                        }`}
+                      >
+                        {/* 折叠/展开图标 */}
+                        <div className="w-4 h-4 flex items-center justify-center text-gray-500">
+                          {isExpanded ? (
+                            <ChevronDown size={14} />
+                          ) : (
+                            <ChevronRight size={14} />
+                          )}
+                        </div>
+                        <div className="w-5 h-5 rounded bg-purple-500/20 flex items-center justify-center text-[10px] font-bold text-purple-300">
+                          {provider.name.charAt(0)}
+                        </div>
+                        <span className="flex-1">{provider.name}</span>
+                      </button>
+                      
+                      {/* Show models when expanded */}
+                      {isExpanded && (
+                        <div className="ml-8 border-l border-purple-500/20 pl-2 py-1">
+                          {isLoadingModels ? (
+                            <div className="flex items-center gap-2 px-3 py-2 text-xs text-gray-500">
+                              <Loader2 size={12} className="animate-spin" />
+                              Loading models...
+                            </div>
+                          ) : providerModels.length === 0 ? (
+                            <div className="px-3 py-2 text-xs text-gray-500">
+                              No models available
+                            </div>
+                          ) : (
+                            providerModels.map(model => (
+                              <button
+                                key={model.id}
+                                onClick={() => handleSelectModel(model.id, provider.id)}
+                                className={`w-full px-3 py-1.5 rounded text-left text-xs transition-colors ${
+                                  currentModel === model.id && currentProvider === provider.id
+                                    ? 'bg-purple-500/20 text-purple-300'
+                                    : 'text-gray-400 hover:bg-purple-500/10 hover:text-purple-200'
+                                }`}
+                              >
+                                {model.name}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
