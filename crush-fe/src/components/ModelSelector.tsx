@@ -8,6 +8,8 @@ interface Provider {
   name: string;
   base_url: string;
   type: string;
+  requires_base_url: boolean;  // Whether this provider needs a custom base_url
+  requires_api_key: boolean;   // Whether this provider needs an API key
 }
 
 interface Model {
@@ -47,6 +49,11 @@ export const ModelSelector = ({ onConfigChange, initialConfig, showAdvanced = fa
   const [isValidating, setIsValidating] = useState(false);
   const [validationStatus, setValidationStatus] = useState<'idle' | 'validating' | 'success' | 'error'>('idle');
   const [validationMessage, setValidationMessage] = useState('');
+  
+  // Track current provider's requirements
+  const currentProvider = providers.find(p => p.id === selectedProvider);
+  const requiresBaseURL = currentProvider?.requires_base_url ?? true;
+  const requiresAPIKey = currentProvider?.requires_api_key ?? true;
 
   useEffect(() => {
     loadProviders();
@@ -60,15 +67,21 @@ export const ModelSelector = ({ onConfigChange, initialConfig, showAdvanced = fa
 
   useEffect(() => {
     if (selectedProvider && selectedModel) {
+      // Find the provider to check if base_url is required
+      const provider = providers.find(p => p.id === selectedProvider);
+      const needsBaseURL = provider?.requires_base_url ?? true;
+      
       const newConfig = {
         ...config,
         provider: selectedProvider,
         model: selectedModel,
+        // Clear base_url if provider doesn't require it (e.g., OpenRouter)
+        base_url: needsBaseURL ? config.base_url : undefined,
       };
       setConfig(newConfig);
       onConfigChange(newConfig);
     }
-  }, [selectedProvider, selectedModel]);
+  }, [selectedProvider, selectedModel, providers]);
 
   const loadProviders = async () => {
     try {
@@ -207,17 +220,17 @@ export const ModelSelector = ({ onConfigChange, initialConfig, showAdvanced = fa
       )}
 
       {/* API Key */}
-      {selectedProvider && selectedModel && (
+      {selectedProvider && selectedModel && requiresAPIKey && (
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">
-            API Key <span className="text-red-500">*</span>
+            {currentProvider?.name || selectedProvider} API Key <span className="text-red-500">*</span>
           </label>
           <div className="space-y-2">
             <input
               type="password"
               value={config.api_key || ''}
               onChange={(e) => handleConfigUpdate('api_key', e.target.value)}
-              placeholder="Enter your API key..."
+              placeholder={`Enter your ${currentProvider?.name || selectedProvider} API key...`}
               className="w-full px-3 py-2 bg-[#3c3c3c] border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
             />
             <div className="flex items-center gap-2">
@@ -238,15 +251,21 @@ export const ModelSelector = ({ onConfigChange, initialConfig, showAdvanced = fa
                 </span>
               )}
             </div>
-            <p className="text-xs text-gray-500">
-              Required for most providers. Keep it secure.
-            </p>
+            {selectedProvider === 'openrouter' ? (
+              <p className="text-xs text-gray-500">
+                Get your API key from <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">openrouter.ai/keys</a>
+              </p>
+            ) : (
+              <p className="text-xs text-gray-500">
+                Required for {currentProvider?.name || selectedProvider}. Keep it secure.
+              </p>
+            )}
           </div>
         </div>
       )}
 
-      {/* Base URL (仅在showAdvanced为true时显示) */}
-      {showAdvanced && selectedProvider && selectedModel && (
+      {/* Base URL (仅在showAdvanced为true且provider需要base_url时显示) */}
+      {showAdvanced && selectedProvider && selectedModel && requiresBaseURL && (
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">
             Base URL (Optional)
@@ -260,6 +279,15 @@ export const ModelSelector = ({ onConfigChange, initialConfig, showAdvanced = fa
           />
           <p className="text-xs text-gray-500 mt-1">
             Override the default API endpoint if needed
+          </p>
+        </div>
+      )}
+      
+      {/* OpenRouter notice - show when base_url is not required */}
+      {showAdvanced && selectedProvider && selectedModel && !requiresBaseURL && (
+        <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+          <p className="text-sm text-blue-400">
+            ℹ️ {currentProvider?.name || selectedProvider} uses a fixed API endpoint. No custom Base URL needed.
           </p>
         </div>
       )}

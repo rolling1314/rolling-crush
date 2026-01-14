@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
-	"github.com/rolling1314/rolling-crush/pkg/config"
 	"github.com/gin-gonic/gin"
+	"github.com/rolling1314/rolling-crush/pkg/config"
 )
 
 // handleGetProviders returns all known providers
@@ -25,11 +25,24 @@ func (s *Server) handleGetProviders(c *gin.Context) {
 
 	result := make([]ProviderInfo, 0, len(knownProviders))
 	for _, p := range knownProviders {
+		// Determine if provider needs base_url based on provider type
+		// OpenRouter has a fixed base URL, so it doesn't require custom base_url
+		requiresBaseURL := true
+		if string(p.ID) == "openrouter" || p.Type == catwalk.TypeOpenRouter {
+			requiresBaseURL = false
+		}
+		// AWS Bedrock and VertexAI don't need base_url either
+		if p.Type == catwalk.TypeBedrock || p.Type == catwalk.TypeVertexAI {
+			requiresBaseURL = false
+		}
+
 		result = append(result, ProviderInfo{
-			ID:      string(p.ID),
-			Name:    p.Name,
-			BaseURL: p.APIEndpoint,
-			Type:    string(p.Type),
+			ID:              string(p.ID),
+			Name:            p.Name,
+			BaseURL:         p.APIEndpoint,
+			Type:            string(p.Type),
+			RequiresBaseURL: requiresBaseURL,
+			RequiresAPIKey:  true, // Most providers require API key
 		})
 	}
 

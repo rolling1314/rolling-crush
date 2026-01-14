@@ -143,10 +143,12 @@ type ErrorResponse struct {
 
 // ProviderInfo represents provider information in API responses
 type ProviderInfo struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	BaseURL string `json:"base_url"`
-	Type    string `json:"type"`
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	BaseURL         string `json:"base_url"`
+	Type            string `json:"type"`
+	RequiresBaseURL bool   `json:"requires_base_url"` // Whether this provider needs a custom base_url
+	RequiresAPIKey  bool   `json:"requires_api_key"`  // Whether this provider needs an API key
 }
 
 // ModelInfo represents model information in API responses
