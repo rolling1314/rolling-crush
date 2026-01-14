@@ -430,7 +430,7 @@ export default function ProjectListPage() {
                     placeholder="e.g. My Awesome App"
                     value={newProject.name}
                     onChange={e => setNewProject({ ...newProject, name: e.target.value })}
-                    className="w-full px-4 py-2.5 bg-[#0A0A0A] border border-[#333] rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all text-white placeholder-gray-600 text-sm"
+                    className="w-full px-4 py-2.5 bg-[#0A0A0A] border border-[#333] rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none transition-all text-white placeholder-gray-600 text-sm"
                     autoFocus
                   />
                 </div>
@@ -446,8 +446,8 @@ export default function ProjectListPage() {
                       onClick={() => setNewProject({ ...newProject, backend_language: '' })}
                       className={`px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
                         newProject.backend_language === '' 
-                          ? 'bg-blue-500 border-blue-500 text-white' 
-                          : 'bg-[#0A0A0A] border-[#333] text-gray-400 hover:border-blue-500'
+                          ? 'bg-gradient-to-r from-purple-600 to-blue-600 border-purple-500 text-white' 
+                          : 'bg-[#0A0A0A] border-[#333] text-gray-400 hover:border-purple-500'
                       }`}
                     >
                       None
@@ -457,8 +457,8 @@ export default function ProjectListPage() {
                       onClick={() => setNewProject({ ...newProject, backend_language: 'go' })}
                       className={`px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
                         newProject.backend_language === 'go' 
-                          ? 'bg-blue-500 border-blue-500 text-white' 
-                          : 'bg-[#0A0A0A] border-[#333] text-gray-400 hover:border-blue-500'
+                          ? 'bg-gradient-to-r from-purple-600 to-blue-600 border-purple-500 text-white' 
+                          : 'bg-[#0A0A0A] border-[#333] text-gray-400 hover:border-purple-500'
                       }`}
                     >
                       Go
@@ -468,8 +468,8 @@ export default function ProjectListPage() {
                       onClick={() => setNewProject({ ...newProject, backend_language: 'java' })}
                       className={`px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
                         newProject.backend_language === 'java' 
-                          ? 'bg-blue-500 border-blue-500 text-white' 
-                          : 'bg-[#0A0A0A] border-[#333] text-gray-400 hover:border-blue-500'
+                          ? 'bg-gradient-to-r from-purple-600 to-blue-600 border-purple-500 text-white' 
+                          : 'bg-[#0A0A0A] border-[#333] text-gray-400 hover:border-purple-500'
                       }`}
                     >
                       Java
@@ -479,8 +479,8 @@ export default function ProjectListPage() {
                       onClick={() => setNewProject({ ...newProject, backend_language: 'python' })}
                       className={`px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
                         newProject.backend_language === 'python' 
-                          ? 'bg-blue-500 border-blue-500 text-white' 
-                          : 'bg-[#0A0A0A] border-[#333] text-gray-400 hover:border-blue-500'
+                          ? 'bg-gradient-to-r from-purple-600 to-blue-600 border-purple-500 text-white' 
+                          : 'bg-[#0A0A0A] border-[#333] text-gray-400 hover:border-purple-500'
                       }`}
                     >
                       Python
@@ -496,7 +496,7 @@ export default function ProjectListPage() {
                         type="checkbox"
                         checked={newProject.need_database}
                         onChange={e => setNewProject({ ...newProject, need_database: e.target.checked })}
-                        className="w-4 h-4 rounded bg-[#0A0A0A] border-[#333] text-blue-500 focus:ring-blue-500"
+                        className="w-4 h-4 rounded bg-[#0A0A0A] border-[#333] text-purple-500 focus:ring-purple-500"
                       />
                       <span className="text-sm text-gray-300">Need Database (PostgreSQL)</span>
                     </label>
@@ -504,8 +504,8 @@ export default function ProjectListPage() {
                 )}
 
                 {/* 提示信息 */}
-                <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                  <p className="text-xs text-blue-400">
+                <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                  <p className="text-xs text-purple-400">
                     ✨ A Docker container will be automatically created with frontend (Vite) 
                     {newProject.backend_language && ` and ${newProject.backend_language.toUpperCase()} backend`}
                     {newProject.need_database && ' with PostgreSQL database'}
@@ -524,7 +524,7 @@ export default function ProjectListPage() {
                 <button
                   onClick={createProject}
                   disabled={!newProject.name.trim() || creating}
-                  className="flex-1 px-4 py-2.5 bg-white text-black font-medium rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-medium rounded-lg hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
                 >
                   {creating ? 'Creating...' : 'Create Project'}
                 </button>
