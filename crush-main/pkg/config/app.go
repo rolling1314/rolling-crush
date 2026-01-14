@@ -12,9 +12,19 @@ import (
 
 // AppConfig holds the complete application configuration.
 type AppConfig struct {
-	Database DatabaseConfig `yaml:"database"`
-	Sandbox  SandboxConfig  `yaml:"sandbox"`
-	Storage  StorageConfig  `yaml:"storage"`
+	Database  DatabaseConfig  `yaml:"database"`
+	Sandbox   SandboxConfig   `yaml:"sandbox"`
+	Storage   StorageConfig   `yaml:"storage"`
+	AutoModel AutoModelConfig `yaml:"auto_model"`
+}
+
+// AutoModelConfig holds the default "Auto" model configuration.
+// When users select "Auto" model, this configuration is used.
+type AutoModelConfig struct {
+	Provider string `yaml:"provider"`
+	Model    string `yaml:"model"`
+	APIKey   string `yaml:"api_key"`
+	BaseURL  string `yaml:"base_url"`
 }
 
 // DatabaseConfig holds database connection settings.

@@ -100,6 +100,9 @@ func (s *Server) Start() error {
 		apiGroup.POST("/providers/test-connection", auth.GinAuthMiddleware(), s.handleTestProviderConnection)
 		apiGroup.POST("/providers/configure", auth.GinAuthMiddleware(), s.handleConfigureProvider)
 
+		// Auto model config endpoint
+		apiGroup.GET("/auto-model", auth.GinAuthMiddleware(), s.handleGetAutoModel)
+
 		// File routes
 		apiGroup.GET("/files", auth.GinAuthMiddleware(), s.handleGetFiles)
 

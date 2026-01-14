@@ -538,7 +538,7 @@ export const ChatPanel = ({
       <div className="p-4 border-b border-[#222] bg-[#0A0A0A] flex justify-between items-center">
         <div className="flex items-center gap-4">
           <h2 className="text-sm font-semibold text-gray-200">
-            {session?.title || 'Chat'}
+            {session?.title || (messages.length === 0 ? 'New Chat' : 'Chat')}
           </h2>
           {session && (
             <>
@@ -582,6 +582,18 @@ export const ChatPanel = ({
       </div>
       
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Welcome message for new chat */}
+        {groupedMessages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500/20 to-blue-500/20 flex items-center justify-center mb-4 border border-purple-500/30">
+              <Sparkles className="w-8 h-8 text-purple-400" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-200 mb-2">开始新对话</h3>
+            <p className="text-sm text-gray-500 max-w-sm">
+              选择模型后发送消息开始对话。Auto 模式将使用智谱 GLM 模型。
+            </p>
+          </div>
+        )}
         {groupedMessages.map((group) => {
           const firstMsg = group[0];
           const isUser = firstMsg.role === 'user';

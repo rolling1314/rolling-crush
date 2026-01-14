@@ -103,10 +103,13 @@ type SessionModelConfig struct {
 }
 
 // CreateSessionRequest represents a request to create a new session
+// Note: model_config is now optional. If not provided or is_auto is true,
+// the system will use the auto model configuration from config.yaml
 type CreateSessionRequest struct {
 	ProjectID   string              `json:"project_id" binding:"required"`
 	Title       string              `json:"title" binding:"required"`
-	ModelConfig *SessionModelConfig `json:"model_config" binding:"required"`
+	ModelConfig *SessionModelConfig `json:"model_config"`
+	IsAuto      bool                `json:"is_auto"` // If true, use auto model config
 }
 
 // SessionConfigResponse represents the model configuration for a session

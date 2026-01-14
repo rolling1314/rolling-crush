@@ -156,3 +156,21 @@ func (s *Server) handleConfigureProvider(c *gin.Context) {
 		"message": "Provider configuration validated successfully",
 	})
 }
+
+// handleGetAutoModel returns the auto model configuration
+// This is used when user selects "Auto" model option
+func (s *Server) handleGetAutoModel(c *gin.Context) {
+	appCfg := config.GetGlobalAppConfig()
+
+	if appCfg.AutoModel.Provider == "" || appCfg.AutoModel.Model == "" {
+		c.JSON(http.StatusNotFound, ErrorResponse{Error: "Auto model not configured"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"provider": appCfg.AutoModel.Provider,
+		"model":    appCfg.AutoModel.Model,
+		// Note: We don't expose API key to frontend for security
+		"configured": true,
+	})
+}

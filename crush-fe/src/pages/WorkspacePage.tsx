@@ -5,7 +5,7 @@ import axios from 'axios';
 import { ChatPanel } from '../components/ChatPanel';
 import { FileTree } from '../components/FileTree';
 import { CodeEditor } from '../components/CodeEditor';
-import { ModelSelector } from '../components/ModelSelector';
+import { InlineChatModelSelector } from '../components/InlineChatModelSelector';
 import { SessionConfigPanel } from '../components/SessionConfigPanel';
 import { type FileNode, type Message, type PermissionRequest, type ToolCall, type ToolResult, type Session } from '../types';
 
@@ -31,6 +31,7 @@ interface SessionModelConfig {
   top_p?: number;
   reasoning_effort?: string;
   think?: boolean;
+  is_auto?: boolean;
 }
 
 export default function WorkspacePage() {
@@ -40,17 +41,20 @@ export default function WorkspacePage() {
   const [project, setProject] = useState<Project | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [showNewSessionModal, setShowNewSessionModal] = useState(false);
-  const [newSessionTitle, setNewSessionTitle] = useState('');
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSessionHistory, setShowSessionHistory] = useState(false);
   
-  // Model selection state
-  const [modelConfig, setModelConfig] = useState<SessionModelConfig>({
-    provider: '',
-    model: '',
-    max_tokens: 4096,
+  // Pending session state - for new sessions that haven't been created yet
+  // When user clicks "New Session", we create a pending session state
+  // The actual session is created when user sends the first message
+  const [isPendingSession, setIsPendingSession] = useState(false);
+  
+  // Model selection state for new/pending sessions
+  const [pendingModelConfig, setPendingModelConfig] = useState<SessionModelConfig>({
+    provider: 'auto',
+    model: 'auto',
+    is_auto: true,
   });
   
   const [messages, setMessages] = useState<Message[]>([]);
@@ -521,9 +525,19 @@ export default function WorkspacePage() {
       
       setSessions(sessionList);
       
-      // 自动选择第一个会话
-      if (sessionList.length > 0 && !currentSessionId) {
+      // 自动选择第一个会话，如果没有会话则启动一个待定会话
+      if (sessionList.length > 0 && !currentSessionId && !isPendingSession) {
         setCurrentSessionId(sessionList[0].id);
+      } else if (sessionList.length === 0 && !isPendingSession) {
+        // 如果没有会话，启动一个待定会话
+        setIsPendingSession(true);
+        setCurrentSessionId(null);
+        setMessages([]);
+        setPendingModelConfig({
+          provider: 'auto',
+          model: 'auto',
+          is_auto: true,
+        });
       }
     } catch (error) {
       console.error('Failed to load sessions:', error);
@@ -657,58 +671,116 @@ export default function WorkspacePage() {
     }
   };
 
-  const createSession = async () => {
-    if (!newSessionTitle.trim()) {
-      alert('Please enter a session title');
-      return;
-    }
-    
-    if (!modelConfig.provider || !modelConfig.model) {
-      alert('Please select a provider and model');
-      return;
-    }
-
-    if (!modelConfig.api_key || !modelConfig.api_key.trim()) {
-      alert('Please enter an API key');
-      return;
-    }
-    
+  // Create a new session with the given config
+  // This is called when user sends first message in a pending session
+  const createSessionWithConfig = async (config: SessionModelConfig, firstMessageContent?: string): Promise<string | null> => {
     try {
       const token = localStorage.getItem('jwt_token');
       
-      // 直接创建session，配置会保存到session_model_configs表
-      const response = await axios.post(`${API_URL}/sessions`, {
+      // Generate a title from the first message content or use default
+      const title = firstMessageContent 
+        ? (firstMessageContent.length > 50 
+            ? firstMessageContent.substring(0, 50) + '...' 
+            : firstMessageContent)
+        : `New Session ${new Date().toLocaleString()}`;
+      
+      // Prepare request body
+      const requestBody: {
+        project_id: string | undefined;
+        title: string;
+        is_auto?: boolean;
+        model_config?: SessionModelConfig;
+      } = {
         project_id: projectId,
-        title: newSessionTitle,
-        model_config: modelConfig
-      }, {
+        title: title,
+      };
+      
+      // If using auto model, set is_auto flag
+      if (config.is_auto) {
+        requestBody.is_auto = true;
+      } else {
+        // Otherwise pass the model config
+        requestBody.model_config = {
+          provider: config.provider,
+          model: config.model,
+          api_key: config.api_key,
+          base_url: config.base_url,
+        };
+      }
+      
+      const response = await axios.post(`${API_URL}/sessions`, requestBody, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      setShowNewSessionModal(false);
-      setNewSessionTitle('');
-      setModelConfig({
-        provider: '',
-        model: '',
-        max_tokens: 4096,
-      });
+      console.log('Session created:', response.data);
       loadSessions();
-      setCurrentSessionId(response.data.id);
+      return response.data.id;
     } catch (error: any) {
       console.error('Failed to create session:', error);
       alert('Failed to create session: ' + (error.response?.data?.error || error.message));
+      return null;
     }
   };
+  
+  // Start a new pending session (called when user clicks "New Session")
+  const startNewSession = () => {
+    setIsPendingSession(true);
+    setCurrentSessionId(null);
+    setMessages([]);
+    setPendingModelConfig({
+      provider: 'auto',
+      model: 'auto',
+      is_auto: true,
+    });
+    setShowSessionHistory(false);
+  };
 
-  const handleSendMessage = (content: string, contextFiles: FileNode[] = [], images: { url: string; filename: string; mime_type: string }[] = []) => {
-    if (!currentSessionId) {
-      console.error('No session selected');
-      return;
+  const handleSendMessage = async (content: string, contextFiles: FileNode[] = [], images: { url: string; filename: string; mime_type: string }[] = []) => {
+    let sessionId = currentSessionId;
+    
+    // If this is a pending session, create the session first
+    if (isPendingSession || !sessionId) {
+      console.log('Creating session for pending session...');
+      
+      // Validate config for non-auto models
+      if (!pendingModelConfig.is_auto && (!pendingModelConfig.provider || !pendingModelConfig.model)) {
+        alert('Please select a model');
+        return;
+      }
+      
+      if (!pendingModelConfig.is_auto && !pendingModelConfig.api_key) {
+        alert('Please enter an API key for the selected model');
+        return;
+      }
+      
+      // Create session with config
+      const newSessionId = await createSessionWithConfig(pendingModelConfig, content);
+      if (!newSessionId) {
+        return; // Creation failed, error already shown
+      }
+      
+      sessionId = newSessionId;
+      setCurrentSessionId(newSessionId);
+      setIsPendingSession(false);
+      
+      // Connect WebSocket to the new session
+      connectWebSocket(newSessionId);
+      
+      // Wait a bit for WebSocket to connect
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
 
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       console.error('WebSocket not connected');
-      return;
+      // Try to reconnect
+      if (sessionId) {
+        connectWebSocket(sessionId);
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        alert('WebSocket connection failed. Please try again.');
+        return;
+      }
     }
 
     let messageContent = content;
@@ -749,7 +821,7 @@ export default function WorkspacePage() {
     } = {
       type: 'message',
       content: messageContent,
-      sessionID: currentSessionId,
+      sessionID: sessionId!,
     };
     
     // Add images if any
@@ -1106,14 +1178,20 @@ export default function WorkspacePage() {
         <div className="flex-1 overflow-hidden flex flex-col">
             <ChatPanel 
             messages={messages} 
-            session={sessions.find(s => s.id === currentSessionId)}
+            session={isPendingSession ? undefined : sessions.find(s => s.id === currentSessionId)}
             onSendMessage={handleSendMessage}
             pendingPermissions={pendingPermissions}
             onPermissionApprove={(toolCallId) => handlePermissionResponse(toolCallId, true)}
             onPermissionDeny={(toolCallId) => handlePermissionResponse(toolCallId, false)}
             onToggleHistory={() => setShowSessionHistory(!showSessionHistory)}
             sessionConfigComponent={
-              currentSessionId ? (
+              isPendingSession ? (
+                <InlineChatModelSelector
+                  selectedConfig={pendingModelConfig}
+                  onConfigChange={setPendingModelConfig}
+                  disabled={isProcessing}
+                />
+              ) : currentSessionId ? (
                 <SessionConfigPanel sessionId={currentSessionId} compact={true} />
               ) : null
             }
@@ -1137,7 +1215,7 @@ export default function WorkspacePage() {
                  <h2 className="text-white font-semibold">Sessions</h2>
               </div>
               <button
-                onClick={() => setShowNewSessionModal(true)}
+                onClick={startNewSession}
                 className="p-1 hover:bg-[#333] rounded"
                 title="New Session"
               >
@@ -1211,57 +1289,6 @@ export default function WorkspacePage() {
           </div>
         )}
       </div>
-
-      {/* 新建会话模态框 */}
-      {showNewSessionModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-[#1A1A1A] p-6 rounded-lg w-[500px] max-h-[80vh] overflow-y-auto border border-[#333]">
-            <h2 className="text-xl font-bold text-white mb-4">New Session</h2>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Session Title
-                </label>
-                <input
-                  type="text"
-                  placeholder="Enter session title..."
-                  value={newSessionTitle}
-                  onChange={e => setNewSessionTitle(e.target.value)}
-                  onKeyPress={e => e.key === 'Enter' && createSession()}
-                  className="w-full px-4 py-2 bg-[#0A0A0A] border border-[#333] rounded text-white focus:outline-none focus:border-blue-500"
-                  autoFocus
-                />
-              </div>
-
-              <ModelSelector 
-                onConfigChange={(config) => setModelConfig(config)}
-                initialConfig={modelConfig}
-                showAdvanced={false}
-              />
-            </div>
-
-            <div className="flex gap-2 mt-6">
-              <button
-                onClick={createSession}
-                disabled={!newSessionTitle.trim() || !modelConfig.provider || !modelConfig.model || !modelConfig.api_key}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Create
-              </button>
-              <button
-                onClick={() => {
-                  setShowNewSessionModal(false);
-                  setNewSessionTitle('');
-                }}
-                className="flex-1 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 删除确认对话框 */}
       {showDeleteConfirm && (

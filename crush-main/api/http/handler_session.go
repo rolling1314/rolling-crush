@@ -25,13 +25,30 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 		return
 	}
 
+	// Determine model config to use
+	modelConfig := req.ModelConfig
+
+	// If is_auto or no model config provided, use auto model from config
+	if req.IsAuto || modelConfig == nil {
+		appCfg := config.GetGlobalAppConfig()
+		if appCfg.AutoModel.Provider != "" && appCfg.AutoModel.Model != "" {
+			modelConfig = &SessionModelConfig{
+				Provider: appCfg.AutoModel.Provider,
+				Model:    appCfg.AutoModel.Model,
+				APIKey:   appCfg.AutoModel.APIKey,
+				BaseURL:  appCfg.AutoModel.BaseURL,
+			}
+			slog.Info("Using auto model config", "provider", modelConfig.Provider, "model", modelConfig.Model)
+		}
+	}
+
 	// Save model config using TUI's exact logic, writing to database instead of file
 	fmt.Println("=== handleCreateSession: About to save model config ===")
-	fmt.Println("req.ModelConfig:", req.ModelConfig)
+	fmt.Println("req.ModelConfig:", modelConfig)
 
-	if req.ModelConfig != nil {
+	if modelConfig != nil {
 		fmt.Println("ModelConfig is not nil, proceeding with config save")
-		fmt.Println("Provider:", req.ModelConfig.Provider, "Model:", req.ModelConfig.Model)
+		fmt.Println("Provider:", modelConfig.Provider, "Model:", modelConfig.Model)
 
 		// 1. Create a temporary Config instance with DB storage enabled
 		tempConfig := *s.config // Shallow copy of base config
@@ -39,27 +56,27 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 		fmt.Println("Enabled DB storage for session:", sess.ID)
 
 		// 2. Set API Key following TUI logic (writes to database automatically)
-		if req.ModelConfig.APIKey != "" {
-			if err := tempConfig.SetProviderAPIKey(req.ModelConfig.Provider, req.ModelConfig.APIKey); err != nil {
+		if modelConfig.APIKey != "" {
+			if err := tempConfig.SetProviderAPIKey(modelConfig.Provider, modelConfig.APIKey); err != nil {
 				slog.Error("Failed to set provider API key", "error", err, "session_id", sess.ID)
 			} else {
-				slog.Info("Saved API key to database", "provider", req.ModelConfig.Provider, "session_id", sess.ID)
+				slog.Info("Saved API key to database", "provider", modelConfig.Provider, "session_id", sess.ID)
 			}
 		}
 
 		// 3. Update preferred large model following TUI logic (writes to database automatically)
 		largeModel := config.SelectedModel{
-			Model:           req.ModelConfig.Model,
-			Provider:        req.ModelConfig.Provider,
-			ReasoningEffort: req.ModelConfig.ReasoningEffort,
+			Model:           modelConfig.Model,
+			Provider:        modelConfig.Provider,
+			ReasoningEffort: modelConfig.ReasoningEffort,
 		}
-		if req.ModelConfig.MaxTokens != nil {
-			largeModel.MaxTokens = *req.ModelConfig.MaxTokens
+		if modelConfig.MaxTokens != nil {
+			largeModel.MaxTokens = *modelConfig.MaxTokens
 		}
 		if err := tempConfig.UpdatePreferredModel(config.SelectedModelTypeLarge, largeModel); err != nil {
 			slog.Error("Failed to update preferred large model", "error", err, "session_id", sess.ID)
 		} else {
-			slog.Info("Saved large model to database", "model", req.ModelConfig.Model, "session_id", sess.ID)
+			slog.Info("Saved large model to database", "model", modelConfig.Model, "session_id", sess.ID)
 		}
 
 		// 4. Auto-set small model following TUI logic (writes to database automatically)
@@ -67,18 +84,18 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 		if err == nil {
 			var providerInfo *catwalk.Provider
 			for _, p := range knownProviders {
-				if string(p.ID) == req.ModelConfig.Provider {
+				if string(p.ID) == modelConfig.Provider {
 					providerInfo = &p
 					break
 				}
 			}
 
 			if providerInfo != nil && providerInfo.DefaultSmallModelID != "" {
-				smallModelInfo := tempConfig.GetModel(req.ModelConfig.Provider, providerInfo.DefaultSmallModelID)
+				smallModelInfo := tempConfig.GetModel(modelConfig.Provider, providerInfo.DefaultSmallModelID)
 				if smallModelInfo != nil {
 					smallModel := config.SelectedModel{
 						Model:           smallModelInfo.ID,
-						Provider:        req.ModelConfig.Provider,
+						Provider:        modelConfig.Provider,
 						ReasoningEffort: smallModelInfo.DefaultReasoningEffort,
 						MaxTokens:       smallModelInfo.DefaultMaxTokens,
 					}
