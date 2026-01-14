@@ -535,12 +535,12 @@ export const ChatPanel = ({
     <div className="flex flex-col h-full bg-black">
       <div className="h-12 px-4 border-b border-[#1a1a1a] bg-[#0A0A0A] flex items-center gap-4">
         <h2 className="text-sm font-medium text-gray-200 truncate">
-          {session?.title || (messages.length === 0 ? '新对话' : '对话')}
+          {session?.title || (messages.length === 0 ? 'New Chat' : 'Chat')}
         </h2>
         {session && (
           <div className="flex items-center gap-3 ml-auto">
             {session.context_window > 0 ? (
-              <div className="flex items-center gap-2 text-xs text-gray-500" title={`已使用: ${session.prompt_tokens + session.completion_tokens} / ${session.context_window} tokens`}>
+              <div className="flex items-center gap-2 text-xs text-gray-500" title={`Used: ${session.prompt_tokens + session.completion_tokens} / ${session.context_window} tokens`}>
                 <div className="w-16 bg-[#1a1a1a] rounded-full h-1 overflow-hidden">
                     <div 
                       className={`h-full rounded-full transition-all duration-500 ${
@@ -568,9 +568,9 @@ export const ChatPanel = ({
             <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500/20 to-blue-500/20 flex items-center justify-center mb-4 border border-purple-500/30">
               <Sparkles className="w-8 h-8 text-purple-400" />
             </div>
-            <h3 className="text-lg font-medium text-gray-200 mb-2">开始新对话</h3>
+            <h3 className="text-lg font-medium text-gray-200 mb-2">Start a New Chat</h3>
             <p className="text-sm text-gray-500 max-w-sm">
-              选择模型后发送消息开始对话。Auto 模式将使用 Z.AI GLM-4.5 模型。
+              Select a model and send a message to begin. Auto mode uses Z.AI GLM-4.5.
             </p>
           </div>
         )}
@@ -805,7 +805,7 @@ export const ChatPanel = ({
             onChange={(e) => setInput(e.target.value)}
             onPaste={handlePaste}
             onKeyDown={handleKeyDown}
-            placeholder={attachedFiles.length > 0 ? "Describe what to do with these files..." : "问问关于代码的问题......"}
+            placeholder={attachedFiles.length > 0 ? "Describe what to do with these files..." : "Ask anything about your code..."}
             className="w-full bg-transparent border-none text-sm text-gray-200 placeholder-gray-500 p-3 min-h-[60px] max-h-[200px] resize-none focus:ring-0 focus:outline-none scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent"
             rows={2}
           />
@@ -827,7 +827,7 @@ export const ChatPanel = ({
                  onClick={() => imageInputRef.current?.click()}
                  disabled={isUploadingImage}
                  className="p-1.5 text-gray-400 hover:text-green-400 hover:bg-green-500/10 rounded-md transition-colors disabled:opacity-50"
-                 title="上传图片"
+                 title="Upload image"
                >
                  {isUploadingImage ? (
                    <Loader2 size={16} className="animate-spin" />
@@ -841,9 +841,9 @@ export const ChatPanel = ({
               <button
                 onClick={onCancelRequest}
                 className="relative p-1.5 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors group"
-                title="取消请求"
+                title="Cancel"
               >
-                {/* 呼吸灯效果 */}
+                {/* Breathing light effect */}
                 <span className="absolute inset-0 rounded-md bg-red-500 animate-ping opacity-30" />
                 <span className="absolute inset-0 rounded-md bg-red-400 animate-pulse opacity-40" />
                 <Square size={16} className="relative z-10 fill-current" />
