@@ -18,26 +18,40 @@ func (s *Server) handleGetFiles(c *gin.Context) {
 	// Get request parameters
 	targetPath := c.DefaultQuery("path", ".")
 	sessionID := c.Query("session_id")
+	projectID := c.Query("project_id")
 
-	slog.Info("handleGetFiles request", "session_id", sessionID, "path", targetPath, "query", c.Request.URL.RawQuery)
+	slog.Info("handleGetFiles request", 
+		"session_id", sessionID, 
+		"project_id", projectID, 
+		"path", targetPath, 
+		"query", c.Request.URL.RawQuery)
 
-	// session_id is required
-	if sessionID == "" {
-		slog.Warn("Missing session_id parameter", "path", targetPath)
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "session_id is required. Usage: /api/files?session_id=xxx&path=/sandbox/project"})
+	// Either session_id or project_id is required
+	if sessionID == "" && projectID == "" {
+		slog.Warn("Missing required parameter", "path", targetPath)
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "session_id or project_id is required. Usage: /api/files?project_id=xxx&path=/sandbox/project"})
 		return
 	}
 
-	slog.Info("Fetching file tree from sandbox", "session_id", sessionID, "path", targetPath)
+	// Prefer project_id over session_id (new approach)
+	if projectID != "" {
+		slog.Info("Fetching file tree from sandbox by project_id", "project_id", projectID, "path", targetPath)
+	} else {
+		slog.Info("Fetching file tree from sandbox by session_id", "session_id", sessionID, "path", targetPath)
+	}
 
 	// Get file tree through sandbox client
 	resp, err := s.sandboxClient.GetFileTree(c.Request.Context(), sandbox.FileTreeRequest{
 		SessionID: sessionID,
+		ProjectID: projectID,
 		Path:      targetPath,
 	})
 
 	if err != nil {
-		slog.Error("Failed to get file tree from sandbox", "error", err, "session_id", sessionID)
+		slog.Error("Failed to get file tree from sandbox", 
+			"error", err, 
+			"session_id", sessionID, 
+			"project_id", projectID)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: fmt.Sprintf("Failed to get file tree: %v", err)})
 		return
 	}

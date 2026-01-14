@@ -119,6 +119,74 @@ class DatabaseManager:
             self._connect()
             return None
     
+    def get_project_by_id(self, project_id: str) -> Optional[Dict]:
+        """根据项目ID查询项目信息
+        
+        返回:
+            {
+                'id': 项目ID,
+                'name': 项目名称,
+                'container_name': 容器名称,
+                'workdir_path': 工作目录路径,
+                'external_ip': 外部IP地址,
+                'frontend_port': 前端端口,
+                'workspace_path': 工作空间路径,
+                'db_host': 数据库主机,
+                'db_port': 数据库端口,
+                'db_user': 数据库用户,
+                'db_password': 数据库密码,
+                'db_name': 数据库名称,
+                'backend_port': 后端端口,
+                'frontend_command': 前端命令,
+                'frontend_language': 前端语言,
+                'backend_command': 后端命令,
+                'backend_language': 后端语言
+            }
+        """
+        if not self.conn:
+            return None
+        
+        try:
+            with self.conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                # 直接查询 projects 表
+                cursor.execute("""
+                    SELECT 
+                        id,
+                        name,
+                        container_name,
+                        workdir_path,
+                        external_ip,
+                        frontend_port,
+                        workspace_path,
+                        db_host,
+                        db_port,
+                        db_user,
+                        db_password,
+                        db_name,
+                        backend_port,
+                        frontend_command,
+                        frontend_language,
+                        backend_command,
+                        backend_language
+                    FROM projects
+                    WHERE id = %s
+                    LIMIT 1
+                """, (project_id,))
+                
+                result = cursor.fetchone()
+                if result:
+                    return dict(result)
+                return None
+        except Exception as e:
+            print(f"⚠️ 查询数据库失败: {e}")
+            # 尝试重新连接
+            try:
+                self.conn.close()
+            except:
+                pass
+            self._connect()
+            return None
+    
     def close(self):
         """关闭数据库连接"""
         if self.conn:

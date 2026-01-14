@@ -104,10 +104,10 @@ export default function WorkspacePage() {
   }, [projectId]);
 
   useEffect(() => {
-    if (project?.workspace_path && currentSessionId) {
-      loadFiles(project.workspace_path, currentSessionId);
+    if (project?.workspace_path && projectId) {
+      loadFiles(project.workspace_path, projectId);
     }
-  }, [project, currentSessionId]);
+  }, [project, projectId]);
 
   // Load open files from localStorage
   useEffect(() => {
@@ -429,11 +429,10 @@ export default function WorkspacePage() {
       // 如果消息包含工具调用结果，刷新文件树（因为工具可能修改了文件）
       // Use refs to get latest state inside WebSocket callback closure
       const currentProject = projectRef.current;
-      const currentSession = currentSessionIdRef.current;
 
-      if (convertedMsg.toolResults && convertedMsg.toolResults.length > 0 && currentProject?.workspace_path && currentSession) {
+      if (convertedMsg.toolResults && convertedMsg.toolResults.length > 0 && currentProject?.workspace_path && currentProject?.id) {
         console.log('Tool result detected, refreshing file tree...');
-        loadFiles(currentProject.workspace_path, currentSession, true);
+        loadFiles(currentProject.workspace_path, currentProject.id, true);
       }
     }
   };
@@ -531,16 +530,16 @@ export default function WorkspacePage() {
     }
   };
 
-  const loadFiles = async (workspacePath: string, sessionId?: string, isBackground: boolean = false) => {
+  const loadFiles = async (workspacePath: string, projectIdOrSessionId?: string, isBackground: boolean = false) => {
     if (!isBackground) {
       setLoadingFiles(true);
     }
     try {
-      // 如果没有提供 sessionId，使用当前会话ID
-      const effectiveSessionId = sessionId || currentSessionId;
+      // 使用传入的 projectId（优先）或当前项目ID
+      const effectiveProjectId = projectIdOrSessionId || projectId;
       
-      if (!effectiveSessionId) {
-        console.warn('No session ID available, skipping file tree load');
+      if (!effectiveProjectId) {
+        console.warn('No project ID available, skipping file tree load');
         setFiles([]);
         if (!isBackground) {
           setLoadingFiles(false);
@@ -549,8 +548,9 @@ export default function WorkspacePage() {
       }
       
       const token = localStorage.getItem('jwt_token');
-      const url = `/api/files?session_id=${encodeURIComponent(effectiveSessionId)}&path=${encodeURIComponent(workspacePath)}`;
-      console.log('Loading file tree:', { sessionId: effectiveSessionId, path: workspacePath, url, isBackground });
+      // 使用 project_id 而不是 session_id 来加载文件
+      const url = `/api/files?project_id=${encodeURIComponent(effectiveProjectId)}&path=${encodeURIComponent(workspacePath)}`;
+      console.log('Loading file tree:', { projectId: effectiveProjectId, path: workspacePath, url, isBackground });
       
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }

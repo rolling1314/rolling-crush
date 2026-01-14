@@ -8,32 +8,89 @@ from flask import Blueprint, request, jsonify, current_app
 file_ops_bp = Blueprint('file_ops', __name__)
 
 
+def get_sandbox_from_session(session_manager, session_id):
+    """
+    通过 session_id 获取 sandbox 实例
+    
+    工作流程：
+    1. 通过 session_id 从数据库查询项目信息
+    2. 连接到项目对应的容器
+    
+    Args:
+        session_manager: SessionManager实例
+        session_id: 会话ID
+    
+    Returns:
+        Sandbox实例
+    
+    Raises:
+        ValueError: 当缺少必需参数或查询失败时
+    """
+    if not session_id:
+        raise ValueError("session_id is required")
+    
+    sandbox = session_manager.get_or_create(session_id)
+    return sandbox
+
+
+def get_sandbox_from_project(session_manager, project_id):
+    """
+    通过 project_id 获取 sandbox 实例
+    
+    工作流程：
+    1. 通过 project_id 从数据库查询项目信息
+    2. 连接到项目对应的容器
+    
+    Args:
+        session_manager: SessionManager实例
+        project_id: 项目ID
+    
+    Returns:
+        Sandbox实例
+    
+    Raises:
+        ValueError: 当缺少必需参数或查询失败时
+    """
+    if not project_id:
+        raise ValueError("project_id is required")
+    
+    sandbox = session_manager.get_or_create_by_project(project_id)
+    return sandbox
+
+
 @file_ops_bp.route('/file/read', methods=['POST'])
 def read_file():
-    """读取文件 - 对应 view 工具"""
+    """读取文件 - 对应 view 工具
+    
+    通过 session_id 查询项目信息并操作文件
+    """
     try:
         session_manager = current_app.config.get('session_manager')
         data = request.json
-        session_id = data.get('session_id')
         file_path = data.get('file_path')
+        session_id = data.get('session_id')
         
         print(f"\n📨 [/file/read] 收到请求", flush=True)
         print(f"   会话ID: {session_id}", flush=True)
         print(f"   文件路径: {file_path}", flush=True)
         
-        if not session_id or not file_path:
-            print(f"❌ [/file/read] 参数缺失")
-            return jsonify({"error": "session_id and file_path are required"}), 400
+        if not file_path:
+            print(f"❌ [/file/read] 文件路径缺失")
+            return jsonify({"error": "file_path is required"}), 400
         
-        sandbox = session_manager.get_or_create(session_id)
+        # 通过 session_id 获取 sandbox 实例
+        sandbox = get_sandbox_from_session(session_manager, session_id)
         content = sandbox.read_file(file_path)
         
-        print(f"✅ [/file/read] 读取成功, 内容长度: {len(content)} 字节")
+        print(f"✅ [/file/read] 读取成功 (会话: {session_id}), 内容长度: {len(content)} 字节")
         
         return jsonify({
             "status": "ok",
             "content": content
         })
+    except ValueError as e:
+        print(f"❌ [/file/read] 参数错误: {str(e)}")
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         print(f"❌ [/file/read] 异常: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -41,7 +98,10 @@ def read_file():
 
 @file_ops_bp.route('/file/write', methods=['POST'])
 def write_file():
-    """写入文件 - 对应 write 和 edit 工具"""
+    """写入文件 - 对应 write 和 edit 工具
+    
+    通过 session_id 查询项目信息并连接容器
+    """
     try:
         session_manager = current_app.config.get('session_manager')
         data = request.json
@@ -54,11 +114,12 @@ def write_file():
         print(f"   文件路径: {file_path}", flush=True)
         print(f"   内容长度: {len(content)} 字节", flush=True)
         
-        if not session_id or not file_path:
-            print(f"❌ [/file/write] 参数缺失")
-            return jsonify({"error": "session_id and file_path are required"}), 400
+        if not file_path:
+            print(f"❌ [/file/write] 文件路径缺失")
+            return jsonify({"error": "file_path is required"}), 400
         
-        sandbox = session_manager.get_or_create(session_id)
+        # 通过 session_id 获取 sandbox
+        sandbox = get_sandbox_from_session(session_manager, session_id)
         sandbox.write_file(file_path, content)
         
         print(f"✅ [/file/write] 写入成功")
@@ -67,6 +128,9 @@ def write_file():
             "status": "ok",
             "message": f"File {file_path} written successfully"
         })
+    except ValueError as e:
+        print(f"❌ [/file/write] 参数错误: {str(e)}")
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         print(f"❌ [/file/write] 异常: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -74,7 +138,10 @@ def write_file():
 
 @file_ops_bp.route('/file/list', methods=['POST'])
 def list_files():
-    """列出文件 - 对应 ls 工具"""
+    """列出文件 - 对应 ls 工具
+    
+    通过 session_id 查询项目信息并连接容器
+    """
     try:
         session_manager = current_app.config.get('session_manager')
         data = request.json
@@ -85,11 +152,8 @@ def list_files():
         print(f"   会话ID: {session_id}")
         print(f"   路径: {path}")
         
-        if not session_id:
-            print(f"❌ [/file/list] 参数缺失")
-            return jsonify({"error": "session_id is required"}), 400
-        
-        sandbox = session_manager.get_or_create(session_id)
+        # 通过 session_id 获取 sandbox
+        sandbox = get_sandbox_from_session(session_manager, session_id)
         files = sandbox.list_files(path)
         
         print(f"✅ [/file/list] 列出成功, 文件数: {len(files)}")
@@ -98,6 +162,9 @@ def list_files():
             "status": "ok",
             "files": files
         })
+    except ValueError as e:
+        print(f"❌ [/file/list] 参数错误: {str(e)}")
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         print(f"❌ [/file/list] 异常: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -105,7 +172,10 @@ def list_files():
 
 @file_ops_bp.route('/file/grep', methods=['POST'])
 def grep_file():
-    """搜索文件内容 - 对应 grep 工具"""
+    """搜索文件内容 - 对应 grep 工具
+    
+    通过 session_id 查询项目信息并连接容器
+    """
     try:
         session_manager = current_app.config.get('session_manager')
         data = request.json
@@ -118,11 +188,13 @@ def grep_file():
         print(f"   搜索模式: {pattern}")
         print(f"   路径: {path}")
         
-        if not session_id or not pattern:
-            print(f"❌ [/file/grep] 参数缺失")
-            return jsonify({"error": "session_id and pattern are required"}), 400
+        if not pattern:
+            print(f"❌ [/file/grep] 搜索模式缺失")
+            return jsonify({"error": "pattern is required"}), 400
         
-        sandbox = session_manager.get_or_create(session_id)
+        # 通过 session_id 获取 sandbox
+        sandbox = get_sandbox_from_session(session_manager, session_id)
+        
         # 使用 grep 命令搜索
         cmd = f"grep -r '{pattern}' {path}"
         result = sandbox.run_code(cmd, language='bash')
@@ -135,6 +207,9 @@ def grep_file():
             "stderr": result["stderr"],
             "exit_code": result["exit_code"]
         })
+    except ValueError as e:
+        print(f"❌ [/file/grep] 参数错误: {str(e)}")
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         print(f"❌ [/file/grep] 异常: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -142,7 +217,10 @@ def grep_file():
 
 @file_ops_bp.route('/file/glob', methods=['POST'])
 def glob_search():
-    """文件名模式匹配 - 对应 glob 工具"""
+    """文件名模式匹配 - 对应 glob 工具
+    
+    通过 session_id 查询项目信息并连接容器
+    """
     try:
         session_manager = current_app.config.get('session_manager')
         data = request.json
@@ -155,11 +233,13 @@ def glob_search():
         print(f"   搜索模式: {pattern}")
         print(f"   路径: {path}")
         
-        if not session_id or not pattern:
-            print(f"❌ [/file/glob] 参数缺失")
-            return jsonify({"error": "session_id and pattern are required"}), 400
+        if not pattern:
+            print(f"❌ [/file/glob] 搜索模式缺失")
+            return jsonify({"error": "pattern is required"}), 400
         
-        sandbox = session_manager.get_or_create(session_id)
+        # 通过 session_id 获取 sandbox
+        sandbox = get_sandbox_from_session(session_manager, session_id)
+        
         # 使用 find 命令搜索文件名
         cmd = f"find {path} -name '{pattern}'"
         result = sandbox.run_code(cmd, language='bash')
@@ -172,6 +252,9 @@ def glob_search():
             "stderr": result["stderr"],
             "exit_code": result["exit_code"]
         })
+    except ValueError as e:
+        print(f"❌ [/file/glob] 参数错误: {str(e)}")
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         print(f"❌ [/file/glob] 异常: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -179,7 +262,10 @@ def glob_search():
 
 @file_ops_bp.route('/file/edit', methods=['POST'])
 def edit_file():
-    """编辑文件内容 - 对应 edit 工具（搜索替换）"""
+    """编辑文件内容 - 对应 edit 工具（搜索替换）
+    
+    通过 session_id 查询项目信息并连接容器
+    """
     try:
         session_manager = current_app.config.get('session_manager')
         data = request.json
@@ -194,11 +280,12 @@ def edit_file():
         print(f"   文件路径: {file_path}")
         print(f"   替换全部: {replace_all}")
         
-        if not session_id or not file_path:
-            print(f"❌ [/file/edit] 参数缺失")
-            return jsonify({"error": "session_id and file_path are required"}), 400
+        if not file_path:
+            print(f"❌ [/file/edit] 文件路径缺失")
+            return jsonify({"error": "file_path is required"}), 400
         
-        sandbox = session_manager.get_or_create(session_id)
+        # 通过 session_id 获取 sandbox
+        sandbox = get_sandbox_from_session(session_manager, session_id)
         
         # 读取文件
         try:
@@ -226,6 +313,9 @@ def edit_file():
             "status": "ok",
             "message": f"File {file_path} edited successfully"
         })
+    except ValueError as e:
+        print(f"❌ [/file/edit] 参数错误: {str(e)}")
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         print(f"❌ [/file/edit] 异常: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -233,22 +323,26 @@ def edit_file():
 
 @file_ops_bp.route('/file/tree', methods=['GET'])
 def get_file_tree():
-    """获取文件树 - 对应前端文件浏览器"""
+    """获取文件树 - 对应前端文件浏览器
+    
+    通过 project_id 查询项目信息并获取文件树
+    """
     try:
         session_manager = current_app.config.get('session_manager')
         # 从 query 参数获取
-        session_id = request.args.get('session_id')
+        project_id = request.args.get('project_id')
         target_path = request.args.get('path', '.')
         
         print(f"\n📨 [GET /file/tree] 收到请求", flush=True)
-        print(f"   会话ID: {session_id}", flush=True)
+        print(f"   项目ID: {project_id}", flush=True)
         print(f"   目标路径: {target_path}", flush=True)
         
-        if not session_id:
-            print(f"❌ [GET /file/tree] 参数缺失")
-            return jsonify({"error": "session_id is required"}), 400
-        
-        sandbox = session_manager.get_or_create(session_id)
+        # 通过 project_id 获取 sandbox 实例
+        try:
+            sandbox = get_sandbox_from_project(session_manager, project_id)
+        except ValueError as e:
+            print(f"❌ [GET /file/tree] 参数错误: {str(e)}")
+            return jsonify({"error": str(e)}), 400
         
         # 打印实际处理的容器路径
         if sandbox.container:
@@ -347,7 +441,7 @@ else:
             
             # 打印文件树统计信息
             node_count = tree_data.get('id', 0)
-            print(f"✅ [GET /file/tree] 文件树生成成功", flush=True)
+            print(f"✅ [GET /file/tree] 文件树生成成功 (项目ID: {project_id})", flush=True)
             print(f"   节点总数: {node_count}", flush=True)
             print(f"   根节点: {tree_data.get('name', 'unknown')}", flush=True)
             

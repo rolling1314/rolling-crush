@@ -224,7 +224,8 @@ func (c *Client) EditFile(ctx context.Context, req FileEditRequest) (*FileEditRe
 
 // FileTreeRequest 获取文件树请求
 type FileTreeRequest struct {
-	SessionID string `json:"session_id"`
+	SessionID string `json:"session_id,omitempty"` // 通过会话ID获取（向后兼容）
+	ProjectID string `json:"project_id,omitempty"` // 通过项目ID获取（推荐）
 	Path      string `json:"path,omitempty"`
 }
 
@@ -248,7 +249,16 @@ type FileTreeResponse struct {
 // GetFileTree 获取文件树
 func (c *Client) GetFileTree(ctx context.Context, req FileTreeRequest) (*FileTreeResponse, error) {
 	// 构建 URL with query parameters
-	url := fmt.Sprintf("%s/file/tree?session_id=%s", c.baseURL, req.SessionID)
+	// 优先使用 ProjectID（新方式），否则使用 SessionID（向后兼容）
+	var url string
+	if req.ProjectID != "" {
+		url = fmt.Sprintf("%s/file/tree?project_id=%s", c.baseURL, req.ProjectID)
+	} else if req.SessionID != "" {
+		url = fmt.Sprintf("%s/file/tree?session_id=%s", c.baseURL, req.SessionID)
+	} else {
+		return nil, fmt.Errorf("either SessionID or ProjectID must be provided")
+	}
+	
 	if req.Path != "" {
 		url = fmt.Sprintf("%s&path=%s", url, req.Path)
 	}
