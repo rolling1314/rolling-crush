@@ -213,16 +213,21 @@ export function InlineChatModelSelector({
 
   const testApiKey = async () => {
     const provider = selectedConfig.provider;
+    const model = selectedConfig.model;
     const apiKey = tempApiKey || sessionConfig?.api_key;
     
-    if (!provider || !apiKey) return;
+    if (!provider || !model || !apiKey) return;
     
     try {
       setTesting(true);
       setTestResult(null);
       const token = localStorage.getItem('jwt_token');
-      await axios.post(`${API_URL}/providers/${provider}/test`, 
-        { api_key: apiKey },
+      await axios.post(`${API_URL}/providers/test-connection`, 
+        { 
+          provider,
+          model,
+          api_key: apiKey 
+        },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setTestResult('success');
