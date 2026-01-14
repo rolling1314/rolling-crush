@@ -13,10 +13,10 @@ import (
 	"unicode/utf8"
 
 	"charm.land/fantasy"
+	"github.com/rolling1314/rolling-crush/domain/permission"
+	"github.com/rolling1314/rolling-crush/internal/lsp"
 	"github.com/rolling1314/rolling-crush/internal/pkg/csync"
 	"github.com/rolling1314/rolling-crush/internal/pkg/filepathext"
-	"github.com/rolling1314/rolling-crush/internal/lsp"
-	"github.com/rolling1314/rolling-crush/domain/permission"
 	"github.com/rolling1314/rolling-crush/sandbox"
 )
 
@@ -66,7 +66,7 @@ func NewViewTool(lspClients *csync.Map[string, *lsp.Client], permissions permiss
 			contextWorkingDir := GetWorkingDirFromContext(ctx)
 			effectiveWorkingDir := cmp.Or(contextWorkingDir, workingDir)
 			filePath := filepathext.SmartJoin(effectiveWorkingDir, params.FilePath)
-			
+
 			sessionID := GetSessionFromContext(ctx)
 			if sessionID == "" {
 				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for reading file")
@@ -77,43 +77,42 @@ func NewViewTool(lspClients *csync.Map[string, *lsp.Client], permissions permiss
 				params.Limit = DefaultReadLimit
 			}
 
-		// ============== 路由到沙箱服务 ==============
-		sandboxClient := sandbox.GetDefaultClient()
+			// ============== 路由到沙箱服务 ==============
+			sandboxClient := sandbox.GetDefaultClient()
 
-		resp, err := sandboxClient.ReadFile(ctx, sandbox.FileReadRequest{
-			SessionID: sessionID,
-			FilePath:  filePath,
-		})
-			
+			resp, err := sandboxClient.ReadFile(ctx, sandbox.FileReadRequest{
+				SessionID: sessionID,
+				FilePath:  filePath,
+			})
+
 			if err != nil {
 				return fantasy.NewTextErrorResponse(fmt.Sprintf("Error reading file from sandbox: %v", err)), nil
 			}
-			
+
 			content := resp.Content
-			
+
 			// Apply offset and limit to content
 			lines := strings.Split(content, "\n")
 			totalLines := len(lines)
-			
+
 			if params.Offset >= totalLines {
 				return fantasy.NewTextErrorResponse("Offset is beyond file end"), nil
 			}
-			
+
 			endLine := params.Offset + params.Limit
 			if endLine > totalLines {
 				endLine = totalLines
 			}
-			
+
 			lines = lines[params.Offset:endLine]
 			content = strings.Join(lines, "\n")
-			
+
 			// Check if valid UTF-8
 			isValidUt8 := utf8.ValidString(content)
 			if !isValidUt8 {
 				return fantasy.NewTextErrorResponse("File content is not valid UTF-8"), nil
 			}
-			
-			notifyLSPs(ctx, lspClients, filePath)
+
 			output := "<file>\n"
 			// Format the output with line numbers
 			output += addLineNumbers(content, params.Offset+1)
@@ -123,7 +122,8 @@ func NewViewTool(lspClients *csync.Map[string, *lsp.Client], permissions permiss
 				output += fmt.Sprintf("\n\n(File has more lines. Use 'offset' parameter to read beyond line %d)", endLine)
 			}
 			output += "\n</file>\n"
-			output += getDiagnostics(filePath, lspClients)
+			// 使用沙箱诊断服务（而不是本地 LSP）
+			output += notifyLSPsAndGetSandboxDiagnostics(ctx, sessionID, filePath)
 			recordFileRead(filePath)
 			return fantasy.WithResponseMetadata(
 				fantasy.NewTextResponse(output),
@@ -132,120 +132,120 @@ func NewViewTool(lspClients *csync.Map[string, *lsp.Client], permissions permiss
 					Content:  content,
 				},
 			), nil
-			
+
 			// ============== 原本地文件读取代码（已注释） ==============
 			/*
-			// Check if file is outside working directory and request permission if needed
-			absWorkingDir, err := filepath.Abs(workingDir)
-			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("error resolving working directory: %w", err)
-			}
-
-			absFilePath, err := filepath.Abs(filePath)
-			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("error resolving file path: %w", err)
-			}
-
-			relPath, err := filepath.Rel(absWorkingDir, absFilePath)
-			if err != nil || strings.HasPrefix(relPath, "..") {
-				// File is outside working directory, request permission
-				granted := permissions.Request(
-					permission.CreatePermissionRequest{
-						SessionID:   sessionID,
-						Path:        absFilePath,
-						ToolCallID:  call.ID,
-						ToolName:    ViewToolName,
-						Action:      "read",
-						Description: fmt.Sprintf("Read file outside working directory: %s", absFilePath),
-						Params:      ViewPermissionsParams(params),
-					},
-				)
-
-				if !granted {
-					return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
+				// Check if file is outside working directory and request permission if needed
+				absWorkingDir, err := filepath.Abs(workingDir)
+				if err != nil {
+					return fantasy.ToolResponse{}, fmt.Errorf("error resolving working directory: %w", err)
 				}
-			}
 
-			// Check if file exists
-			fileInfo, err := os.Stat(filePath)
-			if err != nil {
-				if os.IsNotExist(err) {
-					// Try to offer suggestions for similarly named files
-					dir := filepath.Dir(filePath)
-					base := filepath.Base(filePath)
+				absFilePath, err := filepath.Abs(filePath)
+				if err != nil {
+					return fantasy.ToolResponse{}, fmt.Errorf("error resolving file path: %w", err)
+				}
 
-					dirEntries, dirErr := os.ReadDir(dir)
-					if dirErr == nil {
-						var suggestions []string
-						for _, entry := range dirEntries {
-							if strings.Contains(strings.ToLower(entry.Name()), strings.ToLower(base)) ||
-								strings.Contains(strings.ToLower(base), strings.ToLower(entry.Name())) {
-								suggestions = append(suggestions, filepath.Join(dir, entry.Name()))
-								if len(suggestions) >= 3 {
-									break
+				relPath, err := filepath.Rel(absWorkingDir, absFilePath)
+				if err != nil || strings.HasPrefix(relPath, "..") {
+					// File is outside working directory, request permission
+					granted := permissions.Request(
+						permission.CreatePermissionRequest{
+							SessionID:   sessionID,
+							Path:        absFilePath,
+							ToolCallID:  call.ID,
+							ToolName:    ViewToolName,
+							Action:      "read",
+							Description: fmt.Sprintf("Read file outside working directory: %s", absFilePath),
+							Params:      ViewPermissionsParams(params),
+						},
+					)
+
+					if !granted {
+						return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
+					}
+				}
+
+				// Check if file exists
+				fileInfo, err := os.Stat(filePath)
+				if err != nil {
+					if os.IsNotExist(err) {
+						// Try to offer suggestions for similarly named files
+						dir := filepath.Dir(filePath)
+						base := filepath.Base(filePath)
+
+						dirEntries, dirErr := os.ReadDir(dir)
+						if dirErr == nil {
+							var suggestions []string
+							for _, entry := range dirEntries {
+								if strings.Contains(strings.ToLower(entry.Name()), strings.ToLower(base)) ||
+									strings.Contains(strings.ToLower(base), strings.ToLower(entry.Name())) {
+									suggestions = append(suggestions, filepath.Join(dir, entry.Name()))
+									if len(suggestions) >= 3 {
+										break
+									}
 								}
+							}
+
+							if len(suggestions) > 0 {
+								return fantasy.NewTextErrorResponse(fmt.Sprintf("File not found: %s\n\nDid you mean one of these?\n%s",
+									filePath, strings.Join(suggestions, "\n"))), nil
 							}
 						}
 
-						if len(suggestions) > 0 {
-							return fantasy.NewTextErrorResponse(fmt.Sprintf("File not found: %s\n\nDid you mean one of these?\n%s",
-								filePath, strings.Join(suggestions, "\n"))), nil
-						}
+						return fantasy.NewTextErrorResponse(fmt.Sprintf("File not found: %s", filePath)), nil
 					}
-
-					return fantasy.NewTextErrorResponse(fmt.Sprintf("File not found: %s", filePath)), nil
+					return fantasy.ToolResponse{}, fmt.Errorf("error accessing file: %w", err)
 				}
-				return fantasy.ToolResponse{}, fmt.Errorf("error accessing file: %w", err)
-			}
 
-			// Check if it's a directory
-			if fileInfo.IsDir() {
-				return fantasy.NewTextErrorResponse(fmt.Sprintf("Path is a directory, not a file: %s", filePath)), nil
-			}
+				// Check if it's a directory
+				if fileInfo.IsDir() {
+					return fantasy.NewTextErrorResponse(fmt.Sprintf("Path is a directory, not a file: %s", filePath)), nil
+				}
 
-			// Check file size
-			if fileInfo.Size() > MaxReadSize {
-				return fantasy.NewTextErrorResponse(fmt.Sprintf("File is too large (%d bytes). Maximum size is %d bytes",
-					fileInfo.Size(), MaxReadSize)), nil
-			}
+				// Check file size
+				if fileInfo.Size() > MaxReadSize {
+					return fantasy.NewTextErrorResponse(fmt.Sprintf("File is too large (%d bytes). Maximum size is %d bytes",
+						fileInfo.Size(), MaxReadSize)), nil
+				}
 
-			// Check if it's an image file
-			isImage, imageType := isImageFile(filePath)
-			// TODO: handle images
-			if isImage {
-				return fantasy.NewTextErrorResponse(fmt.Sprintf("This is an image file of type: %s\n", imageType)), nil
-			}
+				// Check if it's an image file
+				isImage, imageType := isImageFile(filePath)
+				// TODO: handle images
+				if isImage {
+					return fantasy.NewTextErrorResponse(fmt.Sprintf("This is an image file of type: %s\n", imageType)), nil
+				}
 
-			// Read the file content
-			content, lineCount, err := readTextFile(filePath, params.Offset, params.Limit)
-			isValidUt8 := utf8.ValidString(content)
-			if !isValidUt8 {
-				return fantasy.NewTextErrorResponse("File content is not valid UTF-8"), nil
-			}
-			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("error reading file: %w", err)
-			}
+				// Read the file content
+				content, lineCount, err := readTextFile(filePath, params.Offset, params.Limit)
+				isValidUt8 := utf8.ValidString(content)
+				if !isValidUt8 {
+					return fantasy.NewTextErrorResponse("File content is not valid UTF-8"), nil
+				}
+				if err != nil {
+					return fantasy.ToolResponse{}, fmt.Errorf("error reading file: %w", err)
+				}
 
-			notifyLSPs(ctx, lspClients, filePath)
-			output := "<file>\n"
-			// Format the output with line numbers
-			output += addLineNumbers(content, params.Offset+1)
+				notifyLSPs(ctx, lspClients, filePath)
+				output := "<file>\n"
+				// Format the output with line numbers
+				output += addLineNumbers(content, params.Offset+1)
 
-			// Add a note if the content was truncated
-			if lineCount > params.Offset+len(strings.Split(content, "\n")) {
-				output += fmt.Sprintf("\n\n(File has more lines. Use 'offset' parameter to read beyond line %d)",
-					params.Offset+len(strings.Split(content, "\n")))
-			}
-			output += "\n</file>\n"
-			output += getDiagnostics(filePath, lspClients)
-			recordFileRead(filePath)
-			return fantasy.WithResponseMetadata(
-				fantasy.NewTextResponse(output),
-				ViewResponseMetadata{
-					FilePath: filePath,
-					Content:  content,
-				},
-			), nil
+				// Add a note if the content was truncated
+				if lineCount > params.Offset+len(strings.Split(content, "\n")) {
+					output += fmt.Sprintf("\n\n(File has more lines. Use 'offset' parameter to read beyond line %d)",
+						params.Offset+len(strings.Split(content, "\n")))
+				}
+				output += "\n</file>\n"
+				output += getDiagnostics(filePath, lspClients)
+				recordFileRead(filePath)
+				return fantasy.WithResponseMetadata(
+					fantasy.NewTextResponse(output),
+					ViewResponseMetadata{
+						FilePath: filePath,
+						Content:  content,
+					},
+				), nil
 			*/
 		})
 }
