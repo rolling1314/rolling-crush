@@ -97,12 +97,10 @@ func NewMultiEditTool(lspClients *csync.Map[string, *lsp.Client], permissions pe
 				return response, nil
 			}
 
-			// Notify LSP clients about the change
-			notifyLSPs(ctx, lspClients, params.FilePath)
-
-			// Wait for LSP diagnostics and add them to the response
+			// 使用沙箱诊断服务
+			sessionID := GetSessionFromContext(ctx)
 			text := fmt.Sprintf("<result>\n%s\n</result>\n", response.Content)
-			text += getDiagnostics(params.FilePath, lspClients)
+			text += notifyLSPsAndGetSandboxDiagnostics(ctx, sessionID, params.FilePath)
 			response.Content = text
 			return response, nil
 		})

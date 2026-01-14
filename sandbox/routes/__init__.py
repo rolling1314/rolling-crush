@@ -7,6 +7,7 @@ from routes.health import health_bp
 from routes.execute import execute_bp
 from routes.file_ops import file_ops_bp
 from routes.project import project_bp
+from routes.lsp import lsp_bp
 
 
 def register_routes(app: Flask):
@@ -15,3 +16,4 @@ def register_routes(app: Flask):
     app.register_blueprint(execute_bp)
     app.register_blueprint(file_ops_bp)
     app.register_blueprint(project_bp)
+    app.register_blueprint(lsp_bp)

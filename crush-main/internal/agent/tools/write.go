@@ -146,11 +146,10 @@ func NewWriteTool(lspClients *csync.Map[string, *lsp.Client], permissions permis
 			recordFileWrite(filePath)
 			recordFileRead(filePath)
 
-			notifyLSPs(ctx, lspClients, params.FilePath)
-
+			// 使用沙箱诊断服务
 			result := fmt.Sprintf("File successfully written: %s", filePath)
 			result = fmt.Sprintf("<result>\n%s\n</result>", result)
-			result += getDiagnostics(filePath, lspClients)
+			result += notifyLSPsAndGetSandboxDiagnostics(ctx, sessionID, filePath)
 			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(result),
 				WriteResponseMetadata{
 					Diff:      diffText,

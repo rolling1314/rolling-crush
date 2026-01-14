@@ -426,3 +426,78 @@ func GetDefaultClient() *Client {
 func SetDefaultClient(baseURL string) {
 	defaultClient = NewClient(baseURL)
 }
+
+// ==================== LSP 诊断相关 ====================
+
+// DiagnosticSeverity LSP诊断严重程度
+type DiagnosticSeverity int
+
+const (
+	SeverityError       DiagnosticSeverity = 1
+	SeverityWarning     DiagnosticSeverity = 2
+	SeverityInformation DiagnosticSeverity = 3
+	SeverityHint        DiagnosticSeverity = 4
+)
+
+// DiagnosticTag LSP诊断标签
+type DiagnosticTag int
+
+const (
+	TagUnnecessary DiagnosticTag = 1
+	TagDeprecated  DiagnosticTag = 2
+)
+
+// Position LSP位置
+type Position struct {
+	Line      int `json:"line"`
+	Character int `json:"character"`
+}
+
+// Range LSP范围
+type Range struct {
+	Start Position `json:"start"`
+	End   Position `json:"end"`
+}
+
+// Diagnostic LSP诊断信息
+type Diagnostic struct {
+	Range    Range              `json:"range"`
+	Severity DiagnosticSeverity `json:"severity"`
+	Code     interface{}        `json:"code,omitempty"`
+	Source   string             `json:"source,omitempty"`
+	Message  string             `json:"message"`
+	Tags     []DiagnosticTag    `json:"tags,omitempty"`
+}
+
+// FileDiagnostics 单个文件的诊断信息
+type FileDiagnostics struct {
+	FilePath    string       `json:"file_path"`
+	Diagnostics []Diagnostic `json:"diagnostics"`
+}
+
+// LSPDiagnosticsRequest LSP诊断请求
+type LSPDiagnosticsRequest struct {
+	SessionID string `json:"session_id"`
+	FilePath  string `json:"file_path,omitempty"` // 可选，为空则返回项目级诊断
+}
+
+// LSPDiagnosticsResponse LSP诊断响应
+type LSPDiagnosticsResponse struct {
+	Status           string            `json:"status"`
+	FileDiagnostics  []FileDiagnostics `json:"file_diagnostics"`  // 当前文件的诊断
+	ProjectDiagnostics []FileDiagnostics `json:"project_diagnostics,omitempty"` // 项目级诊断
+	Error            string            `json:"error,omitempty"`
+}
+
+// GetLSPDiagnostics 获取LSP诊断信息
+func (c *Client) GetLSPDiagnostics(ctx context.Context, req LSPDiagnosticsRequest) (*LSPDiagnosticsResponse, error) {
+	var resp LSPDiagnosticsResponse
+	err := c.doRequest(ctx, "POST", "/lsp/diagnostics", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != "" {
+		return &resp, fmt.Errorf("sandbox error: %s", resp.Error)
+	}
+	return &resp, nil
+}

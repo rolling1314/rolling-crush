@@ -104,6 +104,8 @@ def run_server(host=None, port=None, auto_cleanup=None):
     print(f"\n   代码执行:", flush=True)
     print(f"   - POST /execute         执行命令", flush=True)
     print(f"   - POST /diagnostic      获取诊断信息", flush=True)
+    print(f"\n   LSP服务:", flush=True)
+    print(f"   - POST /lsp/diagnostics LSP诊断信息", flush=True)
     print(f"\n   文件操作:", flush=True)
     print(f"   - POST /file/read       读取文件", flush=True)
     print(f"   - POST /file/write      写入文件", flush=True)

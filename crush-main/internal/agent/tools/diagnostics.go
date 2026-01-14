@@ -12,6 +12,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/rolling1314/rolling-crush/internal/pkg/csync"
 	"github.com/rolling1314/rolling-crush/internal/lsp"
+	"github.com/rolling1314/rolling-crush/sandbox"
 	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
 )
 
@@ -29,6 +30,16 @@ func NewDiagnosticsTool(lspClients *csync.Map[string, *lsp.Client]) fantasy.Agen
 		DiagnosticsToolName,
 		string(diagnosticsDescription),
 		func(ctx context.Context, params DiagnosticsParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+			// 使用沙箱诊断服务
+			sessionID := GetSessionFromContext(ctx)
+			if sessionID != "" {
+				output := getSandboxDiagnostics(ctx, sessionID, params.FilePath)
+				if output != "" {
+					return fantasy.NewTextResponse(output), nil
+				}
+			}
+			
+			// 回退到本地 LSP 客户端（如果可用）
 			if lspClients.Len() == 0 {
 				return fantasy.NewTextErrorResponse("no LSP clients available"), nil
 			}
@@ -37,6 +48,120 @@ func NewDiagnosticsTool(lspClients *csync.Map[string, *lsp.Client]) fantasy.Agen
 			return fantasy.NewTextResponse(output), nil
 		})
 }
+
+// notifyLSPsAndGetSandboxDiagnostics 通知并从沙箱获取诊断（用于 write/edit/multiedit 后）
+func notifyLSPsAndGetSandboxDiagnostics(ctx context.Context, sessionID, filePath string) string {
+	return getSandboxDiagnostics(ctx, sessionID, filePath)
+}
+
+// getSandboxDiagnostics 从沙箱获取诊断信息
+func getSandboxDiagnostics(ctx context.Context, sessionID, filePath string) string {
+	sandboxClient := sandbox.GetDefaultClient()
+	
+	resp, err := sandboxClient.GetLSPDiagnostics(ctx, sandbox.LSPDiagnosticsRequest{
+		SessionID: sessionID,
+		FilePath:  filePath,
+	})
+	
+	if err != nil {
+		slog.Warn("Failed to get sandbox diagnostics", "error", err)
+		return ""
+	}
+	
+	fileDiagnostics := []string{}
+	projectDiagnostics := []string{}
+	
+	// 处理文件诊断
+	for _, fd := range resp.FileDiagnostics {
+		for _, diag := range fd.Diagnostics {
+			formattedDiag := formatSandboxDiagnostic(fd.FilePath, diag)
+			fileDiagnostics = append(fileDiagnostics, formattedDiag)
+		}
+	}
+	
+	// 处理项目诊断
+	for _, pd := range resp.ProjectDiagnostics {
+		for _, diag := range pd.Diagnostics {
+			formattedDiag := formatSandboxDiagnostic(pd.FilePath, diag)
+			projectDiagnostics = append(projectDiagnostics, formattedDiag)
+		}
+	}
+	
+	sortDiagnostics(fileDiagnostics)
+	sortDiagnostics(projectDiagnostics)
+	
+	var output strings.Builder
+	writeDiagnostics(&output, "file_diagnostics", fileDiagnostics)
+	writeDiagnostics(&output, "project_diagnostics", projectDiagnostics)
+	
+	if len(fileDiagnostics) > 0 || len(projectDiagnostics) > 0 {
+		fileErrors := countSeverity(fileDiagnostics, "Error")
+		fileWarnings := countSeverity(fileDiagnostics, "Warn")
+		projectErrors := countSeverity(projectDiagnostics, "Error")
+		projectWarnings := countSeverity(projectDiagnostics, "Warn")
+		output.WriteString("\n<diagnostic_summary>\n")
+		fmt.Fprintf(&output, "Current file: %d errors, %d warnings\n", fileErrors, fileWarnings)
+		fmt.Fprintf(&output, "Project: %d errors, %d warnings\n", projectErrors, projectWarnings)
+		output.WriteString("</diagnostic_summary>\n")
+	}
+	
+	out := output.String()
+	if out != "" {
+		slog.Info("Sandbox Diagnostics", "output", out)
+	}
+	return out
+}
+
+// formatSandboxDiagnostic 格式化沙箱诊断信息
+func formatSandboxDiagnostic(path string, diagnostic sandbox.Diagnostic) string {
+	severity := "Info"
+	switch diagnostic.Severity {
+	case sandbox.SeverityError:
+		severity = "Error"
+	case sandbox.SeverityWarning:
+		severity = "Warn"
+	case sandbox.SeverityHint:
+		severity = "Hint"
+	}
+	
+	location := fmt.Sprintf("%s:%d:%d", path, diagnostic.Range.Start.Line+1, diagnostic.Range.Start.Character+1)
+	
+	sourceInfo := diagnostic.Source
+	if sourceInfo == "" {
+		sourceInfo = "lsp"
+	}
+	
+	codeInfo := ""
+	if diagnostic.Code != nil {
+		codeInfo = fmt.Sprintf("[%v]", diagnostic.Code)
+	}
+	
+	tagsInfo := ""
+	if len(diagnostic.Tags) > 0 {
+		tags := []string{}
+		for _, tag := range diagnostic.Tags {
+			switch tag {
+			case sandbox.TagUnnecessary:
+				tags = append(tags, "unnecessary")
+			case sandbox.TagDeprecated:
+				tags = append(tags, "deprecated")
+			}
+		}
+		if len(tags) > 0 {
+			tagsInfo = fmt.Sprintf(" (%s)", strings.Join(tags, ", "))
+		}
+	}
+	
+	return fmt.Sprintf("%s: %s [%s]%s%s %s",
+		severity,
+		location,
+		sourceInfo,
+		codeInfo,
+		tagsInfo,
+		diagnostic.Message)
+}
+
+// ==================== 原有本地 LSP 相关函数（保留作为回退） ====================
 
 func notifyLSPs(ctx context.Context, lsps *csync.Map[string, *lsp.Client], filepath string) {
 	if filepath == "" {
