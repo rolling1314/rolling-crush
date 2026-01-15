@@ -1,18 +1,18 @@
 package auth
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
+	"log/slog"
+	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
 var (
-	// JWT secret key - in production, this should be loaded from environment variable
-	jwtSecret = []byte(getOrCreateSecret())
-	
+	// JWT secret key - loaded from environment variable or uses default for development
+	jwtSecret = []byte(getJWTSecret())
+
 	ErrInvalidToken     = errors.New("invalid token")
 	ErrExpiredToken     = errors.New("token has expired")
 	ErrInvalidSignature = errors.New("invalid token signature")
@@ -72,17 +72,20 @@ func ValidateToken(tokenString string) (*Claims, error) {
 	return nil, ErrInvalidToken
 }
 
-// getOrCreateSecret generates or retrieves the JWT secret
-// In production, this should be stored securely (e.g., environment variable or secrets manager)
-func getOrCreateSecret() string {
-	// For development, generate a random secret
-	// In production, load from environment: os.Getenv("JWT_SECRET")
-	secret := make([]byte, 32)
-	_, err := rand.Read(secret)
-	if err != nil {
-		// Fallback to a default secret (NOT recommended for production)
-		return "your-secret-key-change-this-in-production"
+// getJWTSecret retrieves the JWT secret from environment variable
+// IMPORTANT: In production, always set JWT_SECRET environment variable
+// Both HTTP and WebSocket servers MUST use the same secret for token validation
+func getJWTSecret() string {
+	secret := os.Getenv("JWT_SECRET")
+	if secret != "" {
+		slog.Info("JWT secret loaded from environment variable")
+		return secret
 	}
-	return base64.StdEncoding.EncodeToString(secret)
+
+	// Default secret for development - both services will use the same secret
+	// WARNING: Change this in production by setting JWT_SECRET environment variable
+	defaultSecret := "crush-dev-jwt-secret-change-in-production-2024"
+	slog.Warn("Using default JWT secret for development. Set JWT_SECRET environment variable in production!")
+	return defaultSecret
 }
 

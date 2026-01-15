@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/rolling1314/rolling-crush/internal/app"
+	"github.com/rolling1314/rolling-crush/internal/shared"
 	"github.com/spf13/cobra"
 )
 
@@ -29,15 +31,37 @@ crush run --quiet "Generate a README for this project"
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		quiet, _ := cmd.Flags().GetBool("quiet")
+		debug, _ := cmd.Flags().GetBool("debug")
+		yolo, _ := cmd.Flags().GetBool("yolo")
+		dataDir, _ := cmd.Flags().GetString("data-dir")
 
-		app, err := setupApp(cmd)
+		cwd, err := ResolveCwd(cmd)
 		if err != nil {
 			return err
 		}
-		defer app.Shutdown()
 
-		if !app.Config().IsConfigured() {
-			return fmt.Errorf("no providers configured - please run 'crush' to set up a provider interactively")
+		ctx := cmd.Context()
+
+		// Initialize shared components
+		initResult, err := shared.Initialize(ctx, shared.InitOptions{
+			WorkingDir: cwd,
+			DataDir:    dataDir,
+			Debug:      debug,
+			Yolo:       yolo,
+		})
+		if err != nil {
+			return err
+		}
+
+		// Create WebSocket application for non-interactive mode
+		wsApp, err := app.NewWSApp(ctx, initResult.DB, initResult.Config)
+		if err != nil {
+			return err
+		}
+		defer wsApp.Shutdown()
+
+		if !wsApp.Config().IsConfigured() {
+			return fmt.Errorf("no providers configured - please set up providers first")
 		}
 
 		prompt := strings.Join(args, " ")
@@ -58,10 +82,11 @@ crush run --quiet "Generate a README for this project"
 		//     echo "Do something fancy" | crush run > output.txt
 		//
 		// TODO: We currently need to press ^c twice to cancel. Fix that.
-		return app.RunNonInteractive(cmd.Context(), os.Stdout, prompt, quiet)
+		return wsApp.RunNonInteractive(ctx, os.Stdout, prompt, quiet)
 	},
 }
 
 func init() {
 	runCmd.Flags().BoolP("quiet", "q", false, "Hide spinner")
+	runCmd.Flags().BoolP("yolo", "y", false, "Automatically accept all permissions (dangerous mode)")
 }
