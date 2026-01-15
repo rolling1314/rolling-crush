@@ -10,7 +10,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	_ "github.com/joho/godotenv/autoload"
 	"github.com/rolling1314/rolling-crush/internal/app"
 	"github.com/rolling1314/rolling-crush/internal/event"
 	"github.com/rolling1314/rolling-crush/internal/shared"
@@ -32,25 +31,19 @@ func main() {
 
 	ctx := context.Background()
 
-	// Get working directory from environment or use current directory
-	cwd := os.Getenv("CRUSH_CWD")
-	dataDir := os.Getenv("CRUSH_DATA_DIR")
-	debug := os.Getenv("CRUSH_DEBUG") == "true"
-	yolo := os.Getenv("CRUSH_YOLO") == "true"
-
-	// Initialize shared components
+	// Initialize shared components (loads config.yaml)
 	initResult, err := shared.Initialize(ctx, shared.InitOptions{
-		WorkingDir: cwd,
-		DataDir:    dataDir,
-		Debug:      debug,
-		Yolo:       yolo,
+		WorkingDir: os.Getenv("CRUSH_CWD"),      // Optional: override working directory
+		DataDir:    os.Getenv("CRUSH_DATA_DIR"), // Optional: override data directory
+		Debug:      false,
+		Yolo:       os.Getenv("CRUSH_YOLO") == "true", // Skip permission requests
 	})
 	if err != nil {
 		slog.Error("Failed to initialize", "error", err)
 		os.Exit(1)
 	}
 
-	// Get server configuration
+	// Get server configuration from config.yaml
 	serverCfg := shared.GetServerConfig()
 
 	// Create WebSocket application
@@ -62,7 +55,7 @@ func main() {
 	defer wsApp.Shutdown()
 
 	// Initialize event tracking if metrics are enabled
-	if shouldEnableMetrics() {
+	if !initResult.Config.Options.DisableMetrics {
 		event.Init()
 	}
 	event.AppInitialized()
@@ -87,15 +80,4 @@ func main() {
 
 	slog.Info("Shutting down WebSocket server...")
 	event.AppExited()
-}
-
-// shouldEnableMetrics checks if metrics should be enabled based on environment variables and config
-func shouldEnableMetrics() bool {
-	if os.Getenv("CRUSH_DISABLE_METRICS") == "true" {
-		return false
-	}
-	if os.Getenv("DO_NOT_TRACK") == "true" {
-		return false
-	}
-	return true
 }

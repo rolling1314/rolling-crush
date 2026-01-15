@@ -5,6 +5,17 @@
 
 # 开发环境配置
 development:
+  # 服务器配置
+  server:
+    http_port: "8001"    # HTTP API 服务端口
+    ws_port: "8002"      # WebSocket 服务端口
+    debug: true          # 调试模式
+
+  # 认证配置
+  auth:
+    jwt_secret: "crush-dev-jwt-secret-change-in-production-2024"  # JWT 密钥
+    token_expire_hour: 24  # Token 过期时间（小时）
+
   # 数据库配置
   database:
     host: "localhost"
@@ -15,6 +26,16 @@ development:
     sslmode: "disable"
     max_open_conns: 25
     max_idle_conns: 5
+
+  # Redis 配置
+  redis:
+    host: "localhost"
+    port: 6379
+    password: "123456"
+    db: 0
+    pool_size: 10
+    stream_max_len: 1000
+    stream_ttl: 3600
   
   # 沙箱服务配置
   sandbox:
@@ -42,6 +63,17 @@ development:
 
 # 生产环境配置
 production:
+  # 服务器配置
+  server:
+    http_port: "8001"
+    ws_port: "8002"
+    debug: false
+
+  # 认证配置
+  auth:
+    jwt_secret: "your-secure-jwt-secret-change-this"  # 重要：请修改为安全的随机密钥
+    token_expire_hour: 24
+
   # 数据库配置
   database:
     host: "your-production-db-host"
@@ -52,6 +84,16 @@ production:
     sslmode: "require"
     max_open_conns: 50
     max_idle_conns: 10
+
+  # Redis 配置
+  redis:
+    host: "your-redis-host"
+    port: 6379
+    password: "your-redis-password"
+    db: 0
+    pool_size: 20
+    stream_max_len: 5000
+    stream_ttl: 7200
   
   # 沙箱服务配置
   sandbox:

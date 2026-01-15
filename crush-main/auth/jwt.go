@@ -3,15 +3,20 @@ package auth
 import (
 	"errors"
 	"log/slog"
-	"os"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/rolling1314/rolling-crush/pkg/config"
 )
 
 var (
-	// JWT secret key - loaded from environment variable or uses default for development
-	jwtSecret = []byte(getJWTSecret())
+	// JWT secret key - loaded lazily from config
+	jwtSecret     []byte
+	jwtSecretOnce sync.Once
+
+	// Token expiration time in hours
+	tokenExpireHour = 24
 
 	ErrInvalidToken     = errors.New("invalid token")
 	ErrExpiredToken     = errors.New("token has expired")
@@ -25,10 +30,36 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
+// initJWTSecret initializes the JWT secret from config (called once)
+func initJWTSecret() {
+	jwtSecretOnce.Do(func() {
+		appCfg := config.GetGlobalAppConfig()
+		if appCfg != nil && appCfg.Auth.JWTSecret != "" {
+			jwtSecret = []byte(appCfg.Auth.JWTSecret)
+			if appCfg.Auth.TokenExpireHour > 0 {
+				tokenExpireHour = appCfg.Auth.TokenExpireHour
+			}
+			slog.Info("JWT secret loaded from config.yaml", "expire_hours", tokenExpireHour)
+		} else {
+			// Default secret for development
+			defaultSecret := "crush-dev-jwt-secret-change-in-production-2024"
+			jwtSecret = []byte(defaultSecret)
+			slog.Warn("Using default JWT secret. Please configure auth.jwt_secret in config.yaml!")
+		}
+	})
+}
+
+// getJWTSecret returns the JWT secret, initializing if needed
+func getJWTSecret() []byte {
+	initJWTSecret()
+	return jwtSecret
+}
+
 // GenerateToken generates a new JWT token for a user
 func GenerateToken(userID, username string) (string, error) {
-	expirationTime := time.Now().Add(24 * time.Hour) // Token expires in 24 hours
-	
+	secret := getJWTSecret()
+	expirationTime := time.Now().Add(time.Duration(tokenExpireHour) * time.Hour)
+
 	claims := &Claims{
 		UserID:   userID,
 		Username: username,
@@ -38,54 +69,38 @@ func GenerateToken(userID, username string) (string, error) {
 			Issuer:    "crush-server",
 		},
 	}
-	
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(jwtSecret)
+	tokenString, err := token.SignedString(secret)
 	if err != nil {
 		return "", err
 	}
-	
+
 	return tokenString, nil
 }
 
 // ValidateToken validates a JWT token and returns the claims
 func ValidateToken(tokenString string) (*Claims, error) {
+	secret := getJWTSecret()
+
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		// Verify the signing method
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, ErrInvalidSignature
 		}
-		return jwtSecret, nil
+		return secret, nil
 	})
-	
+
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
 			return nil, ErrExpiredToken
 		}
 		return nil, ErrInvalidToken
 	}
-	
+
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
 		return claims, nil
 	}
-	
+
 	return nil, ErrInvalidToken
 }
-
-// getJWTSecret retrieves the JWT secret from environment variable
-// IMPORTANT: In production, always set JWT_SECRET environment variable
-// Both HTTP and WebSocket servers MUST use the same secret for token validation
-func getJWTSecret() string {
-	secret := os.Getenv("JWT_SECRET")
-	if secret != "" {
-		slog.Info("JWT secret loaded from environment variable")
-		return secret
-	}
-
-	// Default secret for development - both services will use the same secret
-	// WARNING: Change this in production by setting JWT_SECRET environment variable
-	defaultSecret := "crush-dev-jwt-secret-change-in-production-2024"
-	slog.Warn("Using default JWT secret for development. Set JWT_SECRET environment variable in production!")
-	return defaultSecret
-}
-

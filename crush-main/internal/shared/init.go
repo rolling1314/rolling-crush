@@ -124,26 +124,42 @@ func CreateDotCrushDir(dir string) error {
 	return nil
 }
 
-// ParseEnvFlags parses common environment variables for server configuration.
+// ServerConfig contains server configuration.
 type ServerConfig struct {
 	HTTPPort string
 	WSPort   string
+	Debug    bool
 }
 
-// GetServerConfig returns server configuration from environment variables.
+// GetServerConfig returns server configuration from config.yaml.
+// Falls back to defaults if config is not loaded.
 func GetServerConfig() ServerConfig {
-	httpPort := os.Getenv("HTTP_PORT")
-	if httpPort == "" {
-		httpPort = "8001"
+	appCfg := config.GetGlobalAppConfig()
+
+	// Default values
+	httpPort := "8001"
+	wsPort := "8002"
+	debug := false
+
+	if appCfg != nil {
+		if appCfg.Server.HTTPPort != "" {
+			httpPort = appCfg.Server.HTTPPort
+		}
+		if appCfg.Server.WSPort != "" {
+			wsPort = appCfg.Server.WSPort
+		}
+		debug = appCfg.Server.Debug
 	}
 
-	wsPort := os.Getenv("WS_PORT")
-	if wsPort == "" {
-		wsPort = "8002"
-	}
+	slog.Info("Server configuration loaded",
+		"http_port", httpPort,
+		"ws_port", wsPort,
+		"debug", debug,
+	)
 
 	return ServerConfig{
 		HTTPPort: httpPort,
 		WSPort:   wsPort,
+		Debug:    debug,
 	}
 }

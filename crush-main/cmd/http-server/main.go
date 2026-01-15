@@ -10,7 +10,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	_ "github.com/joho/godotenv/autoload"
 	"github.com/rolling1314/rolling-crush/internal/app"
 	"github.com/rolling1314/rolling-crush/internal/shared"
 )
@@ -31,16 +30,11 @@ func main() {
 
 	ctx := context.Background()
 
-	// Get working directory from environment or use current directory
-	cwd := os.Getenv("CRUSH_CWD")
-	dataDir := os.Getenv("CRUSH_DATA_DIR")
-	debug := os.Getenv("CRUSH_DEBUG") == "true"
-
-	// Initialize shared components
+	// Initialize shared components (loads config.yaml)
 	initResult, err := shared.Initialize(ctx, shared.InitOptions{
-		WorkingDir: cwd,
-		DataDir:    dataDir,
-		Debug:      debug,
+		WorkingDir: os.Getenv("CRUSH_CWD"),      // Optional: override working directory
+		DataDir:    os.Getenv("CRUSH_DATA_DIR"), // Optional: override data directory
+		Debug:      false,
 		Yolo:       false,
 	})
 	if err != nil {
@@ -48,7 +42,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Get server configuration
+	// Get server configuration from config.yaml
 	serverCfg := shared.GetServerConfig()
 
 	// Create HTTP application

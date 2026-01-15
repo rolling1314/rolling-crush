@@ -12,11 +12,26 @@ import (
 
 // AppConfig holds the complete application configuration.
 type AppConfig struct {
+	Server    ServerConfig    `yaml:"server"`
+	Auth      AuthConfig      `yaml:"auth"`
 	Database  DatabaseConfig  `yaml:"database"`
 	Redis     RedisConfig     `yaml:"redis"`
 	Sandbox   SandboxConfig   `yaml:"sandbox"`
 	Storage   StorageConfig   `yaml:"storage"`
 	AutoModel AutoModelConfig `yaml:"auto_model"`
+}
+
+// ServerConfig holds server settings.
+type ServerConfig struct {
+	HTTPPort string `yaml:"http_port"`
+	WSPort   string `yaml:"ws_port"`
+	Debug    bool   `yaml:"debug"`
+}
+
+// AuthConfig holds authentication settings.
+type AuthConfig struct {
+	JWTSecret       string `yaml:"jwt_secret"`
+	TokenExpireHour int    `yaml:"token_expire_hour"`
 }
 
 // RedisConfig holds Redis connection settings.
@@ -245,6 +260,15 @@ func SetGlobalAppConfig(config *AppConfig) {
 // getDefaultAppConfig returns a default configuration.
 func getDefaultAppConfig() *AppConfig {
 	return &AppConfig{
+		Server: ServerConfig{
+			HTTPPort: "8001",
+			WSPort:   "8002",
+			Debug:    false,
+		},
+		Auth: AuthConfig{
+			JWTSecret:       "crush-dev-jwt-secret-change-in-production-2024",
+			TokenExpireHour: 24,
+		},
 		Database: DatabaseConfig{
 			Host:         "localhost",
 			Port:         5432,
