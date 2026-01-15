@@ -197,7 +197,7 @@ func (app *App) HandleClientDisconnect() {
 	// The agent will continue running and messages will be buffered in Redis
 	if app.currentSessionID != "" {
 		app.connectedSessions.Set(app.currentSessionID, false)
-		
+
 		// Update Redis connection status
 		if app.RedisStream != nil {
 			ctx := context.Background()
@@ -205,7 +205,7 @@ func (app *App) HandleClientDisconnect() {
 				slog.Warn("Failed to update Redis connection status", "error", err)
 			}
 		}
-		
+
 		fmt.Printf("Session %s marked as disconnected, agent continues running\n", app.currentSessionID)
 		slog.Info("Session marked as disconnected, agent continues running", "sessionID", app.currentSessionID)
 	}
@@ -235,7 +235,7 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 		ToolCallID string            `json:"tool_call_id"`
 		Granted    bool              `json:"granted"`
 		Denied     bool              `json:"denied"`
-		Images     []ImageAttachment `json:"images"` // Image attachments
+		Images     []ImageAttachment `json:"images"`    // Image attachments
 		LastMsgID  string            `json:"lastMsgId"` // For reconnection - last received Redis stream message ID
 	}
 
@@ -416,12 +416,12 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 		fmt.Printf("  [附件 %d] FileName: %s, MimeType: %s, Size: %d bytes\n",
 			i+1, att.FileName, att.MimeType, len(att.Content))
 	}
-	
+
 	// Run the agent asynchronously
 	go func() {
 		fmt.Println("\n=== Inside goroutine, calling AgentCoordinator.Run ===")
 		fmt.Printf("Goroutine 中的附件数量: %d\n", len(attachments))
-		
+
 		// Mark generation as active in Redis
 		if app.RedisStream != nil {
 			ctx := context.Background()
@@ -429,16 +429,16 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 				slog.Warn("Failed to mark generation as active", "error", err)
 			}
 		}
-		
+
 		_, err := app.AgentCoordinator.Run(context.Background(), sessionID, msg.Content, attachments...)
-		
+
 		// Mark generation as complete in Redis
 		if app.RedisStream != nil {
 			ctx := context.Background()
 			if err := app.RedisStream.SetActiveGeneration(ctx, sessionID, false); err != nil {
 				slog.Warn("Failed to mark generation as complete", "error", err)
 			}
-			
+
 			// Publish generation complete event
 			if err := app.RedisStream.PublishMessage(ctx, sessionID, "generation_complete", map[string]interface{}{
 				"session_id": sessionID,
@@ -447,7 +447,7 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 				slog.Warn("Failed to publish generation complete event", "error", err)
 			}
 		}
-		
+
 		// Send generation complete to WebSocket if connected
 		isConnected, _ := app.connectedSessions.Get(sessionID)
 		if isConnected {
@@ -457,7 +457,7 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 				"error":      err != nil,
 			})
 		}
-		
+
 		if err != nil {
 			fmt.Println("Agent run error:", err)
 			slog.Error("Agent run error", "error", err)
@@ -514,11 +514,11 @@ func (app *App) handleReconnection(sessionID string, lastMsgID string) {
 
 		// Send the message with its original type
 		app.WSServer.SendToSession(sessionID, map[string]interface{}{
-			"_replay":     true,
-			"_streamId":   msg.ID,
-			"_type":       msg.Type,
-			"_timestamp":  msg.Timestamp,
-			"_payload":    payload,
+			"_replay":    true,
+			"_streamId":  msg.ID,
+			"_type":      msg.Type,
+			"_timestamp": msg.Timestamp,
+			"_payload":   payload,
 		})
 	}
 
@@ -544,7 +544,43 @@ func (app *App) handleReconnection(sessionID string, lastMsgID string) {
 		})
 	}
 
+	// Send current session info including context_window
+	app.sendSessionUpdate(ctx, sessionID)
+
 	fmt.Printf("Reconnection complete for session %s\n", sessionID)
+}
+
+// sendSessionUpdate sends the current session info to the client via WebSocket
+// This ensures the client has the latest session data including context_window
+func (app *App) sendSessionUpdate(ctx context.Context, sessionID string) {
+	// Get session from database
+	sess, err := app.Sessions.Get(ctx, sessionID)
+	if err != nil {
+		slog.Warn("Failed to get session for update", "sessionID", sessionID, "error", err)
+		return
+	}
+
+	// Get context window for this session
+	contextWindow := app.getSessionContextWindow(ctx, sessionID)
+
+	slog.Info("Sending session update on connect", "sessionID", sessionID, "context_window", contextWindow, "cost", sess.Cost)
+
+	// Send session update to client
+	sessionMsg := map[string]interface{}{
+		"Type":              "session_update",
+		"id":                sessionID,
+		"project_id":        sess.ProjectID,
+		"title":             sess.Title,
+		"message_count":     sess.MessageCount,
+		"prompt_tokens":     sess.PromptTokens,
+		"completion_tokens": sess.CompletionTokens,
+		"cost":              sess.Cost,
+		"context_window":    contextWindow,
+		"created_at":        sess.CreatedAt,
+		"updated_at":        sess.UpdatedAt,
+	}
+
+	app.WSServer.SendToSession(sessionID, sessionMsg)
 }
 
 // fetchImageFromURL fetches an image from an external URL
@@ -788,25 +824,52 @@ func (app *App) getSessionContextWindow(ctx context.Context, sessionID string) i
 			slog.Info("Found large model config", "session_id", sessionID, "provider", provider, "model", modelID)
 
 			if provider != "" && modelID != "" {
-				// Debug: List all models from this provider
-				if providerConfig, ok := app.config.Providers.Get(provider); ok {
-					slog.Info("Provider found in config", "provider", provider, "model_count", len(providerConfig.Models))
-					for i, m := range providerConfig.Models {
-						if i < 3 { // Only log first 3 models to avoid spam
-							slog.Debug("Available model", "provider", provider, "model_id", m.ID, "model_name", m.Name, "context_window", m.ContextWindow)
+				// First try from session config's providers section (if saved)
+				if providers, ok := configData["providers"].(map[string]interface{}); ok {
+					if providerData, ok := providers[provider].(map[string]interface{}); ok {
+						if modelsData, ok := providerData["models"].([]interface{}); ok {
+							for _, md := range modelsData {
+								if modelData, ok := md.(map[string]interface{}); ok {
+									if id, _ := modelData["id"].(string); id == modelID {
+										if ctxWindow, ok := modelData["context_window"].(float64); ok && ctxWindow > 0 {
+											slog.Info("✅ Found model info in session config providers", "session_id", sessionID, "provider", provider, "model", modelID, "context_window", int64(ctxWindow))
+											return int64(ctxWindow)
+										}
+									}
+								}
+							}
 						}
 					}
-				} else {
-					slog.Warn("Provider not found in app.config.Providers", "provider", provider)
 				}
 
-				modelInfo := app.config.GetModel(provider, modelID)
-				if modelInfo != nil {
-					slog.Info("✅ Found model info", "session_id", sessionID, "provider", provider, "model", modelID, "context_window", modelInfo.ContextWindow)
-					return int64(modelInfo.ContextWindow)
-				} else {
-					slog.Warn("❌ Model not found in config", "session_id", sessionID, "provider", provider, "model", modelID)
+				// Second try from app.config.Providers
+				if providerConfig, ok := app.config.Providers.Get(provider); ok {
+					slog.Info("Provider found in config", "provider", provider, "model_count", len(providerConfig.Models))
+					for _, m := range providerConfig.Models {
+						if m.ID == modelID {
+							slog.Info("✅ Found model info in app.config", "session_id", sessionID, "provider", provider, "model", modelID, "context_window", m.ContextWindow)
+							return int64(m.ContextWindow)
+						}
+					}
 				}
+
+				// Fallback: try from knownProviders (catwalk providers)
+				knownProviders, err := config.Providers(app.config)
+				if err == nil {
+					for _, p := range knownProviders {
+						if string(p.ID) == provider {
+							for _, m := range p.Models {
+								if m.ID == modelID {
+									slog.Info("✅ Found model info in knownProviders", "session_id", sessionID, "provider", provider, "model", modelID, "context_window", m.ContextWindow)
+									return int64(m.ContextWindow)
+								}
+							}
+							break
+						}
+					}
+				}
+
+				slog.Warn("❌ Model not found in config or knownProviders", "session_id", sessionID, "provider", provider, "model", modelID)
 			} else {
 				slog.Warn("Provider or model ID is empty", "session_id", sessionID, "provider", provider, "model", modelID)
 			}
@@ -959,7 +1022,7 @@ func (app *App) Subscribe() {
 			if event, ok := msg.(pubsub.Event[message.Message]); ok {
 				sessionID := event.Payload.SessionID
 				fmt.Printf("[SEND] Sending message to session: ID=%s, Role=%s, SessionID=%s\n", event.Payload.ID, event.Payload.Role, sessionID)
-				
+
 				// Always publish to Redis stream for buffering
 				if app.RedisStream != nil {
 					ctx := context.Background()
@@ -967,7 +1030,7 @@ func (app *App) Subscribe() {
 						slog.Warn("Failed to publish message to Redis stream", "error", err)
 					}
 				}
-				
+
 				// Check if session is connected before sending via WebSocket
 				isConnected, _ := app.connectedSessions.Get(sessionID)
 				if isConnected {
@@ -981,7 +1044,7 @@ func (app *App) Subscribe() {
 			if event, ok := msg.(pubsub.Event[permission.PermissionRequest]); ok {
 				sessionID := event.Payload.SessionID
 				slog.Info("Sending permission request to session", "session_id", sessionID, "tool_call_id", event.Payload.ToolCallID)
-				
+
 				permMsg := map[string]interface{}{
 					"Type":         "permission_request",
 					"id":           event.Payload.ID,
@@ -993,7 +1056,7 @@ func (app *App) Subscribe() {
 					"params":       event.Payload.Params,
 					"path":         event.Payload.Path,
 				}
-				
+
 				// Publish to Redis
 				if app.RedisStream != nil {
 					ctx := context.Background()
@@ -1001,7 +1064,7 @@ func (app *App) Subscribe() {
 						slog.Warn("Failed to publish permission request to Redis stream", "error", err)
 					}
 				}
-				
+
 				// Send via WebSocket if connected
 				isConnected, _ := app.connectedSessions.Get(sessionID)
 				if isConnected {
@@ -1013,14 +1076,14 @@ func (app *App) Subscribe() {
 			if event, ok := msg.(pubsub.Event[permission.PermissionNotification]); ok {
 				sessionID := event.Payload.SessionID
 				slog.Info("Sending permission notification to session", "session_id", sessionID, "tool_call_id", event.Payload.ToolCallID, "granted", event.Payload.Granted)
-				
+
 				notifMsg := map[string]interface{}{
 					"Type":         "permission_notification",
 					"tool_call_id": event.Payload.ToolCallID,
 					"granted":      event.Payload.Granted,
 					"denied":       event.Payload.Denied,
 				}
-				
+
 				// Publish to Redis
 				if app.RedisStream != nil {
 					ctx := context.Background()
@@ -1028,7 +1091,7 @@ func (app *App) Subscribe() {
 						slog.Warn("Failed to publish permission notification to Redis stream", "error", err)
 					}
 				}
-				
+
 				// Send via WebSocket if connected
 				isConnected, _ := app.connectedSessions.Get(sessionID)
 				if isConnected {
@@ -1061,14 +1124,14 @@ func (app *App) Subscribe() {
 						"created_at":        event.Payload.CreatedAt,
 						"updated_at":        event.Payload.UpdatedAt,
 					}
-					
+
 					// Publish to Redis
 					if app.RedisStream != nil {
 						if err := app.RedisStream.PublishMessage(ctx, sessionID, "session_update", sessionMsg); err != nil {
 							slog.Warn("Failed to publish session update to Redis stream", "error", err)
 						}
 					}
-					
+
 					// Send via WebSocket if connected
 					isConnected, _ := app.connectedSessions.Get(sessionID)
 					if isConnected {

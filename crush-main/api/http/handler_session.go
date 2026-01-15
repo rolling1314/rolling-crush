@@ -150,6 +150,36 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 				fmt.Println("Fallback small model saved successfully")
 			}
 		}
+
+		// 5. Save provider model info (including context_window) to session config
+		// This ensures context_window is available even for custom providers
+		if knownProviders != nil {
+			for _, p := range knownProviders {
+				if string(p.ID) == modelConfig.Provider {
+					// Find the model and save its info
+					for _, m := range p.Models {
+						if m.ID == modelConfig.Model {
+							// Save model's context_window to session config
+							modelInfoKey := fmt.Sprintf("providers.%s.models", modelConfig.Provider)
+							modelInfo := []map[string]interface{}{
+								{
+									"id":             m.ID,
+									"name":           m.Name,
+									"context_window": m.ContextWindow,
+								},
+							}
+							if err := tempConfig.SetConfigField(modelInfoKey, modelInfo); err != nil {
+								slog.Warn("Failed to save model context_window to session config", "error", err)
+							} else {
+								slog.Info("Saved model context_window to session config", "provider", modelConfig.Provider, "model", m.ID, "context_window", m.ContextWindow)
+							}
+							break
+						}
+					}
+					break
+				}
+			}
+		}
 	}
 
 	// Get context window for the newly created session
@@ -355,6 +385,33 @@ func (s *Server) handleUpdateSessionConfig(c *gin.Context) {
 			slog.Error("Failed to set fallback small model", "error", err, "session_id", sessionID)
 		} else {
 			slog.Info("Using large model as fallback small model", "model", req.Model, "session_id", sessionID)
+		}
+	}
+
+	// Save provider model info (including context_window) to session config
+	if knownProviders != nil {
+		for _, p := range knownProviders {
+			if string(p.ID) == req.Provider {
+				for _, m := range p.Models {
+					if m.ID == req.Model {
+						modelInfoKey := fmt.Sprintf("providers.%s.models", req.Provider)
+						modelInfo := []map[string]interface{}{
+							{
+								"id":             m.ID,
+								"name":           m.Name,
+								"context_window": m.ContextWindow,
+							},
+						}
+						if err := tempConfig.SetConfigField(modelInfoKey, modelInfo); err != nil {
+							slog.Warn("Failed to save model context_window to session config", "error", err)
+						} else {
+							slog.Info("Saved model context_window to session config", "provider", req.Provider, "model", m.ID, "context_window", m.ContextWindow)
+						}
+						break
+					}
+				}
+				break
+			}
 		}
 	}
 

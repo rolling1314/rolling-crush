@@ -553,6 +553,10 @@ export const ChatPanel = ({
                 </div>
                 <span className="text-gray-500">{Math.round(((session.prompt_tokens + session.completion_tokens) / session.context_window) * 100)}%</span>
               </div>
+            ) : (session.prompt_tokens + session.completion_tokens) > 0 ? (
+              <div className="flex items-center gap-1 text-xs text-gray-500" title="Total tokens used (context window unknown)">
+                <span>{((session.prompt_tokens + session.completion_tokens) / 1000).toFixed(1)}k tokens</span>
+              </div>
             ) : null}
             <div className="flex items-center gap-1 text-xs">
                 <span className="text-gray-500">${session.cost?.toFixed(4) || '0.0000'}</span>
