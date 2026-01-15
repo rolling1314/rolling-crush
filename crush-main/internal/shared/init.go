@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 
 	"github.com/rolling1314/rolling-crush/pkg/config"
-	"github.com/rolling1314/rolling-crush/store/postgres"
+	"github.com/rolling1314/rolling-crush/infra/postgres"
 )
 
 // InitOptions contains options for initialization.

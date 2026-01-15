@@ -1,4 +1,4 @@
-// Package app provides application initialization for HTTP and WebSocket services.
+// Package app provides application initialization for HTTP services.
 package app
 
 import (
@@ -6,15 +6,15 @@ import (
 	"database/sql"
 	"log/slog"
 
-	apihttp "github.com/rolling1314/rolling-crush/api/http"
+	"github.com/rolling1314/rolling-crush/cmd/http-server/handler"
 	"github.com/rolling1314/rolling-crush/domain/message"
 	"github.com/rolling1314/rolling-crush/domain/project"
 	"github.com/rolling1314/rolling-crush/domain/session"
 	"github.com/rolling1314/rolling-crush/domain/user"
+	"github.com/rolling1314/rolling-crush/infra/postgres"
+	"github.com/rolling1314/rolling-crush/infra/sandbox"
+	"github.com/rolling1314/rolling-crush/infra/storage"
 	"github.com/rolling1314/rolling-crush/pkg/config"
-	"github.com/rolling1314/rolling-crush/sandbox"
-	"github.com/rolling1314/rolling-crush/store/postgres"
-	"github.com/rolling1314/rolling-crush/store/storage"
 )
 
 // HTTPApp represents the HTTP-only application instance.
@@ -25,7 +25,7 @@ type HTTPApp struct {
 	Sessions session.Service
 	Messages message.Service
 
-	HTTPServer *apihttp.Server
+	HTTPServer *handler.Server
 
 	config *config.Config
 	db     *sql.DB
@@ -49,7 +49,7 @@ func NewHTTPApp(ctx context.Context, conn *sql.DB, cfg *config.Config, port stri
 		config: cfg,
 		db:     conn,
 
-		HTTPServer: apihttp.New(port, users, projects, sessions, messages, q, cfg),
+		HTTPServer: handler.New(port, users, projects, sessions, messages, q, cfg),
 	}
 
 	// Initialize storage client from app config

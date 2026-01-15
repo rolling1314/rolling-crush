@@ -14,7 +14,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/rolling1314/rolling-crush/internal/pkg/filepathext"
 	"github.com/rolling1314/rolling-crush/domain/permission"
-	"github.com/rolling1314/rolling-crush/sandbox"
+	"github.com/rolling1314/rolling-crush/infra/sandbox"
 )
 
 type DownloadParams struct {

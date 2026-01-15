@@ -1,4 +1,4 @@
-package http
+package handler
 
 import (
 	"database/sql"
@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/rolling1314/rolling-crush/domain/project"
-	"github.com/rolling1314/rolling-crush/sandbox"
 	"github.com/gin-gonic/gin"
+	"github.com/rolling1314/rolling-crush/domain/project"
+	"github.com/rolling1314/rolling-crush/infra/sandbox"
 )
 
 // handleCreateProject handles project creation

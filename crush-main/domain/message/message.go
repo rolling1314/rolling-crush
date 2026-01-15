@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/rolling1314/rolling-crush/store/postgres"
+	"github.com/rolling1314/rolling-crush/infra/postgres"
 	"github.com/rolling1314/rolling-crush/internal/pubsub"
 	"github.com/google/uuid"
 )

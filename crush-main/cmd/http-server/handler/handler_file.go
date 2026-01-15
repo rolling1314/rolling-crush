@@ -1,4 +1,4 @@
-package http
+package handler
 
 import (
 	"fmt"
@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/rolling1314/rolling-crush/sandbox"
-	"github.com/rolling1314/rolling-crush/store/storage"
 	"github.com/gin-gonic/gin"
+	"github.com/rolling1314/rolling-crush/infra/sandbox"
+	"github.com/rolling1314/rolling-crush/infra/storage"
 )
 
 // handleGetFiles handles getting file tree from sandbox

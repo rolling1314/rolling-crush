@@ -1,4 +1,4 @@
-package http
+package handler
 
 // RegisterRequest represents a user registration request
 type RegisterRequest struct {

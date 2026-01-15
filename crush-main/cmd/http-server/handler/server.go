@@ -1,19 +1,19 @@
-package http
+package handler
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
-	"context"
 
+	"github.com/gin-gonic/gin"
 	"github.com/rolling1314/rolling-crush/auth"
-	"github.com/rolling1314/rolling-crush/pkg/config"
-	"github.com/rolling1314/rolling-crush/store/postgres"
 	"github.com/rolling1314/rolling-crush/domain/message"
 	"github.com/rolling1314/rolling-crush/domain/project"
-	"github.com/rolling1314/rolling-crush/sandbox"
 	"github.com/rolling1314/rolling-crush/domain/session"
 	"github.com/rolling1314/rolling-crush/domain/user"
-	"github.com/gin-gonic/gin"
+	"github.com/rolling1314/rolling-crush/infra/postgres"
+	"github.com/rolling1314/rolling-crush/infra/sandbox"
+	"github.com/rolling1314/rolling-crush/pkg/config"
 )
 
 // Server represents the HTTP server

@@ -1,4 +1,4 @@
-// Package app provides application initialization for HTTP and WebSocket services.
+// Package app provides application initialization for WebSocket services.
 package app
 
 import (
@@ -20,13 +20,17 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/charmtone"
-	apiws "github.com/rolling1314/rolling-crush/api/ws"
+	"github.com/rolling1314/rolling-crush/cmd/ws-server/handler"
 	"github.com/rolling1314/rolling-crush/domain/history"
 	"github.com/rolling1314/rolling-crush/domain/message"
 	"github.com/rolling1314/rolling-crush/domain/permission"
 	"github.com/rolling1314/rolling-crush/domain/project"
 	"github.com/rolling1314/rolling-crush/domain/session"
 	"github.com/rolling1314/rolling-crush/domain/user"
+	"github.com/rolling1314/rolling-crush/infra/postgres"
+	storeredis "github.com/rolling1314/rolling-crush/infra/redis"
+	"github.com/rolling1314/rolling-crush/infra/sandbox"
+	"github.com/rolling1314/rolling-crush/infra/storage"
 	"github.com/rolling1314/rolling-crush/internal/agent"
 	"github.com/rolling1314/rolling-crush/internal/agent/tools/mcp"
 	"github.com/rolling1314/rolling-crush/internal/lsp"
@@ -41,10 +45,6 @@ import (
 	"github.com/rolling1314/rolling-crush/internal/update"
 	"github.com/rolling1314/rolling-crush/internal/version"
 	"github.com/rolling1314/rolling-crush/pkg/config"
-	"github.com/rolling1314/rolling-crush/sandbox"
-	"github.com/rolling1314/rolling-crush/store/postgres"
-	storeredis "github.com/rolling1314/rolling-crush/store/redis"
-	"github.com/rolling1314/rolling-crush/store/storage"
 )
 
 // WSApp represents the WebSocket + Agent application instance.
@@ -69,7 +69,7 @@ type WSApp struct {
 	events          chan tea.Msg
 	tuiWG           *sync.WaitGroup
 
-	WSServer *apiws.Server
+	WSServer *handler.Server
 
 	// Redis stream service for message buffering during WebSocket disconnection
 	RedisStream *storeredis.StreamService
@@ -118,7 +118,7 @@ func NewWSApp(ctx context.Context, conn *sql.DB, cfg *config.Config) (*WSApp, er
 		tuiWG:             &sync.WaitGroup{},
 		connectedSessions: csync.NewMap[string, bool](),
 
-		WSServer: apiws.New(),
+		WSServer: handler.New(),
 	}
 
 	// Initialize Redis client and stream service

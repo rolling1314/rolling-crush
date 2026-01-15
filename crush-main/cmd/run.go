@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/rolling1314/rolling-crush/internal/app"
+	wsapp "github.com/rolling1314/rolling-crush/cmd/ws-server/app"
 	"github.com/rolling1314/rolling-crush/internal/shared"
 	"github.com/spf13/cobra"
 )
@@ -54,7 +54,7 @@ crush run --quiet "Generate a README for this project"
 		}
 
 		// Create WebSocket application for non-interactive mode
-		wsApp, err := app.NewWSApp(ctx, initResult.DB, initResult.Config)
+		wsApp, err := wsapp.NewWSApp(ctx, initResult.DB, initResult.Config)
 		if err != nil {
 			return err
 		}

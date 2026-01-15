@@ -10,7 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/rolling1314/rolling-crush/internal/app"
+	httpapp "github.com/rolling1314/rolling-crush/cmd/http-server/app"
 	"github.com/rolling1314/rolling-crush/internal/shared"
 )
 
@@ -46,7 +46,7 @@ func main() {
 	serverCfg := shared.GetServerConfig()
 
 	// Create HTTP application
-	httpApp, err := app.NewHTTPApp(ctx, initResult.DB, initResult.Config, serverCfg.HTTPPort)
+	httpApp, err := httpapp.NewHTTPApp(ctx, initResult.DB, initResult.Config, serverCfg.HTTPPort)
 	if err != nil {
 		slog.Error("Failed to create HTTP app", "error", err)
 		os.Exit(1)

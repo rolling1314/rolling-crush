@@ -12,7 +12,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/rolling1314/rolling-crush/internal/pkg/csync"
 	"github.com/rolling1314/rolling-crush/internal/lsp"
-	"github.com/rolling1314/rolling-crush/sandbox"
+	"github.com/rolling1314/rolling-crush/infra/sandbox"
 	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
 )
 

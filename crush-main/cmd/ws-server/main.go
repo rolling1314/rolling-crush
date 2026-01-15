@@ -10,7 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/rolling1314/rolling-crush/internal/app"
+	wsapp "github.com/rolling1314/rolling-crush/cmd/ws-server/app"
 	"github.com/rolling1314/rolling-crush/internal/event"
 	"github.com/rolling1314/rolling-crush/internal/shared"
 )
@@ -47,7 +47,7 @@ func main() {
 	serverCfg := shared.GetServerConfig()
 
 	// Create WebSocket application
-	wsApp, err := app.NewWSApp(ctx, initResult.DB, initResult.Config)
+	wsApp, err := wsapp.NewWSApp(ctx, initResult.DB, initResult.Config)
 	if err != nil {
 		slog.Error("Failed to create WebSocket app", "error", err)
 		os.Exit(1)

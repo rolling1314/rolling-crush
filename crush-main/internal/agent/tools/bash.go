@@ -16,7 +16,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/rolling1314/rolling-crush/pkg/config"
 	"github.com/rolling1314/rolling-crush/domain/permission"
-	"github.com/rolling1314/rolling-crush/sandbox"
+	"github.com/rolling1314/rolling-crush/infra/sandbox"
 	"github.com/rolling1314/rolling-crush/internal/shell"
 )
 

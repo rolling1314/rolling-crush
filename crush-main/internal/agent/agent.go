@@ -30,7 +30,7 @@ import (
 	"github.com/rolling1314/rolling-crush/internal/agent/tools"
 	"github.com/rolling1314/rolling-crush/pkg/config"
 	"github.com/rolling1314/rolling-crush/internal/pkg/csync"
-	"github.com/rolling1314/rolling-crush/store/postgres"
+	"github.com/rolling1314/rolling-crush/infra/postgres"
 	"github.com/rolling1314/rolling-crush/domain/message"
 	"github.com/rolling1314/rolling-crush/domain/permission"
 	"github.com/rolling1314/rolling-crush/domain/session"

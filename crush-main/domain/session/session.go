@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/rolling1314/rolling-crush/store/postgres"
+	"github.com/google/uuid"
+	"github.com/rolling1314/rolling-crush/infra/postgres"
 	"github.com/rolling1314/rolling-crush/internal/event"
 	"github.com/rolling1314/rolling-crush/internal/pubsub"
-	"github.com/google/uuid"
 )
 
 type Session struct {
