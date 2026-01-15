@@ -123,6 +123,42 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.updateUserPasswordStmt, err = db.PrepareContext(ctx, updateUserPassword); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateUserPassword: %w", err)
 	}
+	if q.createToolCallStmt, err = db.PrepareContext(ctx, createToolCall); err != nil {
+		return nil, fmt.Errorf("error preparing query CreateToolCall: %w", err)
+	}
+	if q.getToolCallStmt, err = db.PrepareContext(ctx, getToolCall); err != nil {
+		return nil, fmt.Errorf("error preparing query GetToolCall: %w", err)
+	}
+	if q.listToolCallsBySessionStmt, err = db.PrepareContext(ctx, listToolCallsBySession); err != nil {
+		return nil, fmt.Errorf("error preparing query ListToolCallsBySession: %w", err)
+	}
+	if q.listToolCallsByMessageStmt, err = db.PrepareContext(ctx, listToolCallsByMessage); err != nil {
+		return nil, fmt.Errorf("error preparing query ListToolCallsByMessage: %w", err)
+	}
+	if q.listPendingToolCallsStmt, err = db.PrepareContext(ctx, listPendingToolCalls); err != nil {
+		return nil, fmt.Errorf("error preparing query ListPendingToolCalls: %w", err)
+	}
+	if q.updateToolCallStatusStmt, err = db.PrepareContext(ctx, updateToolCallStatus); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateToolCallStatus: %w", err)
+	}
+	if q.updateToolCallInputStmt, err = db.PrepareContext(ctx, updateToolCallInput); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateToolCallInput: %w", err)
+	}
+	if q.updateToolCallResultStmt, err = db.PrepareContext(ctx, updateToolCallResult); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateToolCallResult: %w", err)
+	}
+	if q.cancelToolCallStmt, err = db.PrepareContext(ctx, cancelToolCall); err != nil {
+		return nil, fmt.Errorf("error preparing query CancelToolCall: %w", err)
+	}
+	if q.cancelSessionToolCallsStmt, err = db.PrepareContext(ctx, cancelSessionToolCalls); err != nil {
+		return nil, fmt.Errorf("error preparing query CancelSessionToolCalls: %w", err)
+	}
+	if q.deleteToolCallStmt, err = db.PrepareContext(ctx, deleteToolCall); err != nil {
+		return nil, fmt.Errorf("error preparing query DeleteToolCall: %w", err)
+	}
+	if q.deleteSessionToolCallsStmt, err = db.PrepareContext(ctx, deleteSessionToolCalls); err != nil {
+		return nil, fmt.Errorf("error preparing query DeleteSessionToolCalls: %w", err)
+	}
 	return &q, nil
 }
 
@@ -293,6 +329,66 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing updateUserPasswordStmt: %w", cerr)
 		}
 	}
+	if q.createToolCallStmt != nil {
+		if cerr := q.createToolCallStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing createToolCallStmt: %w", cerr)
+		}
+	}
+	if q.getToolCallStmt != nil {
+		if cerr := q.getToolCallStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getToolCallStmt: %w", cerr)
+		}
+	}
+	if q.listToolCallsBySessionStmt != nil {
+		if cerr := q.listToolCallsBySessionStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listToolCallsBySessionStmt: %w", cerr)
+		}
+	}
+	if q.listToolCallsByMessageStmt != nil {
+		if cerr := q.listToolCallsByMessageStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listToolCallsByMessageStmt: %w", cerr)
+		}
+	}
+	if q.listPendingToolCallsStmt != nil {
+		if cerr := q.listPendingToolCallsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listPendingToolCallsStmt: %w", cerr)
+		}
+	}
+	if q.updateToolCallStatusStmt != nil {
+		if cerr := q.updateToolCallStatusStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateToolCallStatusStmt: %w", cerr)
+		}
+	}
+	if q.updateToolCallInputStmt != nil {
+		if cerr := q.updateToolCallInputStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateToolCallInputStmt: %w", cerr)
+		}
+	}
+	if q.updateToolCallResultStmt != nil {
+		if cerr := q.updateToolCallResultStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateToolCallResultStmt: %w", cerr)
+		}
+	}
+	if q.cancelToolCallStmt != nil {
+		if cerr := q.cancelToolCallStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing cancelToolCallStmt: %w", cerr)
+		}
+	}
+	if q.cancelSessionToolCallsStmt != nil {
+		if cerr := q.cancelSessionToolCallsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing cancelSessionToolCallsStmt: %w", cerr)
+		}
+	}
+	if q.deleteToolCallStmt != nil {
+		if cerr := q.deleteToolCallStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing deleteToolCallStmt: %w", cerr)
+		}
+	}
+	if q.deleteSessionToolCallsStmt != nil {
+		if cerr := q.deleteSessionToolCallsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing deleteSessionToolCallsStmt: %w", cerr)
+		}
+	}
 	return err
 }
 
@@ -365,6 +461,19 @@ type Queries struct {
 	updateSessionStmt           *sql.Stmt
 	updateUserStmt              *sql.Stmt
 	updateUserPasswordStmt      *sql.Stmt
+	// Tool calls
+	createToolCallStmt          *sql.Stmt
+	getToolCallStmt             *sql.Stmt
+	listToolCallsBySessionStmt  *sql.Stmt
+	listToolCallsByMessageStmt  *sql.Stmt
+	listPendingToolCallsStmt    *sql.Stmt
+	updateToolCallStatusStmt    *sql.Stmt
+	updateToolCallInputStmt     *sql.Stmt
+	updateToolCallResultStmt    *sql.Stmt
+	cancelToolCallStmt          *sql.Stmt
+	cancelSessionToolCallsStmt  *sql.Stmt
+	deleteToolCallStmt          *sql.Stmt
+	deleteSessionToolCallsStmt  *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
@@ -404,5 +513,18 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		updateSessionStmt:           q.updateSessionStmt,
 		updateUserStmt:              q.updateUserStmt,
 		updateUserPasswordStmt:      q.updateUserPasswordStmt,
+		// Tool calls
+		createToolCallStmt:          q.createToolCallStmt,
+		getToolCallStmt:             q.getToolCallStmt,
+		listToolCallsBySessionStmt:  q.listToolCallsBySessionStmt,
+		listToolCallsByMessageStmt:  q.listToolCallsByMessageStmt,
+		listPendingToolCallsStmt:    q.listPendingToolCallsStmt,
+		updateToolCallStatusStmt:    q.updateToolCallStatusStmt,
+		updateToolCallInputStmt:     q.updateToolCallInputStmt,
+		updateToolCallResultStmt:    q.updateToolCallResultStmt,
+		cancelToolCallStmt:          q.cancelToolCallStmt,
+		cancelSessionToolCallsStmt:  q.cancelSessionToolCallsStmt,
+		deleteToolCallStmt:          q.deleteToolCallStmt,
+		deleteSessionToolCallsStmt:  q.deleteSessionToolCallsStmt,
 	}
 }

@@ -765,14 +765,28 @@ export default function WorkspacePage() {
   const loadSessionMessages = async (sessionId: string) => {
     try {
       const token = localStorage.getItem('jwt_token');
-      const response = await axios.get(`${API_URL}/sessions/${sessionId}/messages`, {
-        headers: { Authorization: `Bearer ${token}` }
+      
+      // Load messages and tool calls in parallel
+      const [messagesResponse, toolCallsResponse] = await Promise.all([
+        axios.get(`${API_URL}/sessions/${sessionId}/messages`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get(`${API_URL}/sessions/${sessionId}/tool-calls`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }).catch(() => ({ data: [] })) // Ignore errors, tool calls are optional
+      ]);
+      
+      console.log('Loaded session messages:', messagesResponse.data);
+      console.log('Loaded tool calls:', toolCallsResponse.data);
+      
+      // Create a map of tool call states by ID
+      const toolCallStates = new Map<string, any>();
+      (toolCallsResponse.data || []).forEach((tc: any) => {
+        toolCallStates.set(tc.id, tc);
       });
       
-      console.log('Loaded session messages:', response.data);
-      
       // 转换后端消息格式为前端格式 - 复用 convertBackendMessageToFrontend 逻辑
-      const backendMessages = response.data || [];
+      const backendMessages = messagesResponse.data || [];
       const convertedMessages: Message[] = backendMessages.map((msg: any) => {
         let textContent = '';
         let reasoning = '';
@@ -790,23 +804,31 @@ export default function WorkspacePage() {
             }
             // 解析 tool_call - 检查是否有 name 和 input 字段
             if (part.name && part.input !== undefined && (part.id || part.ID)) {
+              const toolCallId = part.id || part.ID;
+              const toolCallState = toolCallStates.get(toolCallId);
+              
+              // Merge tool call state from database if available
               const toolCall: ToolCall = {
-                id: part.id || part.ID,
+                id: toolCallId,
                 name: part.name,
-                input: part.input,
-                finished: part.finished ?? true,
+                input: toolCallState?.input || part.input || '{}',
+                finished: toolCallState ? (toolCallState.status === 'completed' || toolCallState.status === 'error' || toolCallState.status === 'cancelled') : (part.finished ?? true),
                 provider_executed: part.provider_executed ?? false
               };
               toolCalls.push(toolCall);
-              console.log('History: Found tool call:', toolCall.id, toolCall.name);
+              console.log('History: Found tool call:', toolCall.id, toolCall.name, 'status:', toolCallState?.status);
             }
             // 解析 tool_result - 检查是否有 tool_call_id 字段
             if (part.content !== undefined && (part.tool_call_id || part.ToolCallID)) {
+              const toolCallId = part.tool_call_id || part.ToolCallID;
+              const toolCallState = toolCallStates.get(toolCallId);
+              
+              // Use result from database if available, otherwise use message part
               const toolResult: ToolResult = {
-                tool_call_id: part.tool_call_id || part.ToolCallID,
-                name: part.name || '',
-                content: part.content,
-                is_error: part.is_error ?? false,
+                tool_call_id: toolCallId,
+                name: part.name || toolCallState?.name || '',
+                content: toolCallState?.result || part.content,
+                is_error: toolCallState ? toolCallState.is_error : (part.is_error ?? false),
                 metadata: part.metadata
               };
               toolResults.push(toolResult);

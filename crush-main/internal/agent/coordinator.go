@@ -21,7 +21,9 @@ import (
 	"github.com/rolling1314/rolling-crush/pkg/config"
 	"github.com/rolling1314/rolling-crush/internal/pkg/csync"
 	"github.com/rolling1314/rolling-crush/infra/postgres"
+	"github.com/rolling1314/rolling-crush/infra/redis"
 	"github.com/rolling1314/rolling-crush/domain/history"
+	"github.com/rolling1314/rolling-crush/domain/toolcall"
 	"github.com/rolling1314/rolling-crush/internal/pkg/log"
 	"github.com/rolling1314/rolling-crush/internal/lsp"
 	"github.com/rolling1314/rolling-crush/domain/message"
@@ -59,6 +61,8 @@ type coordinator struct {
 	cfg         *config.Config
 	sessions    session.Service
 	messages    message.Service
+	toolCalls   toolcall.Service
+	redisCmd    *redis.CommandService
 	permissions permission.Service
 	history     history.Service
 	lspClients  *csync.Map[string, *lsp.Client]
@@ -76,6 +80,8 @@ func NewCoordinator(
 	cfg *config.Config,
 	sessions session.Service,
 	messages message.Service,
+	toolCalls toolcall.Service,
+	redisCmd *redis.CommandService,
 	permissions permission.Service,
 	history history.Service,
 	lspClients *csync.Map[string, *lsp.Client],
@@ -93,6 +99,8 @@ func NewCoordinator(
 		cfg:         cfg,
 		sessions:    sessions,
 		messages:    messages,
+		toolCalls:   toolCalls,
+		redisCmd:    redisCmd,
 		permissions: permissions,
 		history:     history,
 		lspClients:  lspClients,
@@ -432,6 +440,8 @@ func (c *coordinator) buildAgent(ctx context.Context, agentPrompt *agentprompt.P
 		IsYolo:               c.permissions.SkipRequests(),
 		Sessions:             c.sessions,
 		Messages:             c.messages,
+		ToolCalls:            c.toolCalls,
+		RedisCmd:             c.redisCmd,
 		Tools:                nil,
 		DBQuerier:            c.dbQuerier,
 	})

@@ -244,3 +244,145 @@ func (s *CommandService) RemoveSessionSubscription(ctx context.Context, sessionI
 	slog.Debug("Session subscription removed", "session_id", sessionID)
 	return nil
 }
+
+// ToolCallStatus constants
+const (
+	ToolCallKeyPrefix = "crush:toolcall:"
+)
+
+// ToolCallState represents the current state of a tool call in Redis
+type ToolCallState struct {
+	ID        string `json:"id"`
+	SessionID string `json:"session_id"`
+	MessageID string `json:"message_id,omitempty"`
+	Name      string `json:"name"`
+	Status    string `json:"status"`
+	Input     string `json:"input,omitempty"`
+	UpdatedAt int64  `json:"updated_at"`
+}
+
+// toolCallKey returns the Redis key for a tool call
+func (s *CommandService) toolCallKey(sessionID, toolCallID string) string {
+	return ToolCallKeyPrefix + sessionID + ":" + toolCallID
+}
+
+// sessionToolCallsKey returns the Redis key for session tool calls set
+func (s *CommandService) sessionToolCallsKey(sessionID string) string {
+	return ToolCallKeyPrefix + sessionID + ":all"
+}
+
+// SetToolCallState sets the tool call state in Redis
+func (s *CommandService) SetToolCallState(ctx context.Context, state ToolCallState) error {
+	state.UpdatedAt = time.Now().UnixMilli()
+
+	data, err := json.Marshal(state)
+	if err != nil {
+		return fmt.Errorf("failed to marshal tool call state: %w", err)
+	}
+
+	key := s.toolCallKey(state.SessionID, state.ID)
+	// Set with 24 hour expiration
+	err = s.client.rdb.Set(ctx, key, string(data), 24*time.Hour).Err()
+	if err != nil {
+		return fmt.Errorf("failed to set tool call state: %w", err)
+	}
+
+	// Add to session's tool call set
+	err = s.client.rdb.SAdd(ctx, s.sessionToolCallsKey(state.SessionID), state.ID).Err()
+	if err != nil {
+		return fmt.Errorf("failed to add tool call to session set: %w", err)
+	}
+
+	slog.Debug("Tool call state updated in Redis",
+		"tool_call_id", state.ID,
+		"session_id", state.SessionID,
+		"status", state.Status,
+	)
+
+	return nil
+}
+
+// GetToolCallState gets the tool call state from Redis
+func (s *CommandService) GetToolCallState(ctx context.Context, sessionID, toolCallID string) (*ToolCallState, error) {
+	key := s.toolCallKey(sessionID, toolCallID)
+
+	data, err := s.client.rdb.Get(ctx, key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get tool call state: %w", err)
+	}
+
+	var state ToolCallState
+	if err := json.Unmarshal([]byte(data), &state); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal tool call state: %w", err)
+	}
+
+	return &state, nil
+}
+
+// GetSessionToolCallStates gets all tool call states for a session
+func (s *CommandService) GetSessionToolCallStates(ctx context.Context, sessionID string) ([]ToolCallState, error) {
+	// Get all tool call IDs for this session
+	toolCallIDs, err := s.client.rdb.SMembers(ctx, s.sessionToolCallsKey(sessionID)).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get session tool call IDs: %w", err)
+	}
+
+	if len(toolCallIDs) == 0 {
+		return []ToolCallState{}, nil
+	}
+
+	// Get all tool call states
+	states := make([]ToolCallState, 0, len(toolCallIDs))
+	for _, id := range toolCallIDs {
+		state, err := s.GetToolCallState(ctx, sessionID, id)
+		if err != nil {
+			slog.Warn("Failed to get tool call state", "tool_call_id", id, "error", err)
+			continue
+		}
+		if state != nil {
+			states = append(states, *state)
+		}
+	}
+
+	return states, nil
+}
+
+// DeleteToolCallState deletes a tool call state from Redis
+func (s *CommandService) DeleteToolCallState(ctx context.Context, sessionID, toolCallID string) error {
+	key := s.toolCallKey(sessionID, toolCallID)
+
+	err := s.client.rdb.Del(ctx, key).Err()
+	if err != nil {
+		return fmt.Errorf("failed to delete tool call state: %w", err)
+	}
+
+	err = s.client.rdb.SRem(ctx, s.sessionToolCallsKey(sessionID), toolCallID).Err()
+	if err != nil {
+		return fmt.Errorf("failed to remove tool call from session set: %w", err)
+	}
+
+	return nil
+}
+
+// ClearSessionToolCalls clears all tool call states for a session
+func (s *CommandService) ClearSessionToolCalls(ctx context.Context, sessionID string) error {
+	// Get all tool call IDs
+	toolCallIDs, err := s.client.rdb.SMembers(ctx, s.sessionToolCallsKey(sessionID)).Result()
+	if err != nil {
+		return fmt.Errorf("failed to get session tool call IDs: %w", err)
+	}
+
+	// Delete all tool call keys
+	for _, id := range toolCallIDs {
+		key := s.toolCallKey(sessionID, id)
+		if err := s.client.rdb.Del(ctx, key).Err(); err != nil {
+			slog.Warn("Failed to delete tool call key", "key", key, "error", err)
+		}
+	}
+
+	// Delete the session set
+	return s.client.rdb.Del(ctx, s.sessionToolCallsKey(sessionID)).Err()
+}

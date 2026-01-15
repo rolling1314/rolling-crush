@@ -27,14 +27,16 @@ import (
 	"charm.land/fantasy/providers/openai"
 	"charm.land/fantasy/providers/openrouter"
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
-	"github.com/rolling1314/rolling-crush/internal/agent/tools"
-	"github.com/rolling1314/rolling-crush/pkg/config"
-	"github.com/rolling1314/rolling-crush/internal/pkg/csync"
-	"github.com/rolling1314/rolling-crush/infra/postgres"
 	"github.com/rolling1314/rolling-crush/domain/message"
 	"github.com/rolling1314/rolling-crush/domain/permission"
 	"github.com/rolling1314/rolling-crush/domain/session"
+	"github.com/rolling1314/rolling-crush/domain/toolcall"
+	"github.com/rolling1314/rolling-crush/infra/postgres"
+	"github.com/rolling1314/rolling-crush/infra/redis"
+	"github.com/rolling1314/rolling-crush/internal/agent/tools"
+	"github.com/rolling1314/rolling-crush/internal/pkg/csync"
 	"github.com/rolling1314/rolling-crush/internal/pkg/stringext"
+	"github.com/rolling1314/rolling-crush/pkg/config"
 )
 
 //go:embed templates/title.md
@@ -84,6 +86,8 @@ type sessionAgent struct {
 	tools                []fantasy.AgentTool
 	sessions             session.Service
 	messages             message.Service
+	toolCalls            toolcall.Service
+	redisCmd             *redis.CommandService
 	disableAutoSummarize bool
 	isYolo               bool
 	dbQuerier            postgres.Querier // For querying project info
@@ -101,6 +105,8 @@ type SessionAgentOptions struct {
 	IsYolo               bool
 	Sessions             session.Service
 	Messages             message.Service
+	ToolCalls            toolcall.Service
+	RedisCmd             *redis.CommandService
 	Tools                []fantasy.AgentTool
 	DBQuerier            postgres.Querier
 }
@@ -115,6 +121,8 @@ func NewSessionAgent(
 		systemPrompt:         opts.SystemPrompt,
 		sessions:             opts.Sessions,
 		messages:             opts.Messages,
+		toolCalls:            opts.ToolCalls,
+		redisCmd:             opts.RedisCmd,
 		disableAutoSummarize: opts.DisableAutoSummarize,
 		tools:                opts.Tools,
 		isYolo:               opts.IsYolo,
@@ -357,6 +365,30 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 				Finished:         false,
 			}
 			currentAssistant.AddToolCall(toolCall)
+
+			// Track tool call state in database and Redis
+			if a.toolCalls != nil {
+				messageID := ""
+				if currentAssistant != nil {
+					messageID = currentAssistant.ID
+				}
+				_, tcErr := a.toolCalls.Create(genCtx, call.SessionID, messageID, id, toolName)
+				if tcErr != nil {
+					slog.Warn("Failed to create tool call record", "tool_call_id", id, "error", tcErr)
+				}
+			}
+
+			// Update Redis for real-time status
+			if a.redisCmd != nil {
+				_ = a.redisCmd.SetToolCallState(genCtx, redis.ToolCallState{
+					ID:        id,
+					SessionID: call.SessionID,
+					MessageID: currentAssistant.ID,
+					Name:      toolName,
+					Status:    "pending",
+				})
+			}
+
 			return a.messages.Update(genCtx, *currentAssistant)
 		},
 		OnRetry: func(err *fantasy.ProviderError, delay time.Duration) {
@@ -374,6 +406,26 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 				Finished:         true,
 			}
 			currentAssistant.AddToolCall(toolCall)
+
+			// Update tool call state to running with input
+			if a.toolCalls != nil {
+				if err := a.toolCalls.UpdateInput(genCtx, tc.ToolCallID, tc.Input); err != nil {
+					slog.Warn("Failed to update tool call input", "tool_call_id", tc.ToolCallID, "error", err)
+				}
+			}
+
+			// Update Redis for real-time status
+			if a.redisCmd != nil {
+				_ = a.redisCmd.SetToolCallState(genCtx, redis.ToolCallState{
+					ID:        tc.ToolCallID,
+					SessionID: call.SessionID,
+					MessageID: currentAssistant.ID,
+					Name:      tc.ToolName,
+					Status:    "running",
+					Input:     tc.Input,
+				})
+			}
+
 			return a.messages.Update(genCtx, *currentAssistant)
 		},
 		OnToolResult: func(result fantasy.ToolResultContent) error {
@@ -397,6 +449,32 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 
 			// DEBUG: 打印工具调用结果
 			fmt.Printf("\n[TOOL RESULT] id=%s, name=%s, isError=%v, content=%s\n", result.ToolCallID, result.ToolName, isError, resultContent)
+
+			// Update tool call state to completed/error
+			if a.toolCalls != nil {
+				errorMsg := ""
+				if isError {
+					errorMsg = resultContent
+				}
+				if err := a.toolCalls.Complete(genCtx, result.ToolCallID, resultContent, isError, errorMsg); err != nil {
+					slog.Warn("Failed to complete tool call", "tool_call_id", result.ToolCallID, "error", err)
+				}
+			}
+
+			// Update Redis for real-time status
+			if a.redisCmd != nil {
+				status := "completed"
+				if isError {
+					status = "error"
+				}
+				_ = a.redisCmd.SetToolCallState(genCtx, redis.ToolCallState{
+					ID:        result.ToolCallID,
+					SessionID: call.SessionID,
+					MessageID: currentAssistant.ID,
+					Name:      result.ToolName,
+					Status:    status,
+				})
+			}
 
 			toolResult := message.ToolResult{
 				ToolCallID: result.ToolCallID,
@@ -921,6 +999,22 @@ func (a *sessionAgent) Cancel(sessionID string) {
 	if a.QueuedPrompts(sessionID) > 0 {
 		slog.Info("Clearing queued prompts", "session_id", sessionID)
 		a.messageQueue.Del(sessionID)
+	}
+
+	// Cancel all pending tool calls for this session
+	if a.toolCalls != nil {
+		ctx := context.Background()
+		if err := a.toolCalls.CancelSession(ctx, sessionID); err != nil {
+			slog.Warn("Failed to cancel session tool calls", "session_id", sessionID, "error", err)
+		}
+	}
+
+	// Clear Redis tool call states
+	if a.redisCmd != nil {
+		ctx := context.Background()
+		if err := a.redisCmd.ClearSessionToolCalls(ctx, sessionID); err != nil {
+			slog.Warn("Failed to clear Redis tool call states", "session_id", sessionID, "error", err)
+		}
 	}
 }
 

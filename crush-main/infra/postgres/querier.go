@@ -43,6 +43,19 @@ type Querier interface {
 	UpdateSession(ctx context.Context, arg UpdateSessionParams) (Session, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
+	// Tool calls
+	CreateToolCall(ctx context.Context, arg CreateToolCallParams) (ToolCall, error)
+	GetToolCall(ctx context.Context, id string) (ToolCall, error)
+	ListToolCallsBySession(ctx context.Context, sessionID string) ([]ToolCall, error)
+	ListToolCallsByMessage(ctx context.Context, messageID sql.NullString) ([]ToolCall, error)
+	ListPendingToolCalls(ctx context.Context, sessionID string) ([]ToolCall, error)
+	UpdateToolCallStatus(ctx context.Context, arg UpdateToolCallStatusParams) error
+	UpdateToolCallInput(ctx context.Context, arg UpdateToolCallInputParams) error
+	UpdateToolCallResult(ctx context.Context, arg UpdateToolCallResultParams) error
+	CancelToolCall(ctx context.Context, id string) error
+	CancelSessionToolCalls(ctx context.Context, sessionID string) error
+	DeleteToolCall(ctx context.Context, id string) error
+	DeleteSessionToolCalls(ctx context.Context, sessionID string) error
 }
 
 var _ Querier = (*Queries)(nil)

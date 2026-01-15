@@ -10,6 +10,7 @@ import (
 	"github.com/rolling1314/rolling-crush/domain/message"
 	"github.com/rolling1314/rolling-crush/domain/project"
 	"github.com/rolling1314/rolling-crush/domain/session"
+	"github.com/rolling1314/rolling-crush/domain/toolcall"
 	"github.com/rolling1314/rolling-crush/domain/user"
 	"github.com/rolling1314/rolling-crush/infra/postgres"
 	"github.com/rolling1314/rolling-crush/infra/sandbox"
@@ -18,32 +19,34 @@ import (
 
 // Server represents the HTTP server
 type Server struct {
-	port           string
-	engine         *gin.Engine
-	userService    user.Service
-	projectService project.Service
-	sessionService session.Service
-	messageService message.Service
-	db             *postgres.Queries
-	config         *config.Config
-	sandboxClient  *sandbox.Client
+	port            string
+	engine          *gin.Engine
+	userService     user.Service
+	projectService  project.Service
+	sessionService  session.Service
+	messageService  message.Service
+	toolCallService toolcall.Service
+	db              *postgres.Queries
+	config          *config.Config
+	sandboxClient   *sandbox.Client
 }
 
 // New creates a new HTTP server instance
-func New(port string, userService user.Service, projectService project.Service, sessionService session.Service, messageService message.Service, queries *postgres.Queries, cfg *config.Config) *Server {
+func New(port string, userService user.Service, projectService project.Service, sessionService session.Service, messageService message.Service, toolCallService toolcall.Service, queries *postgres.Queries, cfg *config.Config) *Server {
 	gin.SetMode(gin.DebugMode)
 	engine := gin.Default()
 
 	return &Server{
-		port:           port,
-		engine:         engine,
-		userService:    userService,
-		projectService: projectService,
-		sessionService: sessionService,
-		messageService: messageService,
-		db:             queries,
-		config:         cfg,
-		sandboxClient:  sandbox.GetDefaultClient(),
+		port:            port,
+		engine:          engine,
+		userService:     userService,
+		projectService:  projectService,
+		sessionService:  sessionService,
+		messageService:  messageService,
+		toolCallService: toolCallService,
+		db:              queries,
+		config:          cfg,
+		sandboxClient:   sandbox.GetDefaultClient(),
 	}
 }
 
@@ -92,6 +95,10 @@ func (s *Server) Start() error {
 			sessionGroup.GET("/:id/config", s.handleGetSessionConfig)
 			sessionGroup.PUT("/:id/config", s.handleUpdateSessionConfig)
 			sessionGroup.DELETE("/:id", s.handleDeleteSession)
+			// Tool call routes
+			sessionGroup.GET("/:id/tool-calls", s.handleGetSessionToolCalls)
+			sessionGroup.GET("/:id/tool-calls/pending", s.handleGetPendingToolCalls)
+			sessionGroup.GET("/:id/tool-calls/:toolCallId", s.handleGetToolCall)
 		}
 
 		// Provider routes

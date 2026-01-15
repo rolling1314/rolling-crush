@@ -69,6 +69,22 @@ type Session struct {
 	ProjectID        sql.NullString `json:"project_id"`
 }
 
+type ToolCall struct {
+	ID           string         `json:"id"`
+	SessionID    string         `json:"session_id"`
+	MessageID    sql.NullString `json:"message_id"`
+	Name         string         `json:"name"`
+	Input        sql.NullString `json:"input"`
+	Status       string         `json:"status"`
+	Result       sql.NullString `json:"result"`
+	IsError      bool           `json:"is_error"`
+	ErrorMessage sql.NullString `json:"error_message"`
+	CreatedAt    int64          `json:"created_at"`
+	UpdatedAt    int64          `json:"updated_at"`
+	StartedAt    sql.NullInt64  `json:"started_at"`
+	FinishedAt   sql.NullInt64  `json:"finished_at"`
+}
+
 type User struct {
 	ID           string         `json:"id"`
 	Username     string         `json:"username"`

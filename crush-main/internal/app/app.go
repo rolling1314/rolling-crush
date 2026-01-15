@@ -28,6 +28,7 @@ import (
 	"github.com/rolling1314/rolling-crush/domain/permission"
 	"github.com/rolling1314/rolling-crush/domain/project"
 	"github.com/rolling1314/rolling-crush/domain/session"
+	"github.com/rolling1314/rolling-crush/domain/toolcall"
 	"github.com/rolling1314/rolling-crush/domain/user"
 	"github.com/rolling1314/rolling-crush/infra/postgres"
 	storeredis "github.com/rolling1314/rolling-crush/infra/redis"
@@ -52,6 +53,7 @@ import (
 type App struct {
 	Sessions    session.Service
 	Messages    message.Service
+	ToolCalls   toolcall.Service
 	History     history.Service
 	Permissions permission.Service
 	Users       user.Service
@@ -91,6 +93,7 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 	q := postgres.New(conn)
 	sessions := session.NewService(q)
 	messages := message.NewService(q)
+	toolCalls := toolcall.NewService(q)
 	files := history.NewService(q, conn)
 	users := user.NewService(q)
 	projects := project.NewService(q)
@@ -103,6 +106,7 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 	app := &App{
 		Sessions:    sessions,
 		Messages:    messages,
+		ToolCalls:   toolCalls,
 		History:     files,
 		Users:       users,
 		Projects:    projects,
@@ -967,11 +971,20 @@ func (app *App) InitCoderAgent(ctx context.Context) error {
 
 	var err error
 	fmt.Println("Creating coordinator with dbReader:", app.db != nil)
+
+	// Get Redis command service for real-time tool call state updates
+	var redisCmd *storeredis.CommandService
+	if storeredis.GetClient() != nil {
+		redisCmd = storeredis.GetGlobalCommandService()
+	}
+
 	app.AgentCoordinator, err = agent.NewCoordinator(
 		ctx,
 		app.config,
 		app.Sessions,
 		app.Messages,
+		app.ToolCalls,
+		redisCmd,
 		app.Permissions,
 		app.History,
 		app.LSPClients,

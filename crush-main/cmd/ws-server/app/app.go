@@ -16,6 +16,7 @@ import (
 	"github.com/rolling1314/rolling-crush/domain/permission"
 	"github.com/rolling1314/rolling-crush/domain/project"
 	"github.com/rolling1314/rolling-crush/domain/session"
+	"github.com/rolling1314/rolling-crush/domain/toolcall"
 	"github.com/rolling1314/rolling-crush/domain/user"
 	"github.com/rolling1314/rolling-crush/infra/postgres"
 	storeredis "github.com/rolling1314/rolling-crush/infra/redis"
@@ -37,6 +38,7 @@ import (
 type WSApp struct {
 	Sessions    session.Service
 	Messages    message.Service
+	ToolCalls   toolcall.Service
 	History     history.Service
 	Permissions permission.Service
 	Users       user.Service
@@ -75,6 +77,7 @@ func NewWSApp(ctx context.Context, conn *sql.DB, cfg *config.Config) (*WSApp, er
 	q := postgres.New(conn)
 	sessions := session.NewService(q)
 	messages := message.NewService(q)
+	toolCalls := toolcall.NewService(q)
 	files := history.NewService(q, conn)
 	users := user.NewService(q)
 	projects := project.NewService(q)
@@ -87,6 +90,7 @@ func NewWSApp(ctx context.Context, conn *sql.DB, cfg *config.Config) (*WSApp, er
 	app := &WSApp{
 		Sessions:    sessions,
 		Messages:    messages,
+		ToolCalls:   toolCalls,
 		History:     files,
 		Users:       users,
 		Projects:    projects,

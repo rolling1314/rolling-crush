@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	storeredis "github.com/rolling1314/rolling-crush/infra/redis"
 	"github.com/rolling1314/rolling-crush/internal/agent"
 	"github.com/rolling1314/rolling-crush/pkg/config"
 )
@@ -51,11 +52,20 @@ func (app *WSApp) InitCoderAgent(ctx context.Context) error {
 
 	var err error
 	fmt.Println("Creating coordinator with dbReader:", app.db != nil)
+
+	// Get Redis command service for real-time tool call state updates
+	var redisCmd *storeredis.CommandService
+	if storeredis.GetClient() != nil {
+		redisCmd = storeredis.GetGlobalCommandService()
+	}
+
 	app.AgentCoordinator, err = agent.NewCoordinator(
 		ctx,
 		app.config,
 		app.Sessions,
 		app.Messages,
+		app.ToolCalls,
+		redisCmd,
 		app.Permissions,
 		app.History,
 		app.LSPClients,

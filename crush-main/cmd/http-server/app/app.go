@@ -10,6 +10,7 @@ import (
 	"github.com/rolling1314/rolling-crush/domain/message"
 	"github.com/rolling1314/rolling-crush/domain/project"
 	"github.com/rolling1314/rolling-crush/domain/session"
+	"github.com/rolling1314/rolling-crush/domain/toolcall"
 	"github.com/rolling1314/rolling-crush/domain/user"
 	"github.com/rolling1314/rolling-crush/infra/postgres"
 	"github.com/rolling1314/rolling-crush/infra/sandbox"
@@ -20,10 +21,11 @@ import (
 // HTTPApp represents the HTTP-only application instance.
 // It contains only the services required for HTTP API operations.
 type HTTPApp struct {
-	Users    user.Service
-	Projects project.Service
-	Sessions session.Service
-	Messages message.Service
+	Users     user.Service
+	Projects  project.Service
+	Sessions  session.Service
+	Messages  message.Service
+	ToolCalls toolcall.Service
 
 	HTTPServer *handler.Server
 
@@ -39,17 +41,19 @@ func NewHTTPApp(ctx context.Context, conn *sql.DB, cfg *config.Config, port stri
 	projects := project.NewService(q)
 	sessions := session.NewService(q)
 	messages := message.NewService(q)
+	toolCalls := toolcall.NewService(q)
 
 	app := &HTTPApp{
-		Users:    users,
-		Projects: projects,
-		Sessions: sessions,
-		Messages: messages,
+		Users:     users,
+		Projects:  projects,
+		Sessions:  sessions,
+		Messages:  messages,
+		ToolCalls: toolCalls,
 
 		config: cfg,
 		db:     conn,
 
-		HTTPServer: handler.New(port, users, projects, sessions, messages, q, cfg),
+		HTTPServer: handler.New(port, users, projects, sessions, messages, toolCalls, q, cfg),
 	}
 
 	// Initialize storage client from app config
