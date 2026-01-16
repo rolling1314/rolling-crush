@@ -12,6 +12,7 @@ import (
 	"github.com/rolling1314/rolling-crush/domain/permission"
 	"github.com/rolling1314/rolling-crush/domain/session"
 	"github.com/rolling1314/rolling-crush/domain/toolcall"
+	storeredis "github.com/rolling1314/rolling-crush/infra/redis"
 	"github.com/rolling1314/rolling-crush/internal/agent/tools/mcp"
 	"github.com/rolling1314/rolling-crush/internal/pkg/log"
 	"github.com/rolling1314/rolling-crush/internal/pubsub"
@@ -172,13 +173,28 @@ func (app *WSApp) handlePermissionRequestEvent(event pubsub.Event[permission.Per
 		"path":         event.Payload.Path,
 	}
 
-	// Publish to Redis
+	// Store pending permission in Redis (separate from stream)
+	// This allows proper state management for reconnection
 	if app.RedisStream != nil {
 		ctx := context.Background()
-		if err := app.RedisStream.PublishMessage(ctx, sessionID, "permission_request", permMsg); err != nil {
-			slog.Warn("Failed to publish permission request to Redis stream", "error", err)
+		perm := storeredis.PendingPermission{
+			ID:          event.Payload.ID,
+			SessionID:   sessionID,
+			ToolCallID:  event.Payload.ToolCallID,
+			ToolName:    event.Payload.ToolName,
+			Description: event.Payload.Description,
+			Action:      event.Payload.Action,
+			Params:      event.Payload.Params,
+			Path:        event.Payload.Path,
+		}
+		if err := app.RedisStream.SetPendingPermission(ctx, perm); err != nil {
+			slog.Warn("Failed to store pending permission in Redis", "error", err)
 		}
 	}
+
+	// Note: We don't publish permission_request to Redis Stream anymore
+	// because it's transient state that should be managed separately.
+	// On reconnection, we'll check the pending permissions directly.
 
 	// Send via WebSocket if connected
 	isConnected, _ := app.connectedSessions.Get(sessionID)
@@ -199,13 +215,25 @@ func (app *WSApp) handlePermissionNotificationEvent(event pubsub.Event[permissio
 		"denied":       event.Payload.Denied,
 	}
 
-	// Publish to Redis
+	// Update permission status in Redis
 	if app.RedisStream != nil {
 		ctx := context.Background()
-		if err := app.RedisStream.PublishMessage(ctx, sessionID, "permission_notification", notifMsg); err != nil {
-			slog.Warn("Failed to publish permission notification to Redis stream", "error", err)
+		status := "pending"
+		if event.Payload.Granted {
+			status = "granted"
+		} else if event.Payload.Denied {
+			status = "denied"
+		}
+		// Only update if it's a final status (granted or denied)
+		if status != "pending" {
+			if err := app.RedisStream.UpdatePermissionStatus(ctx, sessionID, event.Payload.ToolCallID, status); err != nil {
+				slog.Warn("Failed to update permission status in Redis", "error", err)
+			}
 		}
 	}
+
+	// Note: We don't publish permission_notification to Redis Stream anymore
+	// The permission state is managed separately.
 
 	// Send via WebSocket if connected
 	isConnected, _ := app.connectedSessions.Get(sessionID)

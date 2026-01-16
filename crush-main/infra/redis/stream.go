@@ -20,6 +20,8 @@ const (
 	LastReadKeyPrefix = "crush:lastread:session:"
 	// ActiveGenerationKeyPrefix tracks if a generation is still active
 	ActiveGenerationKeyPrefix = "crush:active:session:"
+	// PendingPermissionKeyPrefix tracks pending permission requests
+	PendingPermissionKeyPrefix = "crush:permission:pending:"
 )
 
 // StreamMessage represents a message stored in Redis stream.
@@ -316,4 +318,157 @@ func (s *StreamService) GetStreamLength(ctx context.Context, sessionID string) (
 		return 0, fmt.Errorf("failed to get stream length: %w", err)
 	}
 	return length, nil
+}
+
+// pendingPermissionKey returns the Redis key for a pending permission request.
+func (s *StreamService) pendingPermissionKey(sessionID, toolCallID string) string {
+	return PendingPermissionKeyPrefix + sessionID + ":" + toolCallID
+}
+
+// PendingPermission represents a pending permission request stored in Redis.
+type PendingPermission struct {
+	ID          string `json:"id"`
+	SessionID   string `json:"session_id"`
+	ToolCallID  string `json:"tool_call_id"`
+	ToolName    string `json:"tool_name"`
+	Description string `json:"description"`
+	Action      string `json:"action"`
+	Params      any    `json:"params"`
+	Path        string `json:"path"`
+	Status      string `json:"status"` // "pending", "granted", "denied"
+	CreatedAt   int64  `json:"created_at"`
+}
+
+// SetPendingPermission stores a pending permission request in Redis.
+func (s *StreamService) SetPendingPermission(ctx context.Context, perm PendingPermission) error {
+	key := s.pendingPermissionKey(perm.SessionID, perm.ToolCallID)
+	perm.Status = "pending"
+	perm.CreatedAt = time.Now().UnixMilli()
+
+	data, err := json.Marshal(perm)
+	if err != nil {
+		return fmt.Errorf("failed to marshal permission: %w", err)
+	}
+
+	// Store with TTL (permissions should expire after some time)
+	err = s.client.rdb.Set(ctx, key, string(data), 30*time.Minute).Err()
+	if err != nil {
+		return fmt.Errorf("failed to set pending permission: %w", err)
+	}
+
+	slog.Debug("Set pending permission",
+		"session_id", perm.SessionID,
+		"tool_call_id", perm.ToolCallID,
+		"tool_name", perm.ToolName,
+	)
+
+	return nil
+}
+
+// UpdatePermissionStatus updates the status of a permission request.
+func (s *StreamService) UpdatePermissionStatus(ctx context.Context, sessionID, toolCallID, status string) error {
+	key := s.pendingPermissionKey(sessionID, toolCallID)
+
+	// Get current permission
+	data, err := s.client.rdb.Get(ctx, key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			// Permission not found, it may have expired or never existed
+			slog.Debug("Permission not found for update", "session_id", sessionID, "tool_call_id", toolCallID)
+			return nil
+		}
+		return fmt.Errorf("failed to get permission: %w", err)
+	}
+
+	var perm PendingPermission
+	if err := json.Unmarshal([]byte(data), &perm); err != nil {
+		return fmt.Errorf("failed to unmarshal permission: %w", err)
+	}
+
+	perm.Status = status
+
+	newData, err := json.Marshal(perm)
+	if err != nil {
+		return fmt.Errorf("failed to marshal permission: %w", err)
+	}
+
+	// Update with shorter TTL for completed permissions (they can be cleaned up sooner)
+	ttl := 5 * time.Minute
+	if status == "pending" {
+		ttl = 30 * time.Minute
+	}
+
+	err = s.client.rdb.Set(ctx, key, string(newData), ttl).Err()
+	if err != nil {
+		return fmt.Errorf("failed to update permission status: %w", err)
+	}
+
+	slog.Debug("Updated permission status",
+		"session_id", sessionID,
+		"tool_call_id", toolCallID,
+		"status", status,
+	)
+
+	return nil
+}
+
+// GetPendingPermission retrieves a pending permission request from Redis.
+func (s *StreamService) GetPendingPermission(ctx context.Context, sessionID, toolCallID string) (*PendingPermission, error) {
+	key := s.pendingPermissionKey(sessionID, toolCallID)
+
+	data, err := s.client.rdb.Get(ctx, key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get permission: %w", err)
+	}
+
+	var perm PendingPermission
+	if err := json.Unmarshal([]byte(data), &perm); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal permission: %w", err)
+	}
+
+	return &perm, nil
+}
+
+// GetAllPendingPermissions retrieves all pending permission requests for a session.
+func (s *StreamService) GetAllPendingPermissions(ctx context.Context, sessionID string) ([]PendingPermission, error) {
+	pattern := PendingPermissionKeyPrefix + sessionID + ":*"
+
+	keys, err := s.client.rdb.Keys(ctx, pattern).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get permission keys: %w", err)
+	}
+
+	var pendingPerms []PendingPermission
+	for _, key := range keys {
+		data, err := s.client.rdb.Get(ctx, key).Result()
+		if err != nil {
+			if err == redis.Nil {
+				continue
+			}
+			slog.Warn("Failed to get permission", "key", key, "error", err)
+			continue
+		}
+
+		var perm PendingPermission
+		if err := json.Unmarshal([]byte(data), &perm); err != nil {
+			slog.Warn("Failed to unmarshal permission", "key", key, "error", err)
+			continue
+		}
+
+		// Only include pending permissions
+		if perm.Status == "pending" {
+			pendingPerms = append(pendingPerms, perm)
+		}
+	}
+
+	return pendingPerms, nil
+}
+
+// DeletePendingPermission removes a permission request from Redis.
+func (s *StreamService) DeletePendingPermission(ctx context.Context, sessionID, toolCallID string) error {
+	key := s.pendingPermissionKey(sessionID, toolCallID)
+	return s.client.rdb.Del(ctx, key).Err()
 }

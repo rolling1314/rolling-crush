@@ -60,6 +60,8 @@ type WSApp struct {
 
 	// Redis stream service for message buffering during WebSocket disconnection
 	RedisStream *storeredis.StreamService
+	// Redis command service for tool call state management
+	RedisCmd *storeredis.CommandService
 
 	// Track the current active session for the single-user mode
 	currentSessionID string
@@ -115,6 +117,7 @@ func NewWSApp(ctx context.Context, conn *sql.DB, cfg *config.Config) (*WSApp, er
 		slog.Warn("Failed to initialize Redis client, message buffering will be unavailable", "error", err)
 	} else {
 		app.RedisStream = storeredis.GetGlobalStreamService()
+		app.RedisCmd = storeredis.GetGlobalCommandService()
 		slog.Info("Redis stream service initialized")
 	}
 

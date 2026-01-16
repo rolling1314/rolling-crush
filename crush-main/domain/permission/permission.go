@@ -134,11 +134,8 @@ func (s *permissionService) Request(opts CreatePermissionRequest) bool {
 		return true
 	}
 
-	// tell the UI that a permission was requested
-	s.notificationBroker.Publish(pubsub.CreatedEvent, PermissionNotification{
-		SessionID:  opts.SessionID,
-		ToolCallID: opts.ToolCallID,
-	})
+	// Note: Don't publish notification here - it will be sent via PermissionRequest event
+	// The empty notification (granted=false, denied=false) was causing duplicate UI updates
 
 	// Get or create per-session mutex
 	sessionMu, _ := s.sessionRequestMu.Get(opts.SessionID)

@@ -375,6 +375,20 @@ func (app *WSApp) handleReconnection(sessionID string, lastMsgID string) {
 
 	// Send missed messages to the client
 	for _, msg := range messages {
+		// Skip permission-related messages during replay - they are managed separately
+		// via pending permissions state (not in stream anymore, but skip for backwards compatibility)
+		if msg.Type == "permission_request" || msg.Type == "permission_notification" {
+			slog.Debug("Skipping permission message during replay", "type", msg.Type, "streamId", msg.ID)
+			continue
+		}
+
+		// Skip tool_call_update messages during replay - we'll send the latest state separately
+		// This prevents showing outdated tool status (e.g., pending when it's already completed)
+		if msg.Type == "tool_call_update" {
+			slog.Debug("Skipping tool_call_update during replay, will send latest state", "streamId", msg.ID)
+			continue
+		}
+
 		var payload interface{}
 		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 			slog.Warn("Failed to unmarshal message payload", "error", err)
@@ -389,6 +403,50 @@ func (app *WSApp) handleReconnection(sessionID string, lastMsgID string) {
 			"_timestamp": msg.Timestamp,
 			"_payload":   payload,
 		})
+	}
+
+	// Send latest tool call states from Redis (real-time status)
+	if app.RedisCmd != nil {
+		toolCallStates, err := app.RedisCmd.GetSessionToolCallStates(ctx, sessionID)
+		if err != nil {
+			slog.Warn("Failed to get tool call states", "error", err)
+		} else if len(toolCallStates) > 0 {
+			slog.Info("Sending latest tool call states on reconnection", "sessionID", sessionID, "count", len(toolCallStates))
+			for _, state := range toolCallStates {
+				toolCallMsg := map[string]interface{}{
+					"Type":       "tool_call_update",
+					"id":         state.ID,
+					"session_id": state.SessionID,
+					"message_id": state.MessageID,
+					"name":       state.Name,
+					"input":      state.Input,
+					"status":     state.Status,
+				}
+				app.WSServer.SendToSession(sessionID, toolCallMsg)
+			}
+		}
+	}
+
+	// Send any pending permissions that are still waiting for user response
+	pendingPerms, err := app.RedisStream.GetAllPendingPermissions(ctx, sessionID)
+	if err != nil {
+		slog.Warn("Failed to get pending permissions", "error", err)
+	} else if len(pendingPerms) > 0 {
+		slog.Info("Sending pending permissions on reconnection", "sessionID", sessionID, "count", len(pendingPerms))
+		for _, perm := range pendingPerms {
+			permMsg := map[string]interface{}{
+				"Type":         "permission_request",
+				"id":           perm.ID,
+				"session_id":   perm.SessionID,
+				"tool_call_id": perm.ToolCallID,
+				"tool_name":    perm.ToolName,
+				"description":  perm.Description,
+				"action":       perm.Action,
+				"params":       perm.Params,
+				"path":         perm.Path,
+			}
+			app.WSServer.SendToSession(sessionID, permMsg)
+		}
 	}
 
 	// Update last read ID
