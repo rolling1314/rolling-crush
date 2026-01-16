@@ -13,7 +13,9 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -33,6 +35,7 @@ import (
 	"github.com/rolling1314/rolling-crush/domain/toolcall"
 	"github.com/rolling1314/rolling-crush/infra/postgres"
 	"github.com/rolling1314/rolling-crush/infra/redis"
+	"github.com/rolling1314/rolling-crush/infra/storage"
 	"github.com/rolling1314/rolling-crush/internal/agent/tools"
 	"github.com/rolling1314/rolling-crush/internal/pkg/csync"
 	"github.com/rolling1314/rolling-crush/internal/pkg/stringext"
@@ -853,6 +856,15 @@ func (a *sessionAgent) createUserMessage(ctx context.Context, call SessionAgentC
 
 func (a *sessionAgent) preparePrompt(msgs []message.Message, attachments ...message.Attachment) ([]fantasy.Message, []fantasy.FilePart) {
 	fmt.Println("\n=== Agent: 准备 Prompt ===")
+
+	// Hydrate binary contents in historical messages (fetch image data from URLs)
+	fmt.Println("=== Agent: 水合历史消息中的图片数据 ===")
+	if err := message.HydrateMessages(msgs, createImageFetcher()); err != nil {
+		fmt.Printf("⚠️ 警告: 水合图片数据失败: %v\n", err)
+		slog.Warn("Failed to hydrate binary contents", "error", err)
+	}
+	fmt.Println("=== Agent: 图片数据水合完成 ===")
+
 	var history []fantasy.Message
 	for _, m := range msgs {
 		if len(m.Parts) == 0 {
@@ -884,6 +896,48 @@ func (a *sessionAgent) preparePrompt(msgs []message.Message, attachments ...mess
 	fmt.Println("=== Agent: Prompt 准备完成 ===\n")
 
 	return history, files
+}
+
+// createImageFetcher creates an ImageFetcher function that fetches image data from URLs.
+// It supports both MinIO URLs and external HTTP URLs.
+func createImageFetcher() message.ImageFetcher {
+	return func(url string) ([]byte, string, error) {
+		// Try MinIO client first if available
+		minioClient := storage.GetMinIOClient()
+		if minioClient != nil && minioClient.IsMinIOURL(url) {
+			fmt.Printf("[ImageFetcher] Fetching from MinIO: %s\n", url)
+			return minioClient.GetFile(context.Background(), url)
+		}
+
+		// Fetch from external URL
+		fmt.Printf("[ImageFetcher] Fetching from external URL: %s\n", url)
+		return fetchImageFromURL(url)
+	}
+}
+
+// fetchImageFromURL fetches an image from an external URL.
+func fetchImageFromURL(url string) ([]byte, string, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to fetch image: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("failed to fetch image: status %d", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to read image data: %w", err)
+	}
+
+	mimeType := resp.Header.Get("Content-Type")
+	if mimeType == "" {
+		mimeType = http.DetectContentType(data)
+	}
+
+	return data, mimeType, nil
 }
 
 func (a *sessionAgent) getSessionMessages(ctx context.Context, session session.Session) ([]message.Message, error) {

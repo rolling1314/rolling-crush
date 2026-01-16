@@ -2,6 +2,7 @@ package message
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -79,9 +80,40 @@ func (iuc ImageURLContent) String() string {
 func (ImageURLContent) isPart() {}
 
 type BinaryContent struct {
-	Path     string
-	MIMEType string
-	Data     []byte
+	Path     string `json:"Path"`
+	MIMEType string `json:"MIMEType"`
+	Data     []byte `json:"-"` // Data is not serialized to DB, loaded on demand from Path URL
+}
+
+// BinaryContentForDB is used for JSON serialization to database.
+// Data field is always empty in DB, images are fetched from Path URL when needed.
+type BinaryContentForDB struct {
+	Path     string `json:"Path"`
+	MIMEType string `json:"MIMEType"`
+	Data     string `json:"Data"` // Always empty string in DB
+}
+
+// MarshalJSON implements custom JSON marshaling for BinaryContent.
+// It ensures Data is stored as empty string in database.
+func (bc BinaryContent) MarshalJSON() ([]byte, error) {
+	return json.Marshal(BinaryContentForDB{
+		Path:     bc.Path,
+		MIMEType: bc.MIMEType,
+		Data:     "", // Always empty - images are fetched from Path URL when needed
+	})
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for BinaryContent.
+// Data will be empty after unmarshaling, needs to be hydrated from Path URL.
+func (bc *BinaryContent) UnmarshalJSON(data []byte) error {
+	var dbContent BinaryContentForDB
+	if err := json.Unmarshal(data, &dbContent); err != nil {
+		return err
+	}
+	bc.Path = dbContent.Path
+	bc.MIMEType = dbContent.MIMEType
+	bc.Data = nil // Data needs to be hydrated from Path URL before sending to AI
+	return nil
 }
 
 func (bc BinaryContent) String(p catwalk.InferenceProvider) string {
@@ -173,6 +205,58 @@ func (m *Message) BinaryContent() []BinaryContent {
 		}
 	}
 	return binaryContents
+}
+
+// ImageFetcher is a function type that fetches image data from a URL.
+// Returns the image data, mime type, and any error.
+type ImageFetcher func(url string) (data []byte, mimeType string, err error)
+
+// HydrateBinaryContents fetches image data for all BinaryContent parts that have
+// a Path (URL) but no Data. This should be called before sending historical messages to AI.
+func (m *Message) HydrateBinaryContents(fetcher ImageFetcher) error {
+	if fetcher == nil {
+		return nil
+	}
+
+	for i, part := range m.Parts {
+		bc, ok := part.(BinaryContent)
+		if !ok {
+			continue
+		}
+
+		// Skip if already has data or no URL path
+		if len(bc.Data) > 0 || bc.Path == "" {
+			continue
+		}
+
+		fmt.Printf("[HydrateBinaryContents] Fetching image from URL: %s\n", bc.Path)
+		data, mimeType, err := fetcher(bc.Path)
+		if err != nil {
+			fmt.Printf("[HydrateBinaryContents] ❌ Failed to fetch image: %v\n", err)
+			return fmt.Errorf("failed to fetch image from %s: %w", bc.Path, err)
+		}
+
+		// Update the BinaryContent with fetched data
+		bc.Data = data
+		if mimeType != "" && bc.MIMEType == "" {
+			bc.MIMEType = mimeType
+		}
+		m.Parts[i] = bc
+		fmt.Printf("[HydrateBinaryContents] ✅ Image fetched: %d bytes, MIME: %s\n", len(data), bc.MIMEType)
+	}
+
+	return nil
+}
+
+// HydrateMessages hydrates binary contents for a slice of messages.
+// This is a convenience function to hydrate all messages at once.
+func HydrateMessages(msgs []Message, fetcher ImageFetcher) error {
+	for i := range msgs {
+		if err := msgs[i].HydrateBinaryContents(fetcher); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (m *Message) ToolCalls() []ToolCall {
