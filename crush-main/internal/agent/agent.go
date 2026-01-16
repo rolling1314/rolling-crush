@@ -378,9 +378,17 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 				}
 			}
 
-			// Update Redis for real-time status
+			// Update Redis for real-time status and publish to frontend
 			if a.redisCmd != nil {
 				_ = a.redisCmd.SetToolCallState(genCtx, redis.ToolCallState{
+					ID:        id,
+					SessionID: call.SessionID,
+					MessageID: currentAssistant.ID,
+					Name:      toolName,
+					Status:    "pending",
+				})
+				// Publish tool call update to frontend via Redis
+				_ = a.redisCmd.PublishToolCallUpdate(genCtx, redis.ToolCallUpdatePayload{
 					ID:        id,
 					SessionID: call.SessionID,
 					MessageID: currentAssistant.ID,
@@ -414,7 +422,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 				}
 			}
 
-			// Update Redis for real-time status
+			// Update Redis for real-time status and publish to frontend
 			if a.redisCmd != nil {
 				_ = a.redisCmd.SetToolCallState(genCtx, redis.ToolCallState{
 					ID:        tc.ToolCallID,
@@ -423,6 +431,15 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 					Name:      tc.ToolName,
 					Status:    "running",
 					Input:     tc.Input,
+				})
+				// Publish tool call update to frontend via Redis
+				_ = a.redisCmd.PublishToolCallUpdate(genCtx, redis.ToolCallUpdatePayload{
+					ID:        tc.ToolCallID,
+					SessionID: call.SessionID,
+					MessageID: currentAssistant.ID,
+					Name:      tc.ToolName,
+					Input:     tc.Input,
+					Status:    "running",
 				})
 			}
 
@@ -461,7 +478,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 				}
 			}
 
-			// Update Redis for real-time status
+			// Update Redis for real-time status and publish to frontend
 			if a.redisCmd != nil {
 				status := "completed"
 				if isError {
@@ -473,6 +490,17 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 					MessageID: currentAssistant.ID,
 					Name:      result.ToolName,
 					Status:    status,
+				})
+				// Publish tool call update to frontend via Redis
+				_ = a.redisCmd.PublishToolCallUpdate(genCtx, redis.ToolCallUpdatePayload{
+					ID:           result.ToolCallID,
+					SessionID:    call.SessionID,
+					MessageID:    currentAssistant.ID,
+					Name:         result.ToolName,
+					Status:       status,
+					Result:       resultContent,
+					IsError:      isError,
+					ErrorMessage: resultContent,
 				})
 			}
 

@@ -11,6 +11,7 @@ import (
 	"github.com/rolling1314/rolling-crush/domain/message"
 	"github.com/rolling1314/rolling-crush/domain/permission"
 	"github.com/rolling1314/rolling-crush/domain/session"
+	"github.com/rolling1314/rolling-crush/domain/toolcall"
 	"github.com/rolling1314/rolling-crush/internal/agent/tools/mcp"
 	"github.com/rolling1314/rolling-crush/internal/pkg/log"
 	"github.com/rolling1314/rolling-crush/internal/pubsub"
@@ -21,6 +22,7 @@ func (app *WSApp) setupEvents() {
 	app.eventsCtx = ctx
 	wsSetupSubscriber(ctx, app.serviceEventsWG, "sessions", app.Sessions.Subscribe, app.events)
 	wsSetupSubscriber(ctx, app.serviceEventsWG, "messages", app.Messages.Subscribe, app.events)
+	wsSetupSubscriber(ctx, app.serviceEventsWG, "toolcalls", app.ToolCalls.Subscribe, app.events)
 	wsSetupSubscriber(ctx, app.serviceEventsWG, "permissions", app.Permissions.Subscribe, app.events)
 	wsSetupSubscriber(ctx, app.serviceEventsWG, "permissions-notifications", app.Permissions.SubscribeNotifications, app.events)
 	wsSetupSubscriber(ctx, app.serviceEventsWG, "history", app.History.Subscribe, app.events)
@@ -108,6 +110,11 @@ func (app *WSApp) handleEvent(msg tea.Msg) {
 	// Send messages to specific session via WebSocket
 	if event, ok := msg.(pubsub.Event[message.Message]); ok {
 		app.handleMessageEvent(event)
+	}
+
+	// Send tool call updates to specific session via WebSocket
+	if event, ok := msg.(pubsub.Event[toolcall.ToolCall]); ok {
+		app.handleToolCallEvent(event)
 	}
 
 	// Send permission requests to specific session via WebSocket
@@ -204,6 +211,53 @@ func (app *WSApp) handlePermissionNotificationEvent(event pubsub.Event[permissio
 	isConnected, _ := app.connectedSessions.Get(sessionID)
 	if isConnected {
 		app.WSServer.SendToSession(sessionID, notifMsg)
+	}
+}
+
+// handleToolCallEvent handles tool call update events
+func (app *WSApp) handleToolCallEvent(event pubsub.Event[toolcall.ToolCall]) {
+	sessionID := event.Payload.SessionID
+	slog.Info("Tool call event received",
+		"event_type", event.Type,
+		"session_id", sessionID,
+		"tool_call_id", event.Payload.ID,
+		"name", event.Payload.Name,
+		"status", event.Payload.Status,
+	)
+
+	toolCallMsg := map[string]interface{}{
+		"Type":          "tool_call_update",
+		"id":            event.Payload.ID,
+		"session_id":    sessionID,
+		"message_id":    event.Payload.MessageID,
+		"name":          event.Payload.Name,
+		"input":         event.Payload.Input,
+		"status":        string(event.Payload.Status),
+		"result":        event.Payload.Result,
+		"is_error":      event.Payload.IsError,
+		"error_message": event.Payload.ErrorMessage,
+		"created_at":    event.Payload.CreatedAt,
+		"updated_at":    event.Payload.UpdatedAt,
+	}
+	if event.Payload.StartedAt != nil {
+		toolCallMsg["started_at"] = *event.Payload.StartedAt
+	}
+	if event.Payload.FinishedAt != nil {
+		toolCallMsg["finished_at"] = *event.Payload.FinishedAt
+	}
+
+	// Publish to Redis for buffering
+	if app.RedisStream != nil {
+		ctx := context.Background()
+		if err := app.RedisStream.PublishMessage(ctx, sessionID, "tool_call_update", toolCallMsg); err != nil {
+			slog.Warn("Failed to publish tool call update to Redis stream", "error", err)
+		}
+	}
+
+	// Send via WebSocket if connected
+	isConnected, _ := app.connectedSessions.Get(sessionID)
+	if isConnected {
+		app.WSServer.SendToSession(sessionID, toolCallMsg)
 	}
 }
 

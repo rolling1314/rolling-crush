@@ -61,6 +61,13 @@ development:
       bucket: "crush-images"
       use_ssl: true
 
+  # Auto 模型配置（用户选择 "Auto" 时使用的默认模型）
+  auto_model:
+    provider: "zhipu"                                    # 提供商 ID
+    model: "glm-4-plus"                                  # 模型 ID
+    api_key: "your-zhipu-api-key"                        # API Key
+    base_url: "https://open.bigmodel.cn/api/paas/v4"     # API 端点
+
 # 生产环境配置
 production:
   # 服务器配置
@@ -116,3 +123,10 @@ production:
       access_key_secret: "your-access-key-secret"
       bucket: "crush-images-prod"
       use_ssl: true
+
+  # Auto 模型配置（用户选择 "Auto" 时使用的默认模型）
+  auto_model:
+    provider: "zhipu"                                    # 提供商 ID
+    model: "glm-4-plus"                                  # 模型 ID
+    api_key: "your-zhipu-api-key"                        # API Key
+    base_url: "https://open.bigmodel.cn/api/paas/v4"     # API 端点

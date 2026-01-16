@@ -32,6 +32,8 @@ const (
 	CmdSessionUpdate CommandType = "session_update"
 	// CmdClientMessage forwards client message to WS service
 	CmdClientMessage CommandType = "client_message"
+	// CmdToolCallUpdate notifies about tool call status updates
+	CmdToolCallUpdate CommandType = "tool_call_update"
 )
 
 // Command represents an inter-service command
@@ -67,6 +69,19 @@ type ClientMessagePayload struct {
 	Denied     bool            `json:"denied"`
 	Images     json.RawMessage `json:"images,omitempty"`
 	LastMsgID  string          `json:"lastMsgId,omitempty"`
+}
+
+// ToolCallUpdatePayload is the payload for tool call status updates
+type ToolCallUpdatePayload struct {
+	ID           string `json:"id"`
+	SessionID    string `json:"session_id"`
+	MessageID    string `json:"message_id,omitempty"`
+	Name         string `json:"name"`
+	Input        string `json:"input,omitempty"`
+	Status       string `json:"status"` // pending, running, completed, error, cancelled
+	Result       string `json:"result,omitempty"`
+	IsError      bool   `json:"is_error"`
+	ErrorMessage string `json:"error_message,omitempty"`
 }
 
 // CommandService provides Redis pub/sub operations for inter-service communication.
@@ -152,6 +167,17 @@ func (s *CommandService) PublishClientMessage(ctx context.Context, sessionID str
 		SessionID: sessionID,
 		Payload:   payload,
 		Source:    "http",
+	})
+}
+
+// PublishToolCallUpdate publishes a tool call status update.
+func (s *CommandService) PublishToolCallUpdate(ctx context.Context, update ToolCallUpdatePayload) error {
+	payload, _ := json.Marshal(update)
+	return s.PublishCommand(ctx, Command{
+		Type:      CmdToolCallUpdate,
+		SessionID: update.SessionID,
+		Payload:   payload,
+		Source:    "ws",
 	})
 }
 

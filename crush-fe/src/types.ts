@@ -10,12 +10,15 @@ export type FileNode = {
 };
 
 // Tool call and result types
+export type ToolCallStatus = 'pending' | 'running' | 'completed' | 'error' | 'cancelled';
+
 export interface ToolCall {
   id: string;
   name: string;
   input: string;
   provider_executed?: boolean;
   finished: boolean;
+  status?: ToolCallStatus;  // Real-time status from backend
 }
 
 export interface ToolResult {

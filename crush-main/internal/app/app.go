@@ -124,7 +124,7 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 		connectedSessions: csync.NewMap[string, bool](),
 
 		WSServer:   apiws.New(),
-		HTTPServer: apihttp.New("8001", users, projects, sessions, messages, q, cfg),
+		HTTPServer: apihttp.New("8001", users, projects, sessions, messages, toolCalls, q, cfg),
 	}
 
 	// Initialize Redis client and stream service

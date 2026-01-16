@@ -280,6 +280,22 @@ export const ChatPanel = ({
     scrollToBottom();
   }, [messages]);
 
+  // Collect all tool results from all messages into a Map for lookup
+  const allToolResults = useMemo(() => {
+    const resultsMap = new Map<string, typeof messages[0]['toolResults'][0]>();
+    messages.forEach(msg => {
+      if (msg.toolResults) {
+        msg.toolResults.forEach(result => {
+          if (result.tool_call_id) {
+            resultsMap.set(result.tool_call_id, result);
+          }
+        });
+      }
+    });
+    console.log('All tool results collected:', resultsMap.size, 'results');
+    return resultsMap;
+  }, [messages]);
+
   const groupedMessages = useMemo(() => {
     const filtered = messages.filter((msg) => {
       const hasContent = msg.content && msg.content.trim();
@@ -616,14 +632,16 @@ export const ChatPanel = ({
                         {msg.toolCalls
                           .filter(tc => tc && tc.id && tc.name) // Only render valid tool calls
                           .map((toolCall) => {
-                            const result = msg.toolResults?.find(r => r.tool_call_id === toolCall.id);
+                            // Look up result from all messages, not just current message
+                            const result = allToolResults.get(toolCall.id) || msg.toolResults?.find(r => r.tool_call_id === toolCall.id);
                             const needsPermission = pendingPermissions.has(toolCall.id);
                             console.log('=== ChatPanel: Rendering ToolCall ===');
                             console.log('Tool Call ID:', toolCall.id);
                             console.log('Tool Call Name:', toolCall.name);
+                            console.log('Tool Call Status:', toolCall.status);
                             console.log('Pending permissions Map keys:', Array.from(pendingPermissions.keys()));
                             console.log('needsPermission:', needsPermission);
-                            console.log('Has result:', !!result);
+                            console.log('Has result:', !!result, result ? `(from ${result.name})` : '');
                             return (
                               <ToolCallDisplay
                                 key={toolCall.id}

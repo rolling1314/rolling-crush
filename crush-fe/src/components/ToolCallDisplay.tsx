@@ -538,15 +538,17 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
   console.log('onApprove:', typeof onApprove);
   console.log('onDeny:', typeof onDeny);
   console.log('finished:', toolCall.finished);
+  console.log('status:', toolCall.status);
   console.log('hasResult:', !!result);
   console.log('input preview:', toolCall.input?.substring(0, 100));
   
-  const isPending = !toolCall.finished && !result;
-  const isError = result?.is_error;
-  const isSuccess = result && !result.is_error;
-  // If tool call is finished (args generated) but no result yet, it is executing, not cancelled.
-  const isExecuting = toolCall.finished && !result;
-  const isCancelled = false; // We don't have a reliable way to detect cancellation yet
+  // Use status field if available, otherwise fall back to old logic
+  const status = toolCall.status;
+  const isPending = status ? status === 'pending' : (!toolCall.finished && !result);
+  const isError = status ? status === 'error' : result?.is_error;
+  const isSuccess = status ? status === 'completed' : (result && !result.is_error);
+  const isExecuting = status ? status === 'running' : (toolCall.finished && !result);
+  const isCancelled = status === 'cancelled';
 
   // Parse parameters - handle empty/undefined input
   const { main: mainParam, extra: extraParams } = useMemo(() => 
@@ -756,14 +758,8 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
     // Render based on tool type
     switch (toolCall.name) {
       case 'view': {
-        const filePath = metadata.file_path as string || mainParam;
-        const content = (metadata.content as string) || result.content;
-        const offset = parseInt(extraParams.offset || '0', 10);
-        return (
-          <div className="pl-4 mt-2">
-            <CodeContent content={content} startLine={offset + 1} filePath={filePath} />
-          </div>
-        );
+        // Don't show file content for view tool - just show success
+        return null;
       }
 
       case 'edit':
@@ -818,6 +814,10 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
         }
         return null;
       }
+
+      case 'ls':
+        // Don't show directory listing content
+        return null;
 
       default:
         if (result.content && result.content.trim()) {

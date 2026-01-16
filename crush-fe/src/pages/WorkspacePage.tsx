@@ -7,7 +7,7 @@ import { ChatSidebar } from '../components/ChatSidebar';
 import { FileTree } from '../components/FileTree';
 import { CodeEditor } from '../components/CodeEditor';
 import { InlineChatModelSelector } from '../components/InlineChatModelSelector';
-import { type FileNode, type Message, type PermissionRequest, type ToolCall, type ToolResult, type Session } from '../types';
+import { type FileNode, type Message, type PermissionRequest, type ToolCall, type ToolResult, type Session, type ToolCallStatus } from '../types';
 
 const API_URL = '/api';
 const WS_URL = '/ws';
@@ -478,6 +478,40 @@ export default function WorkspacePage() {
       return; // 立即返回
     }
     
+    // 处理工具调用状态更新
+    if (data.Type === 'tool_call_update' || data.type === 'tool_call_update') {
+      console.log('=== Tool call update received ===');
+      console.log('Tool call ID:', data.id);
+      console.log('Status:', data.status);
+      console.log('Name:', data.name);
+      console.log('Message ID:', data.message_id);
+      
+      // 更新消息中的工具调用状态
+      setMessages(prev => {
+        return prev.map(msg => {
+          if (msg.toolCalls && msg.toolCalls.length > 0) {
+            const updatedToolCalls = msg.toolCalls.map(tc => {
+              if (tc.id === data.id) {
+                const newStatus = data.status as ToolCallStatus;
+                const isFinished = newStatus === 'completed' || newStatus === 'error' || newStatus === 'cancelled';
+                console.log('Updating tool call:', tc.id, 'from', tc.status, 'to', newStatus, 'finished:', isFinished);
+                return {
+                  ...tc,
+                  status: newStatus,
+                  finished: isFinished,
+                  input: data.input || tc.input,
+                };
+              }
+              return tc;
+            });
+            return { ...msg, toolCalls: updatedToolCalls };
+          }
+          return msg;
+        });
+      });
+      return; // 立即返回
+    }
+    
     // 后端直接广播 message.Message 对象
     // 支持大写和小写字段名（ID/id, Role/role, Parts/parts）
     const msgId = data.ID || data.id;
@@ -617,15 +651,24 @@ export default function WorkspacePage() {
         }
         // 解析 tool_call
         if (part.name && part.input !== undefined && (part.id || part.ID)) {
+          // Determine status based on finished flag
+          let status: ToolCallStatus | undefined;
+          if (part.finished === true) {
+            status = 'completed';
+          } else if (part.finished === false) {
+            status = 'running';
+          }
+          
           const toolCall: ToolCall = {
             id: part.id || part.ID,
             name: part.name,
             input: part.input,
             finished: part.finished ?? true,
-            provider_executed: part.provider_executed ?? false
+            provider_executed: part.provider_executed ?? false,
+            status: status,
           };
           toolCalls.push(toolCall);
-          console.log('Found tool call:', toolCall.id, toolCall.name);
+          console.log('Found tool call:', toolCall.id, toolCall.name, 'finished:', part.finished, 'status:', status);
         }
         // 解析 tool_result
         if (part.content !== undefined && (part.tool_call_id || part.ToolCallID)) {
@@ -807,16 +850,25 @@ export default function WorkspacePage() {
               const toolCallId = part.id || part.ID;
               const toolCallState = toolCallStates.get(toolCallId);
               
+              // Determine status from database or message part
+              let status: ToolCallStatus | undefined;
+              if (toolCallState?.status) {
+                status = toolCallState.status as ToolCallStatus;
+              } else if (part.finished) {
+                status = 'completed';  // Default to completed if finished flag is set
+              }
+              
               // Merge tool call state from database if available
               const toolCall: ToolCall = {
                 id: toolCallId,
                 name: part.name,
                 input: toolCallState?.input || part.input || '{}',
                 finished: toolCallState ? (toolCallState.status === 'completed' || toolCallState.status === 'error' || toolCallState.status === 'cancelled') : (part.finished ?? true),
-                provider_executed: part.provider_executed ?? false
+                provider_executed: part.provider_executed ?? false,
+                status: status,
               };
               toolCalls.push(toolCall);
-              console.log('History: Found tool call:', toolCall.id, toolCall.name, 'status:', toolCallState?.status);
+              console.log('History: Found tool call:', toolCall.id, toolCall.name, 'status:', status, 'db status:', toolCallState?.status);
             }
             // 解析 tool_result - 检查是否有 tool_call_id 字段
             if (part.content !== undefined && (part.tool_call_id || part.ToolCallID)) {
