@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, memo, useCallback } from 'react';
 import { Send, X, File as FileIcon, Folder as FolderIcon, ChevronDown, ChevronRight, Sparkles, Square, Copy, Check, ImagePlus, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -23,7 +23,7 @@ interface ChatPanelProps {
   onFileClick?: (filePath: string) => void;
 }
 
-const ThinkingProcess = ({ reasoning, isStreaming, hasContent }: { reasoning: string, isStreaming: boolean, hasContent: boolean }) => {
+const ThinkingProcess = memo(({ reasoning, isStreaming, hasContent }: { reasoning: string, isStreaming: boolean, hasContent: boolean }) => {
   const [isOpen, setIsOpen] = useState(false);
   
   // We consider it "actively thinking" if the message is streaming AND there is no content yet.
@@ -76,10 +76,10 @@ const ThinkingProcess = ({ reasoning, isStreaming, hasContent }: { reasoning: st
         )}
     </div>
   );
-};
+});
 
 // Component to display images in a message
-const MessageImages = ({ images }: { images: ImageAttachment[] }) => {
+const MessageImages = memo(({ images }: { images: ImageAttachment[] }) => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   
   if (!images || images.length === 0) return null;
@@ -124,9 +124,9 @@ const MessageImages = ({ images }: { images: ImageAttachment[] }) => {
       )}
     </>
   );
-};
+});
 
-const UserMessageRenderer = ({ content, images }: { content: string; images?: ImageAttachment[] }) => {
+const UserMessageRenderer = memo(({ content, images }: { content: string; images?: ImageAttachment[] }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   
   const { text, files } = useMemo(() => {
@@ -250,9 +250,214 @@ const UserMessageRenderer = ({ content, images }: { content: string; images?: Im
       )}
     </div>
   );
-};
+});
 
-export const ChatPanel = ({ 
+// Memoized message group component to avoid re-rendering unchanged messages
+const MessageGroup = memo(({ 
+  group, 
+  allToolResults, 
+  pendingPermissions,
+  onPermissionApprove,
+  onPermissionDeny,
+  onFileClick
+}: {
+  group: Message[];
+  allToolResults: Map<string, any>;
+  pendingPermissions: Map<string, PermissionRequest>;
+  onPermissionApprove: (toolCallId: string) => void;
+  onPermissionDeny: (toolCallId: string) => void;
+  onFileClick?: (filePath: string) => void;
+}) => {
+  const firstMsg = group[0];
+  const isUser = firstMsg.role === 'user';
+  
+  return (
+    <div
+      className={cn(
+        "flex gap-3 message-container streaming-message",
+        isUser ? "ml-auto w-fit max-w-[80%] justify-end" : "w-full"
+      )}
+    >
+      <div className={cn(
+        "flex flex-col gap-2 flex-1 min-w-0 p-3 rounded-lg text-sm leading-relaxed",
+        isUser 
+          ? "bg-blue-600/10 text-blue-100 border border-blue-600/20" 
+          : "text-gray-200 px-0"
+      )}>
+        {group.map((msg, index) => (
+          <React.Fragment key={msg.id}>
+            {index > 0 && <div className="w-full h-px bg-[#333] my-2" />}
+            
+            <div className="flex flex-col gap-2">
+              {/* Reasoning content (Collapsible) */}
+              {msg.reasoning && (
+                <ThinkingProcess 
+                    reasoning={msg.reasoning}
+                    isStreaming={!!msg.isStreaming}
+                    hasContent={!!msg.content}
+                />
+              )}
+              
+              {/* Tool Calls - filter out invalid ones */}
+              {msg.toolCalls && msg.toolCalls.length > 0 && (
+                <div className="space-y-2">
+                  {msg.toolCalls
+                    .filter(tc => tc && tc.id && tc.name) // Only render valid tool calls
+                    .map((toolCall) => {
+                      // Look up result from all messages, not just current message
+                      const result = allToolResults.get(toolCall.id) || msg.toolResults?.find(r => r.tool_call_id === toolCall.id);
+                      const needsPermission = pendingPermissions.has(toolCall.id);
+                      return (
+                        <ToolCallDisplay
+                          key={toolCall.id}
+                          toolCall={toolCall}
+                          result={result}
+                          needsPermission={needsPermission}
+                          onApprove={onPermissionApprove}
+                          onDeny={onPermissionDeny}
+                          onFileClick={onFileClick}
+                        />
+                      );
+                    })}
+                </div>
+              )}
+              
+              {/* Main content */}
+              {msg.content && (
+                <div className={cn(
+                  "prose prose-invert prose-sm max-w-none streaming-content",
+                  msg.isStreaming && "streaming-cursor"
+                )}>
+                  {msg.role === 'assistant' || msg.role === 'tool' ? (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[rehypeHighlight]}
+                      components={{
+                        code: ({node, inline, className, children, ...props}: any) => {
+                          if (inline) {
+                            return (
+                              <code className="bg-gray-800 px-1.5 py-0.5 rounded text-xs font-mono text-green-400" {...props}>
+                                {children}
+                              </code>
+                            );
+                          }
+                          
+                          const [copied, setCopied] = useState(false);
+                          const handleCopy = () => {
+                            const text = String(children).replace(/\n$/, '');
+                            navigator.clipboard.writeText(text);
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 2000);
+                          };
+
+                          return (
+                            <div className="relative group my-2">
+                              <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                                <button
+                                  onClick={handleCopy}
+                                  className="p-1.5 bg-gray-700/80 hover:bg-gray-600 rounded text-gray-300 hover:text-white transition-colors backdrop-blur-sm"
+                                  title="Copy code"
+                                >
+                                  {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                                </button>
+                              </div>
+                              <code className={cn("block bg-gray-900 p-3 rounded-md overflow-x-auto text-xs", className)} {...props}>
+                                {children}
+                              </code>
+                            </div>
+                          );
+                        },
+                        pre: ({children, ...props}: any) => (
+                          <pre className="bg-transparent p-0 m-0" {...props}>
+                            {children}
+                          </pre>
+                        ),
+                        p: ({children, ...props}: any) => (
+                          <p className="mb-2 last:mb-0 leading-relaxed" {...props}>
+                            {children}
+                          </p>
+                        ),
+                        ul: ({children, ...props}: any) => (
+                          <ul className="list-disc list-inside mb-2 space-y-1" {...props}>
+                            {children}
+                          </ul>
+                        ),
+                        ol: ({children, ...props}: any) => (
+                          <ol className="list-decimal list-inside mb-2 space-y-1" {...props}>
+                            {children}
+                          </ol>
+                        ),
+                        li: ({children, ...props}: any) => (
+                          <li className="ml-2" {...props}>
+                            {children}
+                          </li>
+                        ),
+                        h1: ({children, ...props}: any) => (
+                          <h1 className="text-lg font-bold mb-2 mt-3 first:mt-0" {...props}>
+                            {children}
+                          </h1>
+                        ),
+                        h2: ({children, ...props}: any) => (
+                          <h2 className="text-base font-bold mb-2 mt-3 first:mt-0" {...props}>
+                            {children}
+                          </h2>
+                        ),
+                        h3: ({children, ...props}: any) => (
+                          <h3 className="text-sm font-bold mb-2 mt-2 first:mt-0" {...props}>
+                            {children}
+                          </h3>
+                        ),
+                        blockquote: ({children, ...props}: any) => (
+                          <blockquote className="border-l-4 border-gray-600 pl-3 italic my-2" {...props}>
+                            {children}
+                          </blockquote>
+                        ),
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
+                  ) : (
+                    <UserMessageRenderer content={msg.content} images={msg.images} />
+                  )}
+                  {msg.isStreaming && (
+                    <span className="inline-block w-1.5 h-4 ml-1 bg-green-500 animate-pulse align-middle"></span>
+                  )}
+                </div>
+              )}
+            </div>
+          </React.Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}, (prevProps, nextProps) => {
+  // Only re-render if the group's messages actually changed
+  const prevGroup = prevProps.group;
+  const nextGroup = nextProps.group;
+  
+  // Check if group length or message IDs changed
+  if (prevGroup.length !== nextGroup.length) return false;
+  
+  // Check if any message in the group changed
+  for (let i = 0; i < prevGroup.length; i++) {
+    const prevMsg = prevGroup[i];
+    const nextMsg = nextGroup[i];
+    
+    if (
+      prevMsg.id !== nextMsg.id ||
+      prevMsg.content !== nextMsg.content ||
+      prevMsg.isStreaming !== nextMsg.isStreaming ||
+      prevMsg.toolCalls?.length !== nextMsg.toolCalls?.length
+    ) {
+      return false;
+    }
+  }
+  
+  // Check if pending permissions changed for this group
+  return prevProps.pendingPermissions === nextProps.pendingPermissions;
+});
+
+export const ChatPanel = memo(({ 
   messages, 
   session,
   onSendMessage,
@@ -272,13 +477,32 @@ export const ChatPanel = ({
   const inputContainerRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  // Use a ref to track if we should auto-scroll
+  const shouldAutoScrollRef = useRef(true);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  const scrollToBottom = useCallback(() => {
+    if (shouldAutoScrollRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, []);
+
+  // Check if user has scrolled up
+  const handleScroll = useCallback(() => {
+    if (!scrollContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+    shouldAutoScrollRef.current = isNearBottom;
+  }, []);
+
+  // Scroll when messages change (new messages, content updates, or streaming)
+  const messageCount = messages.length;
+  const lastMessageId = messages[messages.length - 1]?.id;
+  const lastMessageContent = messages[messages.length - 1]?.content;
+  const lastMessageIsStreaming = messages[messages.length - 1]?.isStreaming;
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messageCount, lastMessageId, lastMessageContent, lastMessageIsStreaming, scrollToBottom]);
 
   // Collect all tool results from all messages into a Map for lookup
   const allToolResults = useMemo(() => {
@@ -332,6 +556,10 @@ export const ChatPanel = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() && attachedFiles.length === 0 && attachedImages.length === 0) return;
+    
+    // Force scroll to bottom when user sends a message
+    shouldAutoScrollRef.current = true;
+    
     onSendMessage(input, attachedFiles, attachedImages);
     setInput('');
     setAttachedFiles([]);
@@ -581,7 +809,11 @@ export const ChatPanel = ({
         )}
       </div>
       
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div 
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto p-4 space-y-4"
+      >
         {/* Welcome message for new chat */}
         {groupedMessages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center">
@@ -594,177 +826,17 @@ export const ChatPanel = ({
             </p>
           </div>
         )}
-        {groupedMessages.map((group) => {
-          const firstMsg = group[0];
-          const isUser = firstMsg.role === 'user';
-          
-          return (
-          <div
-            key={firstMsg.id}
-            className={cn(
-              "flex gap-3 message-container streaming-message",
-              isUser ? "ml-auto w-fit max-w-[80%] justify-end" : "w-full"
-            )}
-          >
-            <div className={cn(
-              "flex flex-col gap-2 flex-1 min-w-0 p-3 rounded-lg text-sm leading-relaxed",
-              isUser 
-                ? "bg-blue-600/10 text-blue-100 border border-blue-600/20" 
-                : "text-gray-200 px-0"
-            )}>
-              {group.map((msg, index) => (
-                <React.Fragment key={msg.id}>
-                  {index > 0 && <div className="w-full h-px bg-[#333] my-2" />}
-                  
-                  <div className="flex flex-col gap-2">
-                    {/* Reasoning content (Collapsible) */}
-                    {msg.reasoning && (
-                      <ThinkingProcess 
-                          reasoning={msg.reasoning}
-                          isStreaming={!!msg.isStreaming}
-                          hasContent={!!msg.content}
-                      />
-                    )}
-                    
-                    {/* Tool Calls - filter out invalid ones */}
-                    {msg.toolCalls && msg.toolCalls.length > 0 && (
-                      <div className="space-y-2">
-                        {msg.toolCalls
-                          .filter(tc => tc && tc.id && tc.name) // Only render valid tool calls
-                          .map((toolCall) => {
-                            // Look up result from all messages, not just current message
-                            const result = allToolResults.get(toolCall.id) || msg.toolResults?.find(r => r.tool_call_id === toolCall.id);
-                            const needsPermission = pendingPermissions.has(toolCall.id);
-                            console.log('=== ChatPanel: Rendering ToolCall ===');
-                            console.log('Tool Call ID:', toolCall.id);
-                            console.log('Tool Call Name:', toolCall.name);
-                            console.log('Tool Call Status:', toolCall.status);
-                            console.log('Pending permissions Map keys:', Array.from(pendingPermissions.keys()));
-                            console.log('needsPermission:', needsPermission);
-                            console.log('Has result:', !!result, result ? `(from ${result.name})` : '');
-                            return (
-                              <ToolCallDisplay
-                                key={toolCall.id}
-                                toolCall={toolCall}
-                                result={result}
-                                needsPermission={needsPermission}
-                                onApprove={onPermissionApprove}
-                                onDeny={onPermissionDeny}
-                                onFileClick={onFileClick}
-                              />
-                            );
-                          })}
-                      </div>
-                    )}
-                    
-                    {/* Main content */}
-                    {msg.content && (
-                      <div className={cn(
-                        "prose prose-invert prose-sm max-w-none streaming-content",
-                        msg.isStreaming && "streaming-cursor"
-                      )}>
-                        {msg.role === 'assistant' || msg.role === 'tool' ? (
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            rehypePlugins={[rehypeHighlight]}
-                            components={{
-                              code: ({node, inline, className, children, ...props}: any) => {
-                                if (inline) {
-                                  return (
-                                    <code className="bg-gray-800 px-1.5 py-0.5 rounded text-xs font-mono text-green-400" {...props}>
-                                      {children}
-                                    </code>
-                                  );
-                                }
-                                
-                                const [copied, setCopied] = useState(false);
-                                const handleCopy = () => {
-                                  const text = String(children).replace(/\n$/, '');
-                                  navigator.clipboard.writeText(text);
-                                  setCopied(true);
-                                  setTimeout(() => setCopied(false), 2000);
-                                };
-
-                                return (
-                                  <div className="relative group my-2">
-                                    <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                                      <button
-                                        onClick={handleCopy}
-                                        className="p-1.5 bg-gray-700/80 hover:bg-gray-600 rounded text-gray-300 hover:text-white transition-colors backdrop-blur-sm"
-                                        title="Copy code"
-                                      >
-                                        {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
-                                      </button>
-                                    </div>
-                                    <code className={cn("block bg-gray-900 p-3 rounded-md overflow-x-auto text-xs", className)} {...props}>
-                                      {children}
-                                    </code>
-                                  </div>
-                                );
-                              },
-                              pre: ({children, ...props}: any) => (
-                                <pre className="bg-transparent p-0 m-0" {...props}>
-                                  {children}
-                                </pre>
-                              ),
-                              p: ({children, ...props}: any) => (
-                                <p className="mb-2 last:mb-0 leading-relaxed" {...props}>
-                                  {children}
-                                </p>
-                              ),
-                              ul: ({children, ...props}: any) => (
-                                <ul className="list-disc list-inside mb-2 space-y-1" {...props}>
-                                  {children}
-                                </ul>
-                              ),
-                              ol: ({children, ...props}: any) => (
-                                <ol className="list-decimal list-inside mb-2 space-y-1" {...props}>
-                                  {children}
-                                </ol>
-                              ),
-                              li: ({children, ...props}: any) => (
-                                <li className="ml-2" {...props}>
-                                  {children}
-                                </li>
-                              ),
-                              h1: ({children, ...props}: any) => (
-                                <h1 className="text-lg font-bold mb-2 mt-3 first:mt-0" {...props}>
-                                  {children}
-                                </h1>
-                              ),
-                              h2: ({children, ...props}: any) => (
-                                <h2 className="text-base font-bold mb-2 mt-3 first:mt-0" {...props}>
-                                  {children}
-                                </h2>
-                              ),
-                              h3: ({children, ...props}: any) => (
-                                <h3 className="text-sm font-bold mb-2 mt-2 first:mt-0" {...props}>
-                                  {children}
-                                </h3>
-                              ),
-                              blockquote: ({children, ...props}: any) => (
-                                <blockquote className="border-l-4 border-gray-600 pl-3 italic my-2" {...props}>
-                                  {children}
-                                </blockquote>
-                              ),
-                            }}
-                          >
-                            {msg.content}
-                          </ReactMarkdown>
-                        ) : (
-                          <UserMessageRenderer content={msg.content} images={msg.images} />
-                        )}
-                        {msg.isStreaming && (
-                          <span className="inline-block w-1.5 h-4 ml-1 bg-green-500 animate-pulse align-middle"></span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </React.Fragment>
-              ))}
-            </div>
-          </div>
-        )})}
+        {groupedMessages.map((group) => (
+          <MessageGroup
+            key={group[0].id}
+            group={group}
+            allToolResults={allToolResults}
+            pendingPermissions={pendingPermissions}
+            onPermissionApprove={onPermissionApprove}
+            onPermissionDeny={onPermissionDeny}
+            onFileClick={onFileClick}
+          />
+        ))}
         <div ref={messagesEndRef} />
       </div>
 
@@ -884,4 +956,16 @@ export const ChatPanel = ({
       </div>
     </div>
   );
-};
+}, (prevProps, nextProps) => {
+  // Custom comparison function for memo
+  // Only re-render if these props actually change
+  return (
+    prevProps.messages === nextProps.messages &&
+    prevProps.session?.id === nextProps.session?.id &&
+    prevProps.session?.cost === nextProps.session?.cost &&
+    prevProps.session?.prompt_tokens === nextProps.session?.prompt_tokens &&
+    prevProps.session?.completion_tokens === nextProps.session?.completion_tokens &&
+    prevProps.pendingPermissions === nextProps.pendingPermissions &&
+    prevProps.isProcessing === nextProps.isProcessing
+  );
+});

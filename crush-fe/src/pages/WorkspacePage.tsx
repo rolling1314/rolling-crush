@@ -446,35 +446,45 @@ export default function WorkspacePage() {
     // 处理 Session 更新 - 实时更新上下文和费用（复用 TUI 的 PubSub 机制）
     if (data.Type === 'session_update' || data.type === 'session_update') {
       console.log('=== Session update received ===');
-      console.log('Full data:', data);
       console.log('Session ID:', data.id);
-      console.log('Prompt tokens:', data.prompt_tokens);
-      console.log('Completion tokens:', data.completion_tokens);
-      console.log('Total tokens:', data.prompt_tokens + data.completion_tokens);
-      console.log('Context window:', data.context_window);
+      console.log('Tokens:', data.prompt_tokens + data.completion_tokens);
       console.log('Cost:', data.cost);
-      console.log('Percentage:', ((data.prompt_tokens + data.completion_tokens) / data.context_window * 100).toFixed(2) + '%');
       
-      setSessions(prev => {
-        const updated = prev.map(s => {
-          if (s.id === data.id) {
-            // 更新session信息（像 TUI 的 header/sidebar 组件一样）
-            const updatedSession = {
-              ...s,
-              prompt_tokens: data.prompt_tokens,
-              completion_tokens: data.completion_tokens,
-              cost: data.cost,
-              context_window: data.context_window,
-              message_count: data.message_count,
-              updated_at: data.updated_at
-            };
-            console.log('Updated session:', updatedSession);
-            return updatedSession;
+      // 优化：只更新当前正在查看的 session，减少不必要的状态更新
+      if (data.id === currentSessionIdRef.current) {
+        setSessions(prev => {
+          const targetIndex = prev.findIndex(s => s.id === data.id);
+          if (targetIndex === -1) return prev;
+          
+          const targetSession = prev[targetIndex];
+          
+          // 检查是否真的有变化，避免不必要的更新
+          const hasChanges = 
+            targetSession.prompt_tokens !== data.prompt_tokens ||
+            targetSession.completion_tokens !== data.completion_tokens ||
+            targetSession.cost !== data.cost ||
+            targetSession.context_window !== data.context_window ||
+            targetSession.message_count !== data.message_count;
+          
+          if (!hasChanges) {
+            return prev; // 没有变化，不更新
           }
-          return s;
+          
+          // 创建新数组，只替换变化的 session
+          const updated = [...prev];
+          updated[targetIndex] = {
+            ...targetSession,
+            prompt_tokens: data.prompt_tokens,
+            completion_tokens: data.completion_tokens,
+            cost: data.cost,
+            context_window: data.context_window,
+            message_count: data.message_count,
+            updated_at: data.updated_at
+          };
+          
+          return updated;
         });
-        return updated;
-      });
+      }
       return; // 立即返回
     }
     
@@ -616,22 +626,34 @@ export default function WorkspacePage() {
 
   // Helper function to handle session update messages
   const handleSessionUpdateMessage = (payload: any) => {
-    setSessions(prev => {
-      return prev.map(s => {
-        if (s.id === payload.id) {
-          return {
-            ...s,
-            prompt_tokens: payload.prompt_tokens,
-            completion_tokens: payload.completion_tokens,
-            cost: payload.cost,
-            context_window: payload.context_window,
-            message_count: payload.message_count,
-            updated_at: payload.updated_at
-          };
-        }
-        return s;
+    // 优化：只更新当前 session
+    if (payload.id === currentSessionIdRef.current) {
+      setSessions(prev => {
+        const targetIndex = prev.findIndex(s => s.id === payload.id);
+        if (targetIndex === -1) return prev;
+        
+        const targetSession = prev[targetIndex];
+        const hasChanges = 
+          targetSession.prompt_tokens !== payload.prompt_tokens ||
+          targetSession.completion_tokens !== payload.completion_tokens ||
+          targetSession.cost !== payload.cost;
+        
+        if (!hasChanges) return prev;
+        
+        const updated = [...prev];
+        updated[targetIndex] = {
+          ...targetSession,
+          prompt_tokens: payload.prompt_tokens,
+          completion_tokens: payload.completion_tokens,
+          cost: payload.cost,
+          context_window: payload.context_window,
+          message_count: payload.message_count,
+          updated_at: payload.updated_at
+        };
+        
+        return updated;
       });
-    });
+    }
   };
 
   const convertBackendMessageToFrontend = (backendMsg: any): Message => {

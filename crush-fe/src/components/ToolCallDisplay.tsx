@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, memo } from 'react';
 import CodeMirror, { EditorView, Decoration, RangeSetBuilder } from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { vscodeDark } from '@uiw/codemirror-theme-vscode';
@@ -520,7 +520,7 @@ const DiffContent: React.FC<{ oldContent: string; newContent: string; fileName?:
   );
 };
 
-export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
+export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = memo(({
   toolCall,
   result,
   onApprove,
@@ -927,4 +927,13 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
       {isBodyExpanded && renderBody()}
     </div>
   );
-};
+}, (prevProps, nextProps) => {
+  // Only re-render if tool call status, result, or permission status changes
+  return (
+    prevProps.toolCall.id === nextProps.toolCall.id &&
+    prevProps.toolCall.status === nextProps.toolCall.status &&
+    prevProps.toolCall.finished === nextProps.toolCall.finished &&
+    prevProps.result === nextProps.result &&
+    prevProps.needsPermission === nextProps.needsPermission
+  );
+});

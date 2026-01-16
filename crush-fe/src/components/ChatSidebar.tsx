@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { 
   Plus, 
   MessageSquare, 
@@ -27,7 +27,7 @@ interface ChatSidebarProps {
   maxWidth?: number; // Maximum width when expanded (1/4 of chat panel)
 }
 
-export const ChatSidebar: React.FC<ChatSidebarProps> = ({
+export const ChatSidebar: React.FC<ChatSidebarProps> = memo(({
   sessions,
   currentSessionId,
   isPendingSession,
@@ -293,4 +293,14 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       </div>
     </div>
   );
-};
+}, (prevProps, nextProps) => {
+  // Only re-render if sessions array changes length, current session changes, or pending session status changes
+  // Don't re-render on session token/cost updates
+  return (
+    prevProps.sessions.length === nextProps.sessions.length &&
+    prevProps.currentSessionId === nextProps.currentSessionId &&
+    prevProps.isPendingSession === nextProps.isPendingSession &&
+    prevProps.username === nextProps.username &&
+    prevProps.maxWidth === nextProps.maxWidth
+  );
+});
