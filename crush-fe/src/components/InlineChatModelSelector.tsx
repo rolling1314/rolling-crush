@@ -303,12 +303,15 @@ export function InlineChatModelSelector({
       }
     } else {
       // 新会话，只更新本地状态
-      onConfigChange({
+      const newConfig = {
         ...selectedConfig,
         provider: provider,
         model: model,
-        api_key: tempApiKey
-      });
+        api_key: tempApiKey,
+        is_auto: false
+      };
+      console.log('[handleSaveApiKey] New session - updating local state with:', JSON.stringify(newConfig, null, 2));
+      onConfigChange(newConfig);
       setTempApiKey('');
       setLocalSelection(null);
       setShowApiKeyInput(false);
@@ -453,7 +456,7 @@ export function InlineChatModelSelector({
                     Saving...
                   </>
                 ) : (
-                  'Save & Continue'
+                  isExistingSession ? 'Save Configuration' : 'Confirm Selection'
                 )}
               </button>
               

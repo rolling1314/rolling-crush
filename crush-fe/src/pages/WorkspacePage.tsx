@@ -1040,7 +1040,11 @@ export default function WorkspacePage() {
           api_key: config.api_key,
           base_url: config.base_url,
         };
+        // Explicitly set is_auto to false to prevent ambiguity
+        requestBody.is_auto = false;
       }
+      
+      console.log('createSessionWithConfig sending request:', JSON.stringify(requestBody, null, 2));
       
       const response = await axios.post(`${API_URL}/sessions`, requestBody, {
         headers: { Authorization: `Bearer ${token}` }
@@ -1071,6 +1075,12 @@ export default function WorkspacePage() {
   const handleSendMessage = async (content: string, contextFiles: FileNode[] = [], images: { url: string; filename: string; mime_type: string }[] = []) => {
     let sessionId = currentSessionId;
     
+    // Debug: log current config state
+    console.log('=== handleSendMessage called ===');
+    console.log('isPendingSession:', isPendingSession);
+    console.log('currentSessionId:', currentSessionId);
+    console.log('pendingModelConfig:', JSON.stringify(pendingModelConfig, null, 2));
+    
     // If this is a pending session, create the session first
     if (isPendingSession || !sessionId) {
       console.log('Creating session for pending session...');
@@ -1087,6 +1097,7 @@ export default function WorkspacePage() {
       }
       
       // Create session with config
+      console.log('Calling createSessionWithConfig with:', JSON.stringify(pendingModelConfig, null, 2));
       const newSessionId = await createSessionWithConfig(pendingModelConfig, content);
       if (!newSessionId) {
         return; // Creation failed, error already shown

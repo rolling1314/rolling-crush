@@ -974,6 +974,8 @@ export const ChatPanel = memo(({
     prevProps.session?.prompt_tokens === nextProps.session?.prompt_tokens &&
     prevProps.session?.completion_tokens === nextProps.session?.completion_tokens &&
     prevProps.pendingPermissions === nextProps.pendingPermissions &&
-    prevProps.isProcessing === nextProps.isProcessing
+    prevProps.isProcessing === nextProps.isProcessing &&
+    prevProps.onSendMessage === nextProps.onSendMessage &&
+    prevProps.sessionConfigComponent === nextProps.sessionConfigComponent
   );
 });

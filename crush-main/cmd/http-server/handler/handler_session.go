@@ -28,7 +28,20 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 	// Determine model config to use
 	modelConfig := req.ModelConfig
 
-	// If is_auto or no model config provided, use auto model from config
+	slog.Info("handleCreateSession: Model selection logic",
+		"req.IsAuto", req.IsAuto,
+		"req.ModelConfig_Provided", req.ModelConfig != nil,
+	)
+	if req.ModelConfig != nil {
+		slog.Info("handleCreateSession: Provided config details",
+			"provider", req.ModelConfig.Provider,
+			"model", req.ModelConfig.Model,
+			"has_api_key", req.ModelConfig.APIKey != "",
+		)
+	}
+
+	// If is_auto is explicitly true, OR no model config provided, use auto model from config
+	// This allows the frontend to send is_auto: false with a specific model config
 	if req.IsAuto || modelConfig == nil {
 		appCfg := config.GetGlobalAppConfig()
 		if appCfg.AutoModel.Provider != "" && appCfg.AutoModel.Model != "" {
@@ -38,8 +51,12 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 				APIKey:   appCfg.AutoModel.APIKey,
 				BaseURL:  appCfg.AutoModel.BaseURL,
 			}
-			slog.Info("Using auto model config", "provider", modelConfig.Provider, "model", modelConfig.Model)
+			slog.Info("Using auto model config", "provider", modelConfig.Provider, "model", modelConfig.Model, "session_id", sess.ID)
+		} else {
+			slog.Warn("Auto model requested but not configured in global config", "session_id", sess.ID)
 		}
+	} else {
+		slog.Info("Using provided model config", "provider", modelConfig.Provider, "model", modelConfig.Model, "session_id", sess.ID)
 	}
 
 	// Save model config using TUI's exact logic, writing to database instead of file
