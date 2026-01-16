@@ -346,7 +346,15 @@ export default function WorkspacePage() {
   const handleWebSocketMessage = (data: any) => {
     console.log('=== WebSocket message received ===');
     console.log('Type:', data.Type || data.type);
-    console.log('Data:', data);
+    console.log('Raw data keys:', Object.keys(data));
+    console.log('Has ID:', !!data.ID, 'Has id:', !!data.id);
+    console.log('Has Role:', !!data.Role, 'Has role:', !!data.role);
+    console.log('Has Parts:', !!data.Parts, 'Has parts:', !!data.parts);
+    if (data.Parts || data.parts) {
+      console.log('Parts count:', (data.Parts || data.parts)?.length);
+      console.log('Parts preview:', JSON.stringify((data.Parts || data.parts)?.slice(0, 2)));
+    }
+    console.log('Full data:', JSON.stringify(data).substring(0, 500));
     
     // 保存 Redis stream ID 用于重连时恢复消息
     if (data._streamId && currentSessionIdRef.current) {
@@ -528,6 +536,16 @@ export default function WorkspacePage() {
     const msgRole = data.Role || data.role;
     const msgParts = data.Parts || data.parts;
     
+    console.log('[MSG CHECK] msgId:', msgId, 'msgRole:', msgRole, 'msgParts:', !!msgParts, 'length:', msgParts?.length);
+    console.log('[MSG CHECK] SessionID from message:', data.SessionID || data.session_id);
+    console.log('[MSG CHECK] Current session ID:', currentSessionIdRef.current);
+    
+    if (msgId && msgRole && msgParts) {
+      console.log('[MSG CHECK] ✅ Processing message as standard message');
+    } else {
+      console.log('[MSG CHECK] ❌ Skipping - missing required fields. msgId:', !!msgId, 'msgRole:', !!msgRole, 'msgParts:', !!msgParts);
+    }
+    
     if (msgId && msgRole && msgParts) {
       // 标准化数据格式
       const normalizedData = {
@@ -664,6 +682,10 @@ export default function WorkspacePage() {
   };
 
   const convertBackendMessageToFrontend = (backendMsg: any): Message => {
+    console.log('[CONVERT] Converting message:', backendMsg.ID || backendMsg.id);
+    console.log('[CONVERT] Parts type:', typeof backendMsg.Parts, 'isArray:', Array.isArray(backendMsg.Parts));
+    console.log('[CONVERT] Parts length:', backendMsg.Parts?.length);
+    
     let textContent = '';
     let reasoning = '';
     const toolCalls: ToolCall[] = [];
@@ -671,6 +693,7 @@ export default function WorkspacePage() {
     const images: ImageAttachment[] = [];
     
     if (backendMsg.Parts && Array.isArray(backendMsg.Parts)) {
+      console.log('[CONVERT] Processing', backendMsg.Parts.length, 'parts');
       backendMsg.Parts.forEach((part: any) => {
         // Parts 直接包含字段
         if (part.text) {

@@ -157,6 +157,16 @@ func (s *Server) SendToSession(sessionID string, msg interface{}) {
 
 	sentCount := 0
 	totalClients := len(s.clients)
+	
+	// Debug: print all client session IDs for comparison
+	if totalClients > 0 {
+		clientSessions := make([]string, 0, totalClients)
+		for _, clientSID := range s.clients {
+			clientSessions = append(clientSessions, clientSID)
+		}
+		fmt.Printf("[WS DEBUG] Looking for session_id=%s, available sessions=%v\n", sessionID, clientSessions)
+	}
+	
 	for client, clientSessionID := range s.clients {
 		if clientSessionID == sessionID {
 			err := client.WriteMessage(websocket.TextMessage, jsonMsg)
@@ -171,6 +181,11 @@ func (s *Server) SendToSession(sessionID string, msg interface{}) {
 	}
 	// 使用 Info 级别以便调试
 	fmt.Printf("[WS SEND] session_id=%s, sent_to=%d/%d clients\n", sessionID, sentCount, totalClients)
+	
+	// Warn if no clients received the message
+	if sentCount == 0 && totalClients > 0 {
+		slog.Warn("Message not delivered - no matching session found", "target_session", sessionID, "total_clients", totalClients)
+	}
 }
 
 // UpdateClientSession updates the session ID for a specific client connection

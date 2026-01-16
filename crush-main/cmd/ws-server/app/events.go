@@ -56,8 +56,11 @@ func wsSetupSubscriber[T any](
 				var msg tea.Msg = event
 				select {
 				case outputCh <- msg:
-				case <-time.After(2 * time.Second):
+					// Successfully sent
+				case <-time.After(10 * time.Second):
+					// Increased timeout from 2s to 10s to reduce message drops during heavy streaming
 					slog.Warn("message dropped due to slow consumer", "name", name)
+					fmt.Printf("[EVENT DROP] Message dropped for subscriber %s due to slow consumer\n", name)
 				case <-ctx.Done():
 					slog.Debug("subscription cancelled", "name", name)
 					return
@@ -149,10 +152,14 @@ func (app *WSApp) handleMessageEvent(event pubsub.Event[message.Message]) {
 
 	// Check if session is connected before sending via WebSocket
 	isConnected, _ := app.connectedSessions.Get(sessionID)
-	if isConnected {
-		app.WSServer.SendToSession(sessionID, event.Payload)
-	} else {
-		slog.Debug("Session disconnected, message buffered in Redis", "sessionID", sessionID)
+	fmt.Printf("[SEND] Session %s connected status: %v\n", sessionID, isConnected)
+	
+	// Always try to send via WebSocket - SendToSession handles the case where no clients match
+	// This ensures messages aren't lost due to stale connection state
+	app.WSServer.SendToSession(sessionID, event.Payload)
+	
+	if !isConnected {
+		slog.Info("Session marked as disconnected but attempted WebSocket send anyway", "sessionID", sessionID)
 	}
 }
 

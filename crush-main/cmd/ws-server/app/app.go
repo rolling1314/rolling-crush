@@ -104,7 +104,7 @@ func NewWSApp(ctx context.Context, conn *sql.DB, cfg *config.Config) (*WSApp, er
 		config: cfg,
 		db:     q,
 
-		events:            make(chan tea.Msg, 100),
+		events:            make(chan tea.Msg, 1000), // Increased buffer for streaming messages
 		serviceEventsWG:   &sync.WaitGroup{},
 		tuiWG:             &sync.WaitGroup{},
 		connectedSessions: csync.NewMap[string, bool](),
