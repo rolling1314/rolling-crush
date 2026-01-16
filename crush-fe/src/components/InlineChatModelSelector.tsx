@@ -278,8 +278,13 @@ export function InlineChatModelSelector({
           headers: { Authorization: `Bearer ${token}` }
         });
         
-        // 更新本地状态
-        setSessionConfig(prev => prev ? { ...prev, api_key: '****' + tempApiKey.slice(-4) } : null);
+        // 更新本地状态（同时更新 provider、model 和 api_key）
+        setSessionConfig(prev => prev ? { 
+          ...prev, 
+          provider: provider,
+          model: model,
+          api_key: '****' + tempApiKey.slice(-4) 
+        } : null);
         onConfigChange({
           ...selectedConfig,
           provider: provider,
@@ -316,9 +321,13 @@ export function InlineChatModelSelector({
       return 'Auto';
     }
     
-    // 优先使用 sessionConfig（老会话）
-    const modelId = selectedConfig.model || sessionConfig?.model;
-    const providerId = selectedConfig.provider || sessionConfig?.provider;
+    // 对于老会话，优先使用 sessionConfig（保存后立即更新的本地状态）
+    const modelId = isExistingSession 
+      ? (sessionConfig?.model || selectedConfig.model)
+      : (selectedConfig.model || sessionConfig?.model);
+    const providerId = isExistingSession 
+      ? (sessionConfig?.provider || selectedConfig.provider)
+      : (selectedConfig.provider || sessionConfig?.provider);
     
     if (modelId && providerId) {
       const providerModels = modelsMap[providerId] || [];
@@ -338,9 +347,13 @@ export function InlineChatModelSelector({
 
   const needsApiKey = !selectedConfig.is_auto && selectedConfig.provider && selectedConfig.model && !hasApiKey;
 
-  // 获取当前配置的显示状态
-  const currentProvider = selectedConfig.provider || sessionConfig?.provider;
-  const currentModel = selectedConfig.model || sessionConfig?.model;
+  // 获取当前配置的显示状态（老会话优先使用 sessionConfig）
+  const currentProvider = isExistingSession 
+    ? (sessionConfig?.provider || selectedConfig.provider)
+    : (selectedConfig.provider || sessionConfig?.provider);
+  const currentModel = isExistingSession 
+    ? (sessionConfig?.model || selectedConfig.model)
+    : (selectedConfig.model || sessionConfig?.model);
 
   return (
     <div className="relative" ref={dropdownRef}>
