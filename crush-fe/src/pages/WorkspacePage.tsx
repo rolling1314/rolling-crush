@@ -1205,6 +1205,42 @@ export default function WorkspacePage() {
     });
   };
 
+  // Handle "Allow for Session" - grant and add to session allowlist
+  const handlePermissionAllowForSession = (toolCallId: string, toolName: string, action?: string) => {
+    const request = pendingPermissions.get(toolCallId);
+    if (!request) {
+      console.error('Permission request not found for tool_call_id:', toolCallId);
+      return;
+    }
+
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      console.error('WebSocket not connected');
+      return;
+    }
+
+    const response = {
+      type: 'permission_response',
+      id: request.id,
+      tool_call_id: toolCallId,
+      session_id: request.session_id,
+      granted: true,
+      denied: false,
+      allow_for_session: true,  // Signal to backend to add to session allowlist
+      tool_name: toolName || request.tool_name,
+      action: action || request.action,
+    };
+
+    wsRef.current.send(JSON.stringify(response));
+    console.log('Permission allow-for-session response sent:', response);
+
+    // Optimistically remove from pending
+    setPendingPermissions(prev => {
+      const next = new Map(prev);
+      next.delete(toolCallId);
+      return next;
+    });
+  };
+
   const handleFileSelect = (file: FileNode) => {
     if (!openFiles.some(f => f.id === file.id)) {
       setOpenFiles(prev => [...prev, file]);
@@ -1536,6 +1572,7 @@ export default function WorkspacePage() {
             pendingPermissions={pendingPermissions}
             onPermissionApprove={(toolCallId) => handlePermissionResponse(toolCallId, true)}
             onPermissionDeny={(toolCallId) => handlePermissionResponse(toolCallId, false)}
+            onPermissionAllowForSession={handlePermissionAllowForSession}
             sessionConfigComponent={
               isPendingSession ? (
                 <InlineChatModelSelector

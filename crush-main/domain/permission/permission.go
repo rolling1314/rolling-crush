@@ -3,17 +3,33 @@ package permission
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/rolling1314/rolling-crush/internal/pkg/csync"
 	"github.com/rolling1314/rolling-crush/internal/pubsub"
-	"github.com/google/uuid"
 )
 
 var ErrorPermissionDenied = errors.New("user denied permission")
+
+// AllowlistChecker is an interface for checking session-level tool allowlist.
+// This is typically implemented by the Redis stream service.
+type AllowlistChecker interface {
+	IsToolAllowedInSession(ctx context.Context, sessionID, toolName, action, path string) (bool, error)
+	AddToSessionAllowlist(ctx context.Context, sessionID string, entry AllowlistEntry) error
+}
+
+// AllowlistEntry represents an entry in the session tool allowlist.
+type AllowlistEntry struct {
+	ToolName string `json:"tool_name"`
+	Action   string `json:"action"`
+	Path     string `json:"path"`
+	AddedAt  int64  `json:"added_at"`
+}
 
 type CreatePermissionRequest struct {
 	SessionID   string `json:"session_id"`
@@ -47,12 +63,14 @@ type Service interface {
 	pubsub.Suscriber[PermissionRequest]
 	GrantPersistent(permission PermissionRequest)
 	Grant(permission PermissionRequest)
+	GrantForSession(permission PermissionRequest)
 	Deny(permission PermissionRequest)
 	Request(opts CreatePermissionRequest) bool
 	AutoApproveSession(sessionID string)
 	SetSkipRequests(skip bool)
 	SkipRequests() bool
 	SubscribeNotifications(ctx context.Context) <-chan pubsub.Event[PermissionNotification]
+	SetAllowlistChecker(checker AllowlistChecker)
 }
 
 type permissionService struct {
@@ -71,6 +89,10 @@ type permissionService struct {
 	// Per-session request locks and active requests
 	sessionRequestMu     *csync.Map[string, *sync.Mutex]
 	sessionActiveRequest *csync.Map[string, *PermissionRequest]
+
+	// Allowlist checker for session-level tool allowlist (Redis-backed)
+	allowlistChecker   AllowlistChecker
+	allowlistCheckerMu sync.RWMutex
 }
 
 func (s *permissionService) GrantPersistent(permission PermissionRequest) {
@@ -103,6 +125,59 @@ func (s *permissionService) Grant(permission PermissionRequest) {
 	respCh, ok := s.pendingRequests.Get(permission.ID)
 	if ok {
 		respCh <- true
+	}
+
+	// Clear active request for this session
+	if activeReq, ok := s.sessionActiveRequest.Get(permission.SessionID); ok && activeReq != nil && activeReq.ID == permission.ID {
+		s.sessionActiveRequest.Del(permission.SessionID)
+	}
+}
+
+// GrantForSession grants permission and adds the tool to the session's allowlist.
+// Future requests for the same tool+action combination will be auto-approved.
+func (s *permissionService) GrantForSession(permission PermissionRequest) {
+	s.notificationBroker.Publish(pubsub.CreatedEvent, PermissionNotification{
+		SessionID:  permission.SessionID,
+		ToolCallID: permission.ToolCallID,
+		Granted:    true,
+	})
+	respCh, ok := s.pendingRequests.Get(permission.ID)
+	if ok {
+		respCh <- true
+	}
+
+	// Add to in-memory session permissions (for backward compatibility)
+	s.sessionPermissionsMu.Lock()
+	s.sessionPermissions = append(s.sessionPermissions, permission)
+	s.sessionPermissionsMu.Unlock()
+
+	// Add to Redis allowlist for persistence
+	s.allowlistCheckerMu.RLock()
+	checker := s.allowlistChecker
+	s.allowlistCheckerMu.RUnlock()
+
+	if checker != nil {
+		ctx := context.Background()
+		entry := AllowlistEntry{
+			ToolName: permission.ToolName,
+			Action:   permission.Action,
+			Path:     permission.Path,
+		}
+		if err := checker.AddToSessionAllowlist(ctx, permission.SessionID, entry); err != nil {
+			slog.Warn("Failed to add tool to session allowlist",
+				"error", err,
+				"session_id", permission.SessionID,
+				"tool_name", permission.ToolName,
+				"action", permission.Action,
+			)
+		} else {
+			slog.Info("Tool added to session allowlist",
+				"session_id", permission.SessionID,
+				"tool_name", permission.ToolName,
+				"action", permission.Action,
+				"path", permission.Path,
+			)
+		}
 	}
 
 	// Clear active request for this session
@@ -146,7 +221,7 @@ func (s *permissionService) Request(opts CreatePermissionRequest) bool {
 	sessionMu.Lock()
 	defer sessionMu.Unlock()
 
-	// Check if the tool/action combination is in the allowlist
+	// Check if the tool/action combination is in the static allowlist
 	commandKey := opts.ToolName + ":" + opts.Action
 	if slices.Contains(s.allowedTools, commandKey) || slices.Contains(s.allowedTools, opts.ToolName) {
 		return true
@@ -173,6 +248,31 @@ func (s *permissionService) Request(opts CreatePermissionRequest) bool {
 	if dir == "." {
 		dir = s.workingDir
 	}
+
+	// Check Redis session allowlist (if available)
+	s.allowlistCheckerMu.RLock()
+	checker := s.allowlistChecker
+	s.allowlistCheckerMu.RUnlock()
+
+	if checker != nil {
+		ctx := context.Background()
+		allowed, err := checker.IsToolAllowedInSession(ctx, opts.SessionID, opts.ToolName, opts.Action, dir)
+		if err != nil {
+			slog.Warn("Failed to check session allowlist",
+				"error", err,
+				"session_id", opts.SessionID,
+				"tool_name", opts.ToolName,
+			)
+		} else if allowed {
+			slog.Debug("Tool auto-approved from session allowlist",
+				"session_id", opts.SessionID,
+				"tool_name", opts.ToolName,
+				"action", opts.Action,
+			)
+			return true
+		}
+	}
+
 	permission := PermissionRequest{
 		ID:          uuid.New().String(),
 		Path:        dir,
@@ -184,6 +284,7 @@ func (s *permissionService) Request(opts CreatePermissionRequest) bool {
 		Params:      opts.Params,
 	}
 
+	// Check in-memory session permissions (for backward compatibility)
 	s.sessionPermissionsMu.RLock()
 	for _, p := range s.sessionPermissions {
 		if p.ToolName == permission.ToolName && p.Action == permission.Action && p.SessionID == permission.SessionID && p.Path == permission.Path {
@@ -222,6 +323,15 @@ func (s *permissionService) SetSkipRequests(skip bool) {
 
 func (s *permissionService) SkipRequests() bool {
 	return s.skip
+}
+
+// SetAllowlistChecker sets the Redis-backed allowlist checker.
+// This should be called after the Redis client is initialized.
+func (s *permissionService) SetAllowlistChecker(checker AllowlistChecker) {
+	s.allowlistCheckerMu.Lock()
+	s.allowlistChecker = checker
+	s.allowlistCheckerMu.Unlock()
+	slog.Info("Allowlist checker set for permission service")
 }
 
 func NewPermissionService(workingDir string, skip bool, allowedTools []string) Service {

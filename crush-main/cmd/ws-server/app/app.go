@@ -119,6 +119,13 @@ func NewWSApp(ctx context.Context, conn *sql.DB, cfg *config.Config) (*WSApp, er
 		app.RedisStream = storeredis.GetGlobalStreamService()
 		app.RedisCmd = storeredis.GetGlobalCommandService()
 		slog.Info("Redis stream service initialized")
+
+		// Set up allowlist checker for permission service using Redis adapter
+		if app.RedisStream != nil {
+			allowlistAdapter := storeredis.NewAllowlistAdapter(app.RedisStream)
+			app.Permissions.SetAllowlistChecker(allowlistAdapter)
+			slog.Info("Session allowlist checker configured with Redis backend")
+		}
 	}
 
 	// Register the handler for incoming WebSocket messages

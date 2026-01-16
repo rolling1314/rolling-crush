@@ -11,7 +11,9 @@ interface ToolCallDisplayProps {
   result?: ToolResult;
   onApprove?: (toolCallId: string) => void;
   onDeny?: (toolCallId: string) => void;
+  onAllowForSession?: (toolCallId: string, toolName: string, action?: string) => void;
   needsPermission?: boolean;
+  permissionRequest?: { tool_name?: string; action?: string; path?: string };
   onFileClick?: (filePath: string) => void;
 }
 
@@ -525,7 +527,9 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = memo(({
   result,
   onApprove,
   onDeny,
+  onAllowForSession,
   needsPermission = false,
+  permissionRequest,
   onFileClick
 }) => {
   const [isBodyExpanded, setIsBodyExpanded] = useState(true);
@@ -893,7 +897,7 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = memo(({
 
       {/* Permission Buttons - more compact TUI style */}
       {needsPermission && onApprove && onDeny ? (
-        <div className="flex gap-2 mt-2 pl-4">
+        <div className="flex flex-wrap gap-2 mt-2 pl-4">
           <button
             onClick={() => {
               console.log('=== Approve button clicked ===');
@@ -904,6 +908,25 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = memo(({
           >
             ✓ Allow
           </button>
+          {onAllowForSession && (
+            <button
+              onClick={() => {
+                console.log('=== Allow for Session button clicked ===');
+                console.log('Tool Call ID:', toolCall.id);
+                console.log('Tool Name:', permissionRequest?.tool_name || toolCall.name);
+                console.log('Action:', permissionRequest?.action);
+                onAllowForSession(
+                  toolCall.id, 
+                  permissionRequest?.tool_name || toolCall.name,
+                  permissionRequest?.action
+                );
+              }}
+              className="px-3 py-1 text-xs bg-blue-700 hover:bg-blue-600 text-white rounded transition-colors"
+              title="Allow this tool for the rest of this session without asking again"
+            >
+              ✓ Allow for Session
+            </button>
+          )}
           <button
             onClick={() => {
               console.log('=== Deny button clicked ===');
@@ -934,6 +957,8 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = memo(({
     prevProps.toolCall.status === nextProps.toolCall.status &&
     prevProps.toolCall.finished === nextProps.toolCall.finished &&
     prevProps.result === nextProps.result &&
-    prevProps.needsPermission === nextProps.needsPermission
+    prevProps.needsPermission === nextProps.needsPermission &&
+    prevProps.permissionRequest?.tool_name === nextProps.permissionRequest?.tool_name &&
+    prevProps.permissionRequest?.action === nextProps.permissionRequest?.action
   );
 });

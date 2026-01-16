@@ -64,8 +64,12 @@ func (app *WSApp) HandleClientMessage(rawMsg []byte) {
 		ToolCallID      string              `json:"tool_call_id"`
 		Granted         bool                `json:"granted"`
 		Denied          bool                `json:"denied"`
-		Images          []WSImageAttachment `json:"images"`    // Image attachments
-		LastMsgID       string              `json:"lastMsgId"` // For reconnection - last received Redis stream message ID
+		AllowForSession bool                `json:"allow_for_session"` // Allow this tool for the entire session
+		ToolName        string              `json:"tool_name"`         // Tool name for allowlist
+		Action          string              `json:"action"`            // Action for allowlist
+		Path            string              `json:"path"`              // Path for allowlist
+		Images          []WSImageAttachment `json:"images"`            // Image attachments
+		LastMsgID       string              `json:"lastMsgId"`         // For reconnection - last received Redis stream message ID
 	}
 
 	var msg ClientMsg
@@ -92,7 +96,7 @@ func (app *WSApp) HandleClientMessage(rawMsg []byte) {
 		if sessionID == "" {
 			sessionID = app.currentSessionID // Fallback to current session
 		}
-		app.handlePermissionResponse(msg.ID, msg.ToolCallID, sessionID, msg.Granted, msg.Denied)
+		app.handlePermissionResponse(msg.ID, msg.ToolCallID, sessionID, msg.Granted, msg.Denied, msg.AllowForSession, msg.ToolName, msg.Action, msg.Path)
 		return
 	}
 
@@ -127,7 +131,7 @@ func (app *WSApp) HandleClientMessage(rawMsg []byte) {
 }
 
 // handlePermissionResponse handles permission grant/deny responses
-func (app *WSApp) handlePermissionResponse(id, toolCallID, sessionID string, granted, denied bool) {
+func (app *WSApp) handlePermissionResponse(id, toolCallID, sessionID string, granted, denied, allowForSession bool, toolName, action, path string) {
 	ctx := context.Background()
 	permissionChan := app.Permissions.Subscribe(ctx)
 
@@ -135,9 +139,21 @@ func (app *WSApp) handlePermissionResponse(id, toolCallID, sessionID string, gra
 		ID:         id,
 		ToolCallID: toolCallID,
 		SessionID:  sessionID,
+		ToolName:   toolName,
+		Action:     action,
+		Path:       path,
 	}
 
-	if granted {
+	if allowForSession {
+		// Allow for session: grant now and add to session allowlist
+		slog.Info("Permission granted for session by client", 
+			"tool_call_id", toolCallID, 
+			"session_id", sessionID,
+			"tool_name", toolName,
+			"action", action,
+		)
+		app.Permissions.GrantForSession(permissionReq)
+	} else if granted {
 		slog.Info("Permission granted by client", "tool_call_id", toolCallID, "session_id", sessionID)
 		app.Permissions.Grant(permissionReq)
 	} else if denied {
@@ -148,7 +164,7 @@ func (app *WSApp) handlePermissionResponse(id, toolCallID, sessionID string, gra
 	// Also update Redis permission status directly to ensure it's updated
 	if app.RedisStream != nil {
 		status := "denied"
-		if granted {
+		if granted || allowForSession {
 			status = "granted"
 		}
 		if err := app.RedisStream.UpdatePermissionStatus(ctx, sessionID, toolCallID, status); err != nil {

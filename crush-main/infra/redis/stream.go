@@ -22,6 +22,8 @@ const (
 	ActiveGenerationKeyPrefix = "crush:active:session:"
 	// PendingPermissionKeyPrefix tracks pending permission requests
 	PendingPermissionKeyPrefix = "crush:permission:pending:"
+	// SessionToolAllowlistKeyPrefix tracks session-level tool allowlist
+	SessionToolAllowlistKeyPrefix = "crush:allowlist:session:"
 )
 
 // StreamMessage represents a message stored in Redis stream.
@@ -470,5 +472,166 @@ func (s *StreamService) GetAllPendingPermissions(ctx context.Context, sessionID 
 // DeletePendingPermission removes a permission request from Redis.
 func (s *StreamService) DeletePendingPermission(ctx context.Context, sessionID, toolCallID string) error {
 	key := s.pendingPermissionKey(sessionID, toolCallID)
+	return s.client.rdb.Del(ctx, key).Err()
+}
+
+// sessionToolAllowlistKey returns the Redis key for session tool allowlist.
+func (s *StreamService) sessionToolAllowlistKey(sessionID string) string {
+	return SessionToolAllowlistKeyPrefix + sessionID
+}
+
+// ToolAllowlistEntry represents an allowed tool in the session allowlist.
+type ToolAllowlistEntry struct {
+	ToolName  string `json:"tool_name"`
+	Action    string `json:"action"`    // Optional: specific action like "write", "execute"
+	Path      string `json:"path"`      // Optional: specific path pattern
+	AddedAt   int64  `json:"added_at"`
+}
+
+// AddToSessionAllowlist adds a tool to the session's allowlist.
+// toolKey format: "tool_name" or "tool_name:action" or "tool_name:action:path"
+func (s *StreamService) AddToSessionAllowlist(ctx context.Context, sessionID string, entry ToolAllowlistEntry) error {
+	key := s.sessionToolAllowlistKey(sessionID)
+	entry.AddedAt = time.Now().UnixMilli()
+
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return fmt.Errorf("failed to marshal allowlist entry: %w", err)
+	}
+
+	// Create a unique member key for this entry
+	memberKey := entry.ToolName
+	if entry.Action != "" {
+		memberKey += ":" + entry.Action
+	}
+	if entry.Path != "" {
+		memberKey += ":" + entry.Path
+	}
+
+	// Use a hash to store entries (field = memberKey, value = JSON data)
+	err = s.client.rdb.HSet(ctx, key, memberKey, string(data)).Err()
+	if err != nil {
+		return fmt.Errorf("failed to add to session allowlist: %w", err)
+	}
+
+	// Set TTL on the allowlist (same as stream TTL, typically session lifetime)
+	s.client.rdb.Expire(ctx, key, s.client.streamTTL)
+
+	slog.Info("Added tool to session allowlist",
+		"session_id", sessionID,
+		"tool_name", entry.ToolName,
+		"action", entry.Action,
+		"path", entry.Path,
+	)
+
+	return nil
+}
+
+// RemoveFromSessionAllowlist removes a tool from the session's allowlist.
+func (s *StreamService) RemoveFromSessionAllowlist(ctx context.Context, sessionID string, toolName, action, path string) error {
+	key := s.sessionToolAllowlistKey(sessionID)
+
+	memberKey := toolName
+	if action != "" {
+		memberKey += ":" + action
+	}
+	if path != "" {
+		memberKey += ":" + path
+	}
+
+	err := s.client.rdb.HDel(ctx, key, memberKey).Err()
+	if err != nil {
+		return fmt.Errorf("failed to remove from session allowlist: %w", err)
+	}
+
+	slog.Info("Removed tool from session allowlist",
+		"session_id", sessionID,
+		"tool_name", toolName,
+		"action", action,
+		"path", path,
+	)
+
+	return nil
+}
+
+// GetSessionAllowlist returns all entries in the session's allowlist.
+func (s *StreamService) GetSessionAllowlist(ctx context.Context, sessionID string) ([]ToolAllowlistEntry, error) {
+	key := s.sessionToolAllowlistKey(sessionID)
+
+	result, err := s.client.rdb.HGetAll(ctx, key).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get session allowlist: %w", err)
+	}
+
+	entries := make([]ToolAllowlistEntry, 0, len(result))
+	for _, data := range result {
+		var entry ToolAllowlistEntry
+		if err := json.Unmarshal([]byte(data), &entry); err != nil {
+			slog.Warn("Failed to unmarshal allowlist entry", "error", err)
+			continue
+		}
+		entries = append(entries, entry)
+	}
+
+	return entries, nil
+}
+
+// IsToolAllowedInSession checks if a tool is allowed in the session's allowlist.
+// It checks for matches in this order:
+// 1. Exact match: tool_name:action:path
+// 2. Tool+action match: tool_name:action
+// 3. Tool-only match: tool_name
+func (s *StreamService) IsToolAllowedInSession(ctx context.Context, sessionID, toolName, action, path string) (bool, error) {
+	key := s.sessionToolAllowlistKey(sessionID)
+
+	// Check exact match first
+	exactKey := toolName
+	if action != "" {
+		exactKey += ":" + action
+	}
+	if path != "" {
+		exactKey += ":" + path
+	}
+
+	exists, err := s.client.rdb.HExists(ctx, key, exactKey).Result()
+	if err != nil {
+		return false, fmt.Errorf("failed to check session allowlist: %w", err)
+	}
+	if exists {
+		return true, nil
+	}
+
+	// Check tool+action match
+	if path != "" {
+		toolActionKey := toolName
+		if action != "" {
+			toolActionKey += ":" + action
+		}
+		exists, err = s.client.rdb.HExists(ctx, key, toolActionKey).Result()
+		if err != nil {
+			return false, fmt.Errorf("failed to check session allowlist: %w", err)
+		}
+		if exists {
+			return true, nil
+		}
+	}
+
+	// Check tool-only match
+	if action != "" {
+		exists, err = s.client.rdb.HExists(ctx, key, toolName).Result()
+		if err != nil {
+			return false, fmt.Errorf("failed to check session allowlist: %w", err)
+		}
+		if exists {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// ClearSessionAllowlist clears all entries in the session's allowlist.
+func (s *StreamService) ClearSessionAllowlist(ctx context.Context, sessionID string) error {
+	key := s.sessionToolAllowlistKey(sessionID)
 	return s.client.rdb.Del(ctx, key).Err()
 }

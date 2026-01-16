@@ -17,6 +17,7 @@ interface ChatPanelProps {
   pendingPermissions: Map<string, PermissionRequest>;
   onPermissionApprove: (toolCallId: string) => void;
   onPermissionDeny: (toolCallId: string) => void;
+  onPermissionAllowForSession?: (toolCallId: string, toolName: string, action?: string) => void;
   sessionConfigComponent?: React.ReactNode;
   isProcessing?: boolean;
   onCancelRequest?: () => void;
@@ -256,6 +257,7 @@ const MessageGroup = memo(({
   pendingPermissions,
   onPermissionApprove,
   onPermissionDeny,
+  onPermissionAllowForSession,
   onFileClick
 }: {
   group: Message[];
@@ -263,6 +265,7 @@ const MessageGroup = memo(({
   pendingPermissions: Map<string, PermissionRequest>;
   onPermissionApprove: (toolCallId: string) => void;
   onPermissionDeny: (toolCallId: string) => void;
+  onPermissionAllowForSession?: (toolCallId: string, toolName: string, action?: string) => void;
   onFileClick?: (filePath: string) => void;
 }) => {
   const firstMsg = group[0];
@@ -303,15 +306,21 @@ const MessageGroup = memo(({
                     .map((toolCall) => {
                       // Look up result from all messages, not just current message
                       const result = allToolResults.get(toolCall.id) || msg.toolResults?.find(r => r.tool_call_id === toolCall.id);
-                      const needsPermission = pendingPermissions.has(toolCall.id);
+                      const permRequest = pendingPermissions.get(toolCall.id);
+                      const needsPermission = !!permRequest;
                       return (
                         <ToolCallDisplay
                           key={toolCall.id}
                           toolCall={toolCall}
                           result={result}
                           needsPermission={needsPermission}
+                          permissionRequest={permRequest ? {
+                            tool_name: permRequest.tool_name,
+                            action: permRequest.action,
+                          } : undefined}
                           onApprove={onPermissionApprove}
                           onDeny={onPermissionDeny}
+                          onAllowForSession={onPermissionAllowForSession}
                           onFileClick={onFileClick}
                         />
                       );
@@ -461,6 +470,7 @@ export const ChatPanel = memo(({
   pendingPermissions,
   onPermissionApprove,
   onPermissionDeny,
+  onPermissionAllowForSession,
   sessionConfigComponent,
   isProcessing = false,
   onCancelRequest,
@@ -831,6 +841,7 @@ export const ChatPanel = memo(({
             pendingPermissions={pendingPermissions}
             onPermissionApprove={onPermissionApprove}
             onPermissionDeny={onPermissionDeny}
+            onPermissionAllowForSession={onPermissionAllowForSession}
             onFileClick={onFileClick}
           />
         ))}
