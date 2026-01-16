@@ -55,6 +55,9 @@ export interface ContentPart {
   is_error?: boolean;
   reason?: string;
   time?: number;
+  // For images
+  Path?: string;
+  MIMEType?: string;
   [key: string]: any;
 }
 

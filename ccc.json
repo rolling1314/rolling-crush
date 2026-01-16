@@ -1,1441 +1,342 @@
 {
-  "success": true,
-  "code": "0",
-  "msg": null,
-  "data": {
-    "records": [
-      {
-        "stock": null,
-        "sales30day": [
-          {
-            "date": "2025-12-07",
-            "sales": 3884
-          },
-          {
-            "date": "2025-12-08",
-            "sales": 3904
-          },
-          {
-            "date": "2025-12-09",
-            "sales": 3487
-          },
-          {
-            "date": "2025-12-10",
-            "sales": 3222
-          },
-          {
-            "date": "2025-12-11",
-            "sales": 2666
-          },
-          {
-            "date": "2025-12-12",
-            "sales": 2407
-          },
-          {
-            "date": "2025-12-13",
-            "sales": 2431
-          },
-          {
-            "date": "2025-12-14",
-            "sales": 3056
-          },
-          {
-            "date": "2025-12-15",
-            "sales": 3309
-          },
-          {
-            "date": "2025-12-16",
-            "sales": 2245
-          },
-          {
-            "date": "2025-12-17",
-            "sales": 6509
-          },
-          {
-            "date": "2025-12-18",
-            "sales": 8914
-          },
-          {
-            "date": "2025-12-19",
-            "sales": 8128
-          },
-          {
-            "date": "2025-12-20",
-            "sales": 6053
-          },
-          {
-            "date": "2025-12-21",
-            "sales": 7032
-          },
-          {
-            "date": "2025-12-22",
-            "sales": 7727
-          },
-          {
-            "date": "2025-12-23",
-            "sales": 4685
-          },
-          {
-            "date": "2025-12-24",
-            "sales": 4016
-          },
-          {
-            "date": "2025-12-25",
-            "sales": 4452
-          },
-          {
-            "date": "2025-12-26",
-            "sales": 5723
-          },
-          {
-            "date": "2025-12-27",
-            "sales": 6967
-          },
-          {
-            "date": "2025-12-28",
-            "sales": 8159
-          },
-          {
-            "date": "2025-12-29",
-            "sales": 10835
-          },
-          {
-            "date": "2025-12-30",
-            "sales": 7540
-          },
-          {
-            "date": "2025-12-31",
-            "sales": 6481
-          },
-          {
-            "date": "2026-01-01",
-            "sales": 5905
-          },
-          {
-            "date": "2026-01-02",
-            "sales": 5716
-          },
-          {
-            "date": "2026-01-03",
-            "sales": 5668
-          },
-          {
-            "date": "2026-01-04",
-            "sales": 6039
-          },
-          {
-            "date": "2026-01-05",
-            "sales": 16432
-          }
-        ],
-        "commodityId": "1729612709100426165",
-        "commodityTitle": "Loaded Waters - VIRAL Loaded Waters POWDERED BEVERAGE- 200mg Natural Caffeine - Sugar Free & Gluten Free - Energy Boost Drink Mix - 32oz Refreshing Beverage - Made in USA",
-        "commodityThumbnailUrl": "https://microdata-spiders-media-sg.oss-ap-southeast-1.aliyuncs.com/image/9c423915-2d3c-4a85-b167-31b4d80e1620__1729612709100426165.jpeg",
-        "commodityUrl": "https://www.tiktok.com/shop/pdp/1729612709100426165?source=product_detail",
-        "countryRegion": "美国",
-        "commodityPrice": "4.50",
-        "commodityPriceMin": "4.50",
-        "commodityStarRate": 4.8000,
-        "storeLogoUrl": "http://microdata-static-hk.oss-cn-hongkong.aliyuncs.com/pro-api/tt/image/c128a355-0949-4f56-b0a5-a046fb9de47d.jpeg",
-        "storeUrl": "aweme://ec/store?sellerId=7495500842223700917&url_maker=store_rpc&store_page_version=1",
-        "storeName": "Caffeine, Candles & Chaos",
-        "storeSalesNumber": 3038961,
-        "storeCommodityNumber": 9,
-        "commodityCategory": "Food & Beverages",
-        "commodityCategoryCn": "食品饮料",
-        "reviewsNumber": 43917,
-        "totalSalesNumber": 1238905,
-        "salesQoq": 172.1000,
-        "totalSaleIncomeNumber": 5575072.50,
-        "powerSellerNumber": 3911,
-        "powerSellerEmailNumber": null,
-        "powerSellerCreatorNumber": null,
-        "shelfTime": "2024-09-23",
-        "commodityShipCost": "$3.88",
-        "sales": "16432",
-        "totalSales": "1238905",
-        "salesVolume": 73944.00,
-        "shopId": "7495500842223700917",
-        "whetherOffShelf": false,
-        "dataUpdateTime": "2026-01-05 14:03:54",
-        "videoSale": null,
-        "videoGmv": null,
-        "userFocusStatus": "not_focus",
-        "salesLst7d": 53781,
-        "salesLst30d": 173592,
-        "isCrossBorder": 0,
-        "operateType": null
+  "title": "首页界面功能介绍",
+  "create_time": 1768550523.747804,
+  "update_time": 1768550542.406133,
+  "mapping": {
+      "client-created-root": {
+          "id": "client-created-root",
+          "message": null,
+          "parent": null,
+          "children": [
+              "21829bdc-92b5-4e98-a374-6152e924e849"
+          ]
       },
-      {
-        "stock": null,
-        "sales30day": [
-          {
-            "date": "2025-12-26",
-            "sales": 301
+      "21829bdc-92b5-4e98-a374-6152e924e849": {
+          "id": "21829bdc-92b5-4e98-a374-6152e924e849",
+          "message": {
+              "id": "21829bdc-92b5-4e98-a374-6152e924e849",
+              "author": {
+                  "role": "system",
+                  "name": null,
+                  "metadata": {}
+              },
+              "create_time": null,
+              "update_time": null,
+              "content": {
+                  "content_type": "text",
+                  "parts": [
+                      ""
+                  ]
+              },
+              "status": "finished_successfully",
+              "end_turn": true,
+              "weight": 0.0,
+              "metadata": {
+                  "is_visually_hidden_from_conversation": true
+              },
+              "recipient": "all",
+              "channel": null
           },
-          {
-            "date": "2025-12-27",
-            "sales": 508
-          },
-          {
-            "date": "2025-12-28",
-            "sales": 467
-          },
-          {
-            "date": "2025-12-29",
-            "sales": 533
-          },
-          {
-            "date": "2025-12-30",
-            "sales": 701
-          },
-          {
-            "date": "2025-12-31",
-            "sales": 1339
-          },
-          {
-            "date": "2026-01-01",
-            "sales": 671
-          },
-          {
-            "date": "2026-01-02",
-            "sales": 2703
-          },
-          {
-            "date": "2026-01-03",
-            "sales": 1607
-          },
-          {
-            "date": "2026-01-04",
-            "sales": 2569
-          },
-          {
-            "date": "2026-01-05",
-            "sales": 6848
-          }
-        ],
-        "commodityId": "1732072994697941487",
-        "commodityTitle": "Vacuum Magnetic Suction Phone Holder, 2025 New Magnetic Suction Phone Mount, Foldable Portable Double-Sided Vacuum Magnetic adsorption Adjustable Mobile Phone Holder for All Phones",
-        "commodityThumbnailUrl": "https://microdata-spiders-media-sg.oss-ap-southeast-1.aliyuncs.com/image/5136331a-d63e-4a54-b06c-20aa2cd384f5__1732072994697941487.jpeg",
-        "commodityUrl": "https://www.tiktok.com/shop/pdp/1732072994697941487?source=product_detail",
-        "countryRegion": "美国",
-        "commodityPrice": "7.07",
-        "commodityPriceMin": "7.07",
-        "commodityStarRate": 4.3000,
-        "storeLogoUrl": "http://microdata-static-hk.oss-cn-hongkong.aliyuncs.com/pro-api/tt/image/a326fd13-b213-4e69-a57f-6b9947e942c7.jpeg",
-        "storeUrl": "aweme://ec/store?sellerId=7495476384874727919&url_maker=store_rpc&store_page_version=1",
-        "storeName": "The Sphere.Shop",
-        "storeSalesNumber": 134620,
-        "storeCommodityNumber": 51,
-        "commodityCategory": "Automotive & Motorcycle",
-        "commodityCategoryCn": "汽车与摩托车",
-        "reviewsNumber": 193,
-        "totalSalesNumber": 19594,
-        "salesQoq": 166.5600,
-        "totalSaleIncomeNumber": 138529.58,
-        "powerSellerNumber": 108,
-        "powerSellerEmailNumber": null,
-        "powerSellerCreatorNumber": null,
-        "shelfTime": "2025-12-25",
-        "commodityShipCost": "$0.00",
-        "sales": "6848",
-        "totalSales": "19594",
-        "salesVolume": 48415.36,
-        "shopId": "7495476384874727919",
-        "whetherOffShelf": false,
-        "dataUpdateTime": "2026-01-05 16:03:11",
-        "videoSale": null,
-        "videoGmv": null,
-        "userFocusStatus": "not_focus",
-        "salesLst7d": 16438,
-        "salesLst30d": 18247,
-        "isCrossBorder": 0,
-        "operateType": null
+          "parent": "client-created-root",
+          "children": [
+              "15812f45-2503-40d8-b4ca-07b9d515a70c"
+          ]
       },
-      {
-        "stock": null,
-        "sales30day": [
-          {
-            "date": "2025-12-07",
-            "sales": 4580
+      "15812f45-2503-40d8-b4ca-07b9d515a70c": {
+          "id": "15812f45-2503-40d8-b4ca-07b9d515a70c",
+          "message": {
+              "id": "15812f45-2503-40d8-b4ca-07b9d515a70c",
+              "author": {
+                  "role": "user",
+                  "name": null,
+                  "metadata": {}
+              },
+              "create_time": 1768550522.984,
+              "update_time": null,
+              "content": {
+                  "content_type": "multimodal_text",
+                  "parts": [
+                      {
+                          "content_type": "image_asset_pointer",
+                          "asset_pointer": "sediment://file_00000000d29471fda973aaeb803b7589",
+                          "size_bytes": 65921,
+                          "width": 2048,
+                          "height": 717,
+                          "fovea": null,
+                          "metadata": {
+                              "dalle": null,
+                              "gizmo": null,
+                              "generation": null,
+                              "container_pixel_height": null,
+                              "container_pixel_width": null,
+                              "emu_omit_glimpse_image": null,
+                              "emu_patches_override": null,
+                              "lpe_keep_patch_ijhw": null,
+                              "lpe_delta_encoding_channel": null,
+                              "sanitized": true,
+                              "asset_pointer_link": null,
+                              "watermarked_asset_pointer": null,
+                              "is_no_auth_placeholder": null
+                          }
+                      },
+                      "这个有什么？"
+                  ]
+              },
+              "status": "finished_successfully",
+              "end_turn": null,
+              "weight": 1.0,
+              "metadata": {
+                  "attachments": [
+                      {
+                          "id": "file_00000000d29471fda973aaeb803b7589",
+                          "size": 65921,
+                          "name": "dc5a61b0-c90d-45eb-a504-0d2ccca32d8e.png",
+                          "mime_type": "image/png",
+                          "width": 2048,
+                          "height": 717,
+                          "source": "local",
+                          "is_big_paste": false
+                      }
+                  ],
+                  "selected_github_repos": [],
+                  "serialization_metadata": {
+                      "custom_symbol_offsets": []
+                  },
+                  "request_id": "9d7eee18-e29c-415d-ac04-526a8e32d23a",
+                  "message_source": null,
+                  "turn_exchange_id": "93978c60-bc7f-4647-84dd-1a10680687bb"
+              },
+              "recipient": "all",
+              "channel": null
           },
-          {
-            "date": "2025-12-08",
-            "sales": 4738
-          },
-          {
-            "date": "2025-12-09",
-            "sales": 4296
-          },
-          {
-            "date": "2025-12-10",
-            "sales": 4100
-          },
-          {
-            "date": "2025-12-11",
-            "sales": 4146
-          },
-          {
-            "date": "2025-12-12",
-            "sales": 4761
-          },
-          {
-            "date": "2025-12-13",
-            "sales": 4897
-          },
-          {
-            "date": "2025-12-14",
-            "sales": 5425
-          },
-          {
-            "date": "2025-12-15",
-            "sales": 5569
-          },
-          {
-            "date": "2025-12-16",
-            "sales": 5972
-          },
-          {
-            "date": "2025-12-17",
-            "sales": 6111
-          },
-          {
-            "date": "2025-12-18",
-            "sales": 4924
-          },
-          {
-            "date": "2025-12-19",
-            "sales": 5351
-          },
-          {
-            "date": "2025-12-20",
-            "sales": 5236
-          },
-          {
-            "date": "2025-12-21",
-            "sales": 4753
-          },
-          {
-            "date": "2025-12-22",
-            "sales": 4515
-          },
-          {
-            "date": "2025-12-23",
-            "sales": 4125
-          },
-          {
-            "date": "2025-12-24",
-            "sales": 3694
-          },
-          {
-            "date": "2025-12-25",
-            "sales": 3186
-          },
-          {
-            "date": "2025-12-26",
-            "sales": 4192
-          },
-          {
-            "date": "2025-12-27",
-            "sales": 5359
-          },
-          {
-            "date": "2025-12-28",
-            "sales": 5779
-          },
-          {
-            "date": "2025-12-29",
-            "sales": 7527
-          },
-          {
-            "date": "2025-12-30",
-            "sales": 6134
-          },
-          {
-            "date": "2025-12-31",
-            "sales": 6621
-          },
-          {
-            "date": "2026-01-01",
-            "sales": 4921
-          },
-          {
-            "date": "2026-01-02",
-            "sales": 6998
-          },
-          {
-            "date": "2026-01-03",
-            "sales": 8010
-          },
-          {
-            "date": "2026-01-04",
-            "sales": 7160
-          },
-          {
-            "date": "2026-01-05",
-            "sales": 6403
-          }
-        ],
-        "commodityId": "1729448464509734958",
-        "commodityTitle": "Toplux Magnesium Complex 8 Essential Magnesium Supplement 1000mg",
-        "commodityThumbnailUrl": "https://microdata-spiders-media-sg.oss-ap-southeast-1.aliyuncs.com/image/7c58b746-a380-4304-8597-18dd946ac8bc__1729448464509734958.jpeg",
-        "commodityUrl": "https://www.tiktok.com/shop/pdp/1729448464509734958?source=product_detail",
-        "countryRegion": "美国",
-        "commodityPrice": "49.97",
-        "commodityPriceMin": "49.97",
-        "commodityStarRate": 4.5000,
-        "storeLogoUrl": "http://microdata-static-hk.oss-cn-hongkong.aliyuncs.com/pro-api/tt/image/6f45dc68-937e-4924-80b7-8d410b4715f7.jpeg",
-        "storeUrl": "aweme://ec/store?sellerId=7495620301677955118&url_maker=store_rpc&store_page_version=1",
-        "storeName": "Toplux Nutrition",
-        "storeSalesNumber": 1374997,
-        "storeCommodityNumber": 26,
-        "commodityCategory": "Health",
-        "commodityCategoryCn": "健康",
-        "reviewsNumber": 43925,
-        "totalSalesNumber": 708220,
-        "salesQoq": -10.5700,
-        "totalSaleIncomeNumber": 35389753.40,
-        "powerSellerNumber": 9215,
-        "powerSellerEmailNumber": null,
-        "powerSellerCreatorNumber": null,
-        "shelfTime": "2024-04-17",
-        "commodityShipCost": "$0.00",
-        "sales": "6403",
-        "totalSales": "708220",
-        "salesVolume": 319957.91,
-        "shopId": "7495620301677955118",
-        "whetherOffShelf": false,
-        "dataUpdateTime": "2026-01-05 13:49:12",
-        "videoSale": null,
-        "videoGmv": null,
-        "userFocusStatus": "not_focus",
-        "salesLst7d": 46247,
-        "salesLst30d": 159483,
-        "isCrossBorder": 0,
-        "operateType": null
+          "parent": "21829bdc-92b5-4e98-a374-6152e924e849",
+          "children": [
+              "f484b111-3697-4247-a9b3-d94b91d4f5a4"
+          ]
       },
-      {
-        "stock": null,
-        "sales30day": [
-          {
-            "date": "2025-12-07",
-            "sales": 2864
+      "f484b111-3697-4247-a9b3-d94b91d4f5a4": {
+          "id": "f484b111-3697-4247-a9b3-d94b91d4f5a4",
+          "message": {
+              "id": "f484b111-3697-4247-a9b3-d94b91d4f5a4",
+              "author": {
+                  "role": "assistant",
+                  "name": null,
+                  "metadata": {}
+              },
+              "create_time": 1768550523.5608368,
+              "update_time": null,
+              "content": {
+                  "content_type": "model_editable_context",
+                  "model_set_context": "",
+                  "repository": null,
+                  "repo_summary": null,
+                  "structured_context": null
+              },
+              "status": "finished_successfully",
+              "end_turn": null,
+              "weight": 1.0,
+              "metadata": {
+                  "request_id": "9d7eee18-e29c-415d-ac04-526a8e32d23a",
+                  "message_type": "next",
+                  "model_slug": "gpt-5-2",
+                  "default_model_slug": "auto",
+                  "parent_id": "15812f45-2503-40d8-b4ca-07b9d515a70c",
+                  "turn_exchange_id": "93978c60-bc7f-4647-84dd-1a10680687bb",
+                  "model_switcher_deny": [
+                      {
+                          "slug": "gpt-5-mini",
+                          "context": "regenerate",
+                          "reason": "unsupported_attachment",
+                          "is_available": false,
+                          "description": "This model doesn't support file attachments."
+                      },
+                      {
+                          "slug": "gpt-5-mini",
+                          "context": "conversation",
+                          "reason": "unsupported_attachment",
+                          "is_available": false,
+                          "description": "This model doesn't support file attachments."
+                      },
+                      {
+                          "slug": "auto",
+                          "context": "regenerate",
+                          "reason": "unsupported_attachment",
+                          "is_available": false,
+                          "description": "This model doesn't support file attachments."
+                      },
+                      {
+                          "slug": "auto",
+                          "context": "conversation",
+                          "reason": "unsupported_attachment",
+                          "is_available": false,
+                          "description": "This model doesn't support file attachments."
+                      }
+                  ]
+              },
+              "recipient": "all",
+              "channel": null
           },
-          {
-            "date": "2025-12-08",
-            "sales": 2774
-          },
-          {
-            "date": "2025-12-09",
-            "sales": 2498
-          },
-          {
-            "date": "2025-12-10",
-            "sales": 2485
-          },
-          {
-            "date": "2025-12-11",
-            "sales": 2169
-          },
-          {
-            "date": "2025-12-12",
-            "sales": 2578
-          },
-          {
-            "date": "2025-12-13",
-            "sales": 2159
-          },
-          {
-            "date": "2025-12-14",
-            "sales": 2097
-          },
-          {
-            "date": "2025-12-15",
-            "sales": 3465
-          },
-          {
-            "date": "2025-12-16",
-            "sales": 3236
-          },
-          {
-            "date": "2025-12-17",
-            "sales": 3235
-          },
-          {
-            "date": "2025-12-18",
-            "sales": 3035
-          },
-          {
-            "date": "2025-12-19",
-            "sales": 2937
-          },
-          {
-            "date": "2025-12-20",
-            "sales": 3179
-          },
-          {
-            "date": "2025-12-21",
-            "sales": 3261
-          },
-          {
-            "date": "2025-12-22",
-            "sales": 3291
-          },
-          {
-            "date": "2025-12-23",
-            "sales": 2880
-          },
-          {
-            "date": "2025-12-24",
-            "sales": 3543
-          },
-          {
-            "date": "2025-12-25",
-            "sales": 2528
-          },
-          {
-            "date": "2025-12-26",
-            "sales": 3594
-          },
-          {
-            "date": "2025-12-27",
-            "sales": 3837
-          },
-          {
-            "date": "2025-12-28",
-            "sales": 4258
-          },
-          {
-            "date": "2025-12-29",
-            "sales": 4340
-          },
-          {
-            "date": "2025-12-30",
-            "sales": 4067
-          },
-          {
-            "date": "2025-12-31",
-            "sales": 3881
-          },
-          {
-            "date": "2026-01-01",
-            "sales": 2486
-          },
-          {
-            "date": "2026-01-02",
-            "sales": 4144
-          },
-          {
-            "date": "2026-01-03",
-            "sales": 4098
-          },
-          {
-            "date": "2026-01-04",
-            "sales": 3398
-          },
-          {
-            "date": "2026-01-05",
-            "sales": 4121
-          }
-        ],
-        "commodityId": "1731006372333326477",
-        "commodityTitle": "NeoCell Collagen Bio-Peptides Powder 20oz - Grassfed Protein Supplement - Advanced with 18 Essential Amino Acids",
-        "commodityThumbnailUrl": "https://microdata-spiders-media-sg.oss-ap-southeast-1.aliyuncs.com/image/18e9b199-3168-42b0-95be-28d3b5153672__1731006372333326477.jpeg",
-        "commodityUrl": "https://www.tiktok.com/shop/pdp/1731006372333326477?source=product_detail",
-        "countryRegion": "美国",
-        "commodityPrice": "32.44",
-        "commodityPriceMin": "32.44",
-        "commodityStarRate": 4.7000,
-        "storeLogoUrl": "https://p16-oec-general-useast5.ttcdn-us.com/tos-useast5-i-omjb5zjo8w-tx/9b5a096c44704036b9141fb9114f6d62~tplv-fhlh96nyum-resize-webp:300:300.webp?dr=12185&t=555f072d&ps=933b5bde&shp=905da467&shcp=a6e80448&idc=useast5&from=2422056039",
-        "storeUrl": "aweme://ec/store?sellerId=7496040710007589005&url_maker=store_rpc&store_page_version=1",
-        "storeName": "NeoCell Collagen",
-        "storeSalesNumber": 337857,
-        "storeCommodityNumber": 19,
-        "commodityCategory": "Health",
-        "commodityCategoryCn": "健康",
-        "reviewsNumber": 24167,
-        "totalSalesNumber": 267922,
-        "salesQoq": 21.2800,
-        "totalSaleIncomeNumber": 8691389.68,
-        "powerSellerNumber": 16027,
-        "powerSellerEmailNumber": null,
-        "powerSellerCreatorNumber": null,
-        "shelfTime": "2025-05-12",
-        "commodityShipCost": "$0.00",
-        "sales": "4121",
-        "totalSales": "267922",
-        "salesVolume": 133685.24,
-        "shopId": "7496040710007589005",
-        "whetherOffShelf": false,
-        "dataUpdateTime": "2026-01-05 13:13:56",
-        "videoSale": null,
-        "videoGmv": null,
-        "userFocusStatus": "not_focus",
-        "salesLst7d": 26195,
-        "salesLst30d": 96438,
-        "isCrossBorder": 0,
-        "operateType": null
+          "parent": "15812f45-2503-40d8-b4ca-07b9d515a70c",
+          "children": [
+              "33a26378-3ea6-49bb-b915-f6b7f124a5d2"
+          ]
       },
-      {
-        "stock": null,
-        "sales30day": [
-          {
-            "date": "2025-12-27",
-            "sales": 365
-          },
-          {
-            "date": "2025-12-28",
-            "sales": 282
-          },
-          {
-            "date": "2025-12-29",
-            "sales": 281
-          },
-          {
-            "date": "2025-12-30",
-            "sales": 272
-          },
-          {
-            "date": "2025-12-31",
-            "sales": 138
-          },
-          {
-            "date": "2026-01-01",
-            "sales": 182
-          },
-          {
-            "date": "2026-01-02",
-            "sales": 178
-          },
-          {
-            "date": "2026-01-03",
-            "sales": 588
-          },
-          {
-            "date": "2026-01-04",
-            "sales": 957
-          },
-          {
-            "date": "2026-01-05",
-            "sales": 3893
-          }
-        ],
-        "commodityId": "1732171917746737697",
-        "commodityTitle": "Scented Car Air Freshener - Long Lasting Car Diffuser - Last 60+ Days teakwood",
-        "commodityThumbnailUrl": "https://microdata-spiders-media-sg.oss-ap-southeast-1.aliyuncs.com/image/106910a2-e5ba-46a5-8e75-2a1148e96c2c__1732171917746737697.jpeg",
-        "commodityUrl": "https://www.tiktok.com/shop/pdp/1732171917746737697?source=product_detail",
-        "countryRegion": "美国",
-        "commodityPrice": "11.72",
-        "commodityPriceMin": "11.72",
-        "commodityStarRate": 4.8000,
-        "storeLogoUrl": "http://microdata-static-hk.oss-cn-hongkong.aliyuncs.com/pro-api/tt/image/73e92fe0-ae52-4e62-9ea3-d07ff8f5af62.webp",
-        "storeUrl": "aweme://ec/store?sellerId=7494125917403907617&url_maker=store_rpc&store_page_version=1",
-        "storeName": "RiotFit",
-        "storeSalesNumber": 16100,
-        "storeCommodityNumber": 105,
-        "commodityCategory": "Automotive & Motorcycle",
-        "commodityCategoryCn": "汽车与摩托车",
-        "reviewsNumber": 32,
-        "totalSalesNumber": 7275,
-        "salesQoq": 306.7900,
-        "totalSaleIncomeNumber": 85263.00,
-        "powerSellerNumber": 9,
-        "powerSellerEmailNumber": null,
-        "powerSellerCreatorNumber": null,
-        "shelfTime": "2025-12-26",
-        "commodityShipCost": "$0.00",
-        "sales": "3893",
-        "totalSales": "7275",
-        "salesVolume": 45625.96,
-        "shopId": "7494125917403907617",
-        "whetherOffShelf": false,
-        "dataUpdateTime": "2026-01-05 16:04:57",
-        "videoSale": null,
-        "videoGmv": null,
-        "userFocusStatus": "not_focus",
-        "salesLst7d": 6208,
-        "salesLst30d": 7136,
-        "isCrossBorder": 0,
-        "operateType": null
-      },
-      {
-        "stock": null,
-        "sales30day": [
-          {
-            "date": "2025-12-16",
-            "sales": 792
-          },
-          {
-            "date": "2025-12-17",
-            "sales": 752
-          },
-          {
-            "date": "2025-12-18",
-            "sales": 768
-          },
-          {
-            "date": "2025-12-19",
-            "sales": 959
-          },
-          {
-            "date": "2025-12-20",
-            "sales": 1482
-          },
-          {
-            "date": "2025-12-21",
-            "sales": 1072
-          },
-          {
-            "date": "2025-12-22",
-            "sales": 1930
-          },
-          {
-            "date": "2025-12-23",
-            "sales": 1530
-          },
-          {
-            "date": "2025-12-24",
-            "sales": 679
-          },
-          {
-            "date": "2025-12-25",
-            "sales": 1118
-          },
-          {
-            "date": "2025-12-26",
-            "sales": 1850
-          },
-          {
-            "date": "2025-12-27",
-            "sales": 1348
-          },
-          {
-            "date": "2025-12-28",
-            "sales": 2253
-          },
-          {
-            "date": "2025-12-29",
-            "sales": 1942
-          },
-          {
-            "date": "2025-12-30",
-            "sales": 1682
-          },
-          {
-            "date": "2025-12-31",
-            "sales": 1560
-          },
-          {
-            "date": "2026-01-01",
-            "sales": 1969
-          },
-          {
-            "date": "2026-01-02",
-            "sales": 4367
-          },
-          {
-            "date": "2026-01-03",
-            "sales": 3598
-          },
-          {
-            "date": "2026-01-04",
-            "sales": 3698
-          },
-          {
-            "date": "2026-01-05",
-            "sales": 3462
-          }
-        ],
-        "commodityId": "1732007602890051991",
-        "commodityTitle": "Insoles for Women Man,Cloud Soles for Men Women,4D Cloud Soles for Men,Anti Fatigue, Shock Absorption, Foot Pain Relief",
-        "commodityThumbnailUrl": "https://microdata-spiders-media-sg.oss-ap-southeast-1.aliyuncs.com/image/320cbeb0-7460-481c-b0b9-f27e69b45d52__1732007602890051991.jpeg",
-        "commodityUrl": "https://www.tiktok.com/shop/pdp/1732007602890051991?source=product_detail",
-        "countryRegion": "美国",
-        "commodityPrice": "5.34",
-        "commodityPriceMin": "5.34",
-        "commodityStarRate": 4.5000,
-        "storeLogoUrl": "http://microdata-static-hk.oss-cn-hongkong.aliyuncs.com/pro-api/tt/image/8b439c57-ae66-42ed-8b5a-f79febcd394d.webp",
-        "storeUrl": "aweme://ec/store?sellerId=7494228806286738839&url_maker=store_rpc&store_page_version=1",
-        "storeName": "WonderDrobeXJoy",
-        "storeSalesNumber": 80519,
-        "storeCommodityNumber": 42,
-        "commodityCategory": "Shoes",
-        "commodityCategoryCn": "鞋靴",
-        "reviewsNumber": 1211,
-        "totalSalesNumber": 41569,
-        "salesQoq": -6.3800,
-        "totalSaleIncomeNumber": 221978.46,
-        "powerSellerNumber": 47,
-        "powerSellerEmailNumber": null,
-        "powerSellerCreatorNumber": null,
-        "shelfTime": "2025-12-15",
-        "commodityShipCost": "$0.00",
-        "sales": "3462",
-        "totalSales": "41569",
-        "salesVolume": 18487.08,
-        "shopId": "7494228806286738839",
-        "whetherOffShelf": false,
-        "dataUpdateTime": "2026-01-05 15:57:52",
-        "videoSale": null,
-        "videoGmv": null,
-        "userFocusStatus": "not_focus",
-        "salesLst7d": 20336,
-        "salesLst30d": 38811,
-        "isCrossBorder": 0,
-        "operateType": null
-      },
-      {
-        "stock": null,
-        "sales30day": [
-          {
-            "date": "2025-12-07",
-            "sales": 3511
-          },
-          {
-            "date": "2025-12-08",
-            "sales": 3440
-          },
-          {
-            "date": "2025-12-09",
-            "sales": 2902
-          },
-          {
-            "date": "2025-12-10",
-            "sales": 2717
-          },
-          {
-            "date": "2025-12-11",
-            "sales": 2732
-          },
-          {
-            "date": "2025-12-12",
-            "sales": 3387
-          },
-          {
-            "date": "2025-12-13",
-            "sales": 4250
-          },
-          {
-            "date": "2025-12-14",
-            "sales": 4006
-          },
-          {
-            "date": "2025-12-15",
-            "sales": 4346
-          },
-          {
-            "date": "2025-12-16",
-            "sales": 3138
-          },
-          {
-            "date": "2025-12-17",
-            "sales": 3059
-          },
-          {
-            "date": "2025-12-18",
-            "sales": 3212
-          },
-          {
-            "date": "2025-12-19",
-            "sales": 3357
-          },
-          {
-            "date": "2025-12-20",
-            "sales": 3448
-          },
-          {
-            "date": "2025-12-21",
-            "sales": 2986
-          },
-          {
-            "date": "2025-12-22",
-            "sales": 2625
-          },
-          {
-            "date": "2025-12-23",
-            "sales": 2281
-          },
-          {
-            "date": "2025-12-24",
-            "sales": 2059
-          },
-          {
-            "date": "2025-12-25",
-            "sales": 2191
-          },
-          {
-            "date": "2025-12-26",
-            "sales": 2432
-          },
-          {
-            "date": "2025-12-27",
-            "sales": 3116
-          },
-          {
-            "date": "2025-12-28",
-            "sales": 2782
-          },
-          {
-            "date": "2025-12-29",
-            "sales": 2756
-          },
-          {
-            "date": "2025-12-30",
-            "sales": 2581
-          },
-          {
-            "date": "2025-12-31",
-            "sales": 2637
-          },
-          {
-            "date": "2026-01-01",
-            "sales": 2698
-          },
-          {
-            "date": "2026-01-02",
-            "sales": 3647
-          },
-          {
-            "date": "2026-01-03",
-            "sales": 3931
-          },
-          {
-            "date": "2026-01-04",
-            "sales": 3638
-          },
-          {
-            "date": "2026-01-05",
-            "sales": 3367
-          }
-        ],
-        "commodityId": "1729718141631565851",
-        "commodityTitle": "[Dr.Melaxin Official] Cemenrete Calcium Multi Balm Eye Care Routine Korean Skin Care Anti-aging Cosmetics Eye Care Eye Stick 9g",
-        "commodityThumbnailUrl": "https://microdata-spiders-media-sg.oss-ap-southeast-1.aliyuncs.com/image/ca5a9d52-4bc4-4961-8b3f-a98d6c86698d__1729718141631565851.jpeg",
-        "commodityUrl": "https://www.tiktok.com/shop/pdp/1729718141631565851?source=product_detail",
-        "countryRegion": "美国",
-        "commodityPrice": "23.00",
-        "commodityPriceMin": "23.00",
-        "commodityStarRate": 4.3000,
-        "storeLogoUrl": "http://microdata-static-hk.oss-cn-hongkong.aliyuncs.com/pro-api/tt/image/06316f9d-e8f1-46c5-8665-63a8497b9586.jpeg",
-        "storeUrl": "aweme://ec/store?sellerId=7495830785034323995&url_maker=store_rpc&store_page_version=1",
-        "storeName": "Dr.Melaxin Global",
-        "storeSalesNumber": 2069372,
-        "storeCommodityNumber": 88,
-        "commodityCategory": "Beauty & Personal Care",
-        "commodityCategoryCn": "美妆个护",
-        "reviewsNumber": 17187,
-        "totalSalesNumber": 407878,
-        "salesQoq": -7.4500,
-        "totalSaleIncomeNumber": 9381194.00,
-        "powerSellerNumber": 4047,
-        "powerSellerEmailNumber": null,
-        "powerSellerCreatorNumber": null,
-        "shelfTime": "2024-12-02",
-        "commodityShipCost": "$4.28",
-        "sales": "3367",
-        "totalSales": "407878",
-        "salesVolume": 77441.00,
-        "shopId": "7495830785034323995",
-        "whetherOffShelf": false,
-        "dataUpdateTime": "2026-01-05 14:08:19",
-        "videoSale": null,
-        "videoGmv": null,
-        "userFocusStatus": "not_focus",
-        "salesLst7d": 22499,
-        "salesLst30d": 93232,
-        "isCrossBorder": 0,
-        "operateType": null
-      },
-      {
-        "stock": null,
-        "sales30day": [
-          {
-            "date": "2025-12-07",
-            "sales": 4360
-          },
-          {
-            "date": "2025-12-08",
-            "sales": 4658
-          },
-          {
-            "date": "2025-12-09",
-            "sales": 3213
-          },
-          {
-            "date": "2025-12-10",
-            "sales": 3732
-          },
-          {
-            "date": "2025-12-11",
-            "sales": 3140
-          },
-          {
-            "date": "2025-12-12",
-            "sales": 3308
-          },
-          {
-            "date": "2025-12-13",
-            "sales": 4326
-          },
-          {
-            "date": "2025-12-14",
-            "sales": 4562
-          },
-          {
-            "date": "2025-12-15",
-            "sales": 4537
-          },
-          {
-            "date": "2025-12-16",
-            "sales": 3360
-          },
-          {
-            "date": "2025-12-17",
-            "sales": 2775
-          },
-          {
-            "date": "2025-12-18",
-            "sales": 2115
-          },
-          {
-            "date": "2025-12-19",
-            "sales": 2533
-          },
-          {
-            "date": "2025-12-20",
-            "sales": 2437
-          },
-          {
-            "date": "2025-12-21",
-            "sales": 2807
-          },
-          {
-            "date": "2025-12-22",
-            "sales": 3708
-          },
-          {
-            "date": "2025-12-23",
-            "sales": 2546
-          },
-          {
-            "date": "2025-12-24",
-            "sales": 2316
-          },
-          {
-            "date": "2025-12-25",
-            "sales": 2763
-          },
-          {
-            "date": "2025-12-26",
-            "sales": 3411
-          },
-          {
-            "date": "2025-12-27",
-            "sales": 5935
-          },
-          {
-            "date": "2025-12-28",
-            "sales": 6767
-          },
-          {
-            "date": "2025-12-29",
-            "sales": 7406
-          },
-          {
-            "date": "2025-12-30",
-            "sales": 4767
-          },
-          {
-            "date": "2025-12-31",
-            "sales": 5300
-          },
-          {
-            "date": "2026-01-01",
-            "sales": 3150
-          },
-          {
-            "date": "2026-01-02",
-            "sales": 3560
-          },
-          {
-            "date": "2026-01-03",
-            "sales": 3571
-          },
-          {
-            "date": "2026-01-04",
-            "sales": 3401
-          },
-          {
-            "date": "2026-01-05",
-            "sales": 3333
-          }
-        ],
-        "commodityId": "1730491237165011696",
-        "commodityTitle": "VRCOMFY Jelly Wireless Womens Comfortable Wireless Bras Push Up Bralettes Seamless Tshirts Bras Deep V Everyday Bras",
-        "commodityThumbnailUrl": "https://microdata-spiders-media-sg.oss-ap-southeast-1.aliyuncs.com/image/ebc35f4f-2ea5-47f3-b402-4223a775ca8c__1730491237165011696.jpeg",
-        "commodityUrl": "https://www.tiktok.com/shop/pdp/1730491237165011696?source=product_detail",
-        "countryRegion": "美国",
-        "commodityPrice": "19.27",
-        "commodityPriceMin": "19.27",
-        "commodityStarRate": 4.2000,
-        "storeLogoUrl": "http://microdata-static-hk.oss-cn-hongkong.aliyuncs.com/pro-api/tt/image/0982fb5e-4636-442e-868c-882e2c70f66b.jpeg",
-        "storeUrl": "aweme://ec/store?sellerId=7495757249114901232&url_maker=store_rpc&store_page_version=1",
-        "storeName": "VRCOMFY",
-        "storeSalesNumber": 581090,
-        "storeCommodityNumber": 31,
-        "commodityCategory": "Womenswear & Underwear",
-        "commodityCategoryCn": "女装与女士内衣",
-        "reviewsNumber": 31746,
-        "totalSalesNumber": 475320,
-        "salesQoq": -2.0000,
-        "totalSaleIncomeNumber": 9159416.40,
-        "powerSellerNumber": 3608,
-        "powerSellerEmailNumber": null,
-        "powerSellerCreatorNumber": null,
-        "shelfTime": "2025-01-15",
-        "commodityShipCost": "$4.62",
-        "sales": "3333",
-        "totalSales": "475320",
-        "salesVolume": 64226.91,
-        "shopId": "7495757249114901232",
-        "whetherOffShelf": false,
-        "dataUpdateTime": "2026-01-05 14:18:27",
-        "videoSale": null,
-        "videoGmv": null,
-        "userFocusStatus": "not_focus",
-        "salesLst7d": 27082,
-        "salesLst30d": 113797,
-        "isCrossBorder": 0,
-        "operateType": null
-      },
-      {
-        "stock": null,
-        "sales30day": [
-          {
-            "date": "2025-12-07",
-            "sales": 3572
-          },
-          {
-            "date": "2025-12-08",
-            "sales": 2821
-          },
-          {
-            "date": "2025-12-09",
-            "sales": 1859
-          },
-          {
-            "date": "2025-12-10",
-            "sales": 2178
-          },
-          {
-            "date": "2025-12-11",
-            "sales": 2114
-          },
-          {
-            "date": "2025-12-12",
-            "sales": 2319
-          },
-          {
-            "date": "2025-12-13",
-            "sales": 2373
-          },
-          {
-            "date": "2025-12-14",
-            "sales": 2507
-          },
-          {
-            "date": "2025-12-15",
-            "sales": 2248
-          },
-          {
-            "date": "2025-12-16",
-            "sales": 1313
-          },
-          {
-            "date": "2025-12-17",
-            "sales": 2152
-          },
-          {
-            "date": "2025-12-18",
-            "sales": 2431
-          },
-          {
-            "date": "2025-12-19",
-            "sales": 2393
-          },
-          {
-            "date": "2025-12-20",
-            "sales": 2884
-          },
-          {
-            "date": "2025-12-21",
-            "sales": 3659
-          },
-          {
-            "date": "2025-12-22",
-            "sales": 3245
-          },
-          {
-            "date": "2025-12-23",
-            "sales": 2332
-          },
-          {
-            "date": "2025-12-24",
-            "sales": 2139
-          },
-          {
-            "date": "2025-12-25",
-            "sales": 2448
-          },
-          {
-            "date": "2025-12-26",
-            "sales": 3288
-          },
-          {
-            "date": "2025-12-27",
-            "sales": 3851
-          },
-          {
-            "date": "2025-12-28",
-            "sales": 3862
-          },
-          {
-            "date": "2025-12-29",
-            "sales": 4486
-          },
-          {
-            "date": "2025-12-30",
-            "sales": 3240
-          },
-          {
-            "date": "2025-12-31",
-            "sales": 3143
-          },
-          {
-            "date": "2026-01-01",
-            "sales": 2568
-          },
-          {
-            "date": "2026-01-02",
-            "sales": 3571
-          },
-          {
-            "date": "2026-01-03",
-            "sales": 3295
-          },
-          {
-            "date": "2026-01-04",
-            "sales": 3504
-          },
-          {
-            "date": "2026-01-05",
-            "sales": 3170
-          }
-        ],
-        "commodityId": "1731997246433955867",
-        "commodityTitle": "[Dr.Melaxin Official] Gifted Collagen Boost Set Pore Spot Skin Care Calcium Collagen Volume Firming Balm for Enhanced Skin Health routine",
-        "commodityThumbnailUrl": "https://microdata-spiders-media-sg.oss-ap-southeast-1.aliyuncs.com/image/66b15b70-8bd2-477d-9ae0-5bd666defe71__1731997246433955867.jpeg",
-        "commodityUrl": "https://www.tiktok.com/shop/pdp/1731997246433955867?source=product_detail",
-        "countryRegion": "美国",
-        "commodityPrice": "69.00",
-        "commodityPriceMin": "69.00",
-        "commodityStarRate": 4.6000,
-        "storeLogoUrl": "http://microdata-static-hk.oss-cn-hongkong.aliyuncs.com/pro-api/tt/image/06316f9d-e8f1-46c5-8665-63a8497b9586.jpeg",
-        "storeUrl": "aweme://ec/store?sellerId=7495830785034323995&url_maker=store_rpc&store_page_version=1",
-        "storeName": "Dr.Melaxin Global",
-        "storeSalesNumber": 2069372,
-        "storeCommodityNumber": 88,
-        "commodityCategory": "Beauty & Personal Care",
-        "commodityCategoryCn": "美妆个护",
-        "reviewsNumber": 3183,
-        "totalSalesNumber": 123135,
-        "salesQoq": -9.5300,
-        "totalSaleIncomeNumber": 8496315.00,
-        "powerSellerNumber": 1445,
-        "powerSellerEmailNumber": null,
-        "powerSellerCreatorNumber": null,
-        "shelfTime": "2025-11-03",
-        "commodityShipCost": "$0.00",
-        "sales": "3170",
-        "totalSales": "123135",
-        "salesVolume": 218730.00,
-        "shopId": "7495830785034323995",
-        "whetherOffShelf": false,
-        "dataUpdateTime": "2026-01-05 15:40:14",
-        "videoSale": null,
-        "videoGmv": null,
-        "userFocusStatus": "not_focus",
-        "salesLst7d": 22491,
-        "salesLst30d": 84965,
-        "isCrossBorder": 0,
-        "operateType": null
-      },
-      {
-        "stock": null,
-        "sales30day": [
-          {
-            "date": "2025-12-07",
-            "sales": 357
-          },
-          {
-            "date": "2025-12-08",
-            "sales": 417
-          },
-          {
-            "date": "2025-12-09",
-            "sales": 420
-          },
-          {
-            "date": "2025-12-10",
-            "sales": 403
-          },
-          {
-            "date": "2025-12-11",
-            "sales": 492
-          },
-          {
-            "date": "2025-12-12",
-            "sales": 443
-          },
-          {
-            "date": "2025-12-13",
-            "sales": 396
-          },
-          {
-            "date": "2025-12-14",
-            "sales": 369
-          },
-          {
-            "date": "2025-12-15",
-            "sales": 449
-          },
-          {
-            "date": "2025-12-16",
-            "sales": 427
-          },
-          {
-            "date": "2025-12-17",
-            "sales": 449
-          },
-          {
-            "date": "2025-12-18",
-            "sales": 522
-          },
-          {
-            "date": "2025-12-19",
-            "sales": 536
-          },
-          {
-            "date": "2025-12-20",
-            "sales": 484
-          },
-          {
-            "date": "2025-12-21",
-            "sales": 609
-          },
-          {
-            "date": "2025-12-22",
-            "sales": 832
-          },
-          {
-            "date": "2025-12-23",
-            "sales": 689
-          },
-          {
-            "date": "2025-12-24",
-            "sales": 751
-          },
-          {
-            "date": "2025-12-25",
-            "sales": 637
-          },
-          {
-            "date": "2025-12-26",
-            "sales": 647
-          },
-          {
-            "date": "2025-12-27",
-            "sales": 1197
-          },
-          {
-            "date": "2025-12-28",
-            "sales": 1554
-          },
-          {
-            "date": "2025-12-29",
-            "sales": 1677
-          },
-          {
-            "date": "2025-12-30",
-            "sales": 2658
-          },
-          {
-            "date": "2025-12-31",
-            "sales": 3978
-          },
-          {
-            "date": "2026-01-01",
-            "sales": 3091
-          },
-          {
-            "date": "2026-01-02",
-            "sales": 3143
-          },
-          {
-            "date": "2026-01-03",
-            "sales": 4683
-          },
-          {
-            "date": "2026-01-04",
-            "sales": 4535
-          },
-          {
-            "date": "2026-01-05",
-            "sales": 3137
-          }
-        ],
-        "commodityId": "1730436771915338118",
-        "commodityTitle": "Nasomin Nasal Iodine – Nasal Cleanse– Neutralize Nose - Iodine + Fulvic Acid Blend -100% Natural Mineral Complex – (2 oz. Bottle+Nasal Sprayer) Oral Daily",
-        "commodityThumbnailUrl": "https://microdata-spiders-media-sg.oss-ap-southeast-1.aliyuncs.com/image/c5362fd0-bbde-45de-8af7-3c3bc800c762__1730436771915338118.jpeg",
-        "commodityUrl": "https://www.tiktok.com/shop/pdp/1730436771915338118?source=product_detail",
-        "countryRegion": "美国",
-        "commodityPrice": "74.97",
-        "commodityPriceMin": "24.99",
-        "commodityStarRate": 4.5000,
-        "storeLogoUrl": "http://microdata-static-hk.oss-cn-hongkong.aliyuncs.com/pro-api/tt/image/6477c817-7a0a-4943-8a08-aae41c399e38.jpeg",
-        "storeUrl": "aweme://ec/store?sellerId=7495330630624905606&url_maker=store_rpc&store_page_version=1",
-        "storeName": "Triquetra",
-        "storeSalesNumber": 955939,
-        "storeCommodityNumber": 87,
-        "commodityCategory": "Beauty & Personal Care",
-        "commodityCategoryCn": "美妆个护",
-        "reviewsNumber": 2167,
-        "totalSalesNumber": 84118,
-        "salesQoq": -30.8300,
-        "totalSaleIncomeNumber": 4204217.64,
-        "powerSellerNumber": 8542,
-        "powerSellerEmailNumber": null,
-        "powerSellerCreatorNumber": null,
-        "shelfTime": "2025-01-08",
-        "commodityShipCost": "$7.00",
-        "sales": "3137",
-        "totalSales": "84118",
-        "salesVolume": 156787.26,
-        "shopId": "7495330630624905606",
-        "whetherOffShelf": false,
-        "dataUpdateTime": "2026-01-05 14:17:40",
-        "videoSale": null,
-        "videoGmv": null,
-        "userFocusStatus": "not_focus",
-        "salesLst7d": 25225,
-        "salesLst30d": 39982,
-        "isCrossBorder": 0,
-        "operateType": null
+      "33a26378-3ea6-49bb-b915-f6b7f124a5d2": {
+          "id": "33a26378-3ea6-49bb-b915-f6b7f124a5d2",
+          "message": {
+              "id": "33a26378-3ea6-49bb-b915-f6b7f124a5d2",
+              "author": {
+                  "role": "assistant",
+                  "name": null,
+                  "metadata": {}
+              },
+              "create_time": 1768550523.601468,
+              "update_time": null,
+              "content": {
+                  "content_type": "text",
+                  "parts": [
+                      "这是 **ChatGPT 的对话首页界面**，主要包含这些东西：\n\n1. **中间的大字**  \n   - 文案是：**“很高兴见到你。滚动。”**  \n   - 这是首页的欢迎语，提示你可以向下滚动或直接开始提问。\n\n2. **底部输入框（核心功能区）**  \n   - 文本提示：**“Ask anything”**  \n   - 左侧 **“+”**：通常用于添加内容（比如上传文件、图片等，取决于当前版本）  \n   - 右侧两个按钮：  \n     - 🎤 **麦克风**：语音输入  \n     - ⚫ **波形图标**：语音对话 / 实时语音模式入口\n\n3. **左侧边栏（部分可见）**  \n   - 一个圆形头像，标着 **“WJ”**，代表你的账号或当前用户  \n   - 左侧一般是：历史对话列表、设置入口等（这里只截到一小部分）\n\n4. **整体状态**  \n   - 当前**没有打开任何具体对话**  \n   - 这是一个“空白起始页”，你可以直接输入任何问题开始使用\n\n如果你想问的是：  \n- 「这个页面还能做什么？」  \n- 「为什么会显示这个？」  \n- 「和旧版界面有什么区别？」  \n\n你可以直接说你具体想了解哪一块，我可以给你详细拆解。"
+                  ]
+              },
+              "status": "finished_successfully",
+              "end_turn": true,
+              "weight": 1.0,
+              "metadata": {
+                  "finish_details": {
+                      "type": "stop",
+                      "stop_tokens": [
+                          200002
+                      ]
+                  },
+                  "is_complete": true,
+                  "sonic_classification_result": {
+                      "latency_ms": null,
+                      "simple_search_prob": null,
+                      "complex_search_prob": null,
+                      "no_search_prob": null,
+                      "search_complexity_decision": null,
+                      "search_decision": null,
+                      "simple_search_threshold": 0.0,
+                      "complex_search_threshold": 0.4,
+                      "no_search_threshold": 0.2,
+                      "threshold_order": [
+                          "no_search",
+                          "complex",
+                          "simple"
+                      ],
+                      "classifier_config_name": "sonic_classifier_5p2_3cls_ev3",
+                      "classifier_config": {
+                          "model_name": "snc-pg-sw-3cls-ev3",
+                          "renderer_name": "harmony_v4.0.15_16k_orion_text_only_no_asr_2k_action",
+                          "classifier_config_name": "sonic_classifier_5p2_3cls_ev3",
+                          "model_config_name": "chatgpt_sonic_classifier_model_config",
+                          "disable_sonic_prefetch_classifier": false,
+                          "force_disabled_rate": 0.0,
+                          "force_enabled_rate": 0.0,
+                          "num_messages": 20,
+                          "only_user_messages": false,
+                          "remove_memory": true,
+                          "support_mm": true,
+                          "n_ctx": 2048,
+                          "max_action_length": 4,
+                          "dynamic_set_max_message_size": false,
+                          "max_message_tokens": 2000,
+                          "append_base_config": false,
+                          "no_search_token": "1",
+                          "simple_search_token": "7",
+                          "complex_search_token": "5",
+                          "simple_search_threshold": 0.0,
+                          "complex_search_threshold": 0.4,
+                          "no_search_threshold": 0.2,
+                          "prefetch_threshold": null,
+                          "first_turn_prefetch_threshold": 0.6,
+                          "force_search_first_turn_threshold": 0.00001,
+                          "threshold_order": [
+                              "no_search",
+                              "complex",
+                              "simple"
+                          ],
+                          "passthrough_tool_calls": null,
+                          "passthrough_tool_name_exclusions": [
+                              "genui"
+                          ],
+                          "timeout": 1.0
+                      },
+                      "classifier_snapshot_id": null,
+                      "decision_source": "mainline",
+                      "passthrough_tool_names": []
+                  },
+                  "citations": [],
+                  "content_references": [],
+                  "request_id": "9d7eee18-e29c-415d-ac04-526a8e32d23a",
+                  "message_type": "next",
+                  "model_slug": "gpt-5-2",
+                  "default_model_slug": "auto",
+                  "parent_id": "f484b111-3697-4247-a9b3-d94b91d4f5a4",
+                  "turn_exchange_id": "93978c60-bc7f-4647-84dd-1a10680687bb",
+                  "model_switcher_deny": [
+                      {
+                          "slug": "gpt-5-mini",
+                          "context": "regenerate",
+                          "reason": "unsupported_attachment",
+                          "is_available": false,
+                          "description": "This model doesn't support file attachments."
+                      },
+                      {
+                          "slug": "gpt-5-mini",
+                          "context": "conversation",
+                          "reason": "unsupported_attachment",
+                          "is_available": false,
+                          "description": "This model doesn't support file attachments."
+                      },
+                      {
+                          "slug": "auto",
+                          "context": "regenerate",
+                          "reason": "unsupported_attachment",
+                          "is_available": false,
+                          "description": "This model doesn't support file attachments."
+                      },
+                      {
+                          "slug": "auto",
+                          "context": "conversation",
+                          "reason": "unsupported_attachment",
+                          "is_available": false,
+                          "description": "This model doesn't support file attachments."
+                      }
+                  ]
+              },
+              "recipient": "all",
+              "channel": "final"
+          },
+          "parent": "f484b111-3697-4247-a9b3-d94b91d4f5a4",
+          "children": []
       }
-    ],
-    "total": 9501121,
-    "size": 10,
-    "current": 1,
-    "pages": 950113
-  }
+  },
+  "moderation_results": [],
+  "current_node": "33a26378-3ea6-49bb-b915-f6b7f124a5d2",
+  "plugin_ids": null,
+  "conversation_id": "6969f076-d278-8326-bb7b-1de97c117400",
+  "conversation_template_id": null,
+  "gizmo_id": null,
+  "gizmo_type": null,
+  "is_archived": false,
+  "is_starred": null,
+  "safe_urls": [
+      "https://www.openai.com"
+  ],
+  "blocked_urls": [],
+  "default_model_slug": "auto",
+  "conversation_origin": null,
+  "is_read_only": null,
+  "voice": null,
+  "async_status": null,
+  "disabled_tool_ids": [],
+  "is_do_not_remember": false,
+  "memory_scope": "global_enabled",
+  "context_scopes": null,
+  "sugar_item_id": null,
+  "sugar_item_visible": false,
+  "pinned_time": null,
+  "is_study_mode": false,
+  "owner": null
 }

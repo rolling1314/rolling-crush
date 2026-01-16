@@ -7,7 +7,7 @@ import { ChatSidebar } from '../components/ChatSidebar';
 import { FileTree } from '../components/FileTree';
 import { CodeEditor } from '../components/CodeEditor';
 import { InlineChatModelSelector } from '../components/InlineChatModelSelector';
-import { type FileNode, type Message, type PermissionRequest, type ToolCall, type ToolResult, type Session, type ToolCallStatus } from '../types';
+import { type FileNode, type Message, type PermissionRequest, type ToolCall, type ToolResult, type Session, type ToolCallStatus, type ImageAttachment } from '../types';
 
 const API_URL = '/api';
 const WS_URL = '/ws';
@@ -661,6 +661,7 @@ export default function WorkspacePage() {
     let reasoning = '';
     const toolCalls: ToolCall[] = [];
     const toolResults: ToolResult[] = [];
+    const images: ImageAttachment[] = [];
     
     if (backendMsg.Parts && Array.isArray(backendMsg.Parts)) {
       backendMsg.Parts.forEach((part: any) => {
@@ -671,6 +672,26 @@ export default function WorkspacePage() {
         if (part.thinking) {
           reasoning = part.thinking;
         }
+
+        // Image extraction
+        if (part.Path && part.MIMEType && part.MIMEType.startsWith('image/')) {
+            // Convert absolute URL to relative for proxy if needed
+            let url = part.Path;
+            if (url.includes('/crush-images/')) {
+                const parts = url.split('/crush-images/');
+                if (parts.length > 1) {
+                    url = `/crush-images/${parts[1]}`;
+                }
+            }
+
+            const filename = url.split('/').pop() || 'image.png';
+            images.push({
+                url: url,
+                filename: filename,
+                mime_type: part.MIMEType,
+            });
+        }
+
         // 解析 tool_call
         if (part.name && part.input !== undefined && (part.id || part.ID)) {
           // Determine status based on finished flag
@@ -718,6 +739,7 @@ export default function WorkspacePage() {
       isStreaming: !isFinished, // 如果没有 finish reason，说明还在流式传输
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       toolResults: toolResults.length > 0 ? toolResults : undefined,
+      images: images.length > 0 ? images : undefined,
     };
   };
 
@@ -857,6 +879,7 @@ export default function WorkspacePage() {
         let reasoning = '';
         const toolCalls: ToolCall[] = [];
         const toolResults: ToolResult[] = [];
+        const images: ImageAttachment[] = [];
         
         if (msg.Parts && Array.isArray(msg.Parts)) {
           msg.Parts.forEach((part: any) => {
@@ -867,6 +890,26 @@ export default function WorkspacePage() {
             if (part.thinking) {
               reasoning = part.thinking;
             }
+
+            // Image extraction
+            if (part.Path && part.MIMEType && part.MIMEType.startsWith('image/')) {
+                // Convert absolute URL to relative for proxy if needed
+                let url = part.Path;
+                if (url.includes('/crush-images/')) {
+                    const parts = url.split('/crush-images/');
+                    if (parts.length > 1) {
+                        url = `/crush-images/${parts[1]}`;
+                    }
+                }
+
+                const filename = url.split('/').pop() || 'image.png';
+                images.push({
+                    url: url,
+                    filename: filename,
+                    mime_type: part.MIMEType,
+                });
+            }
+
             // 解析 tool_call - 检查是否有 name 和 input 字段
             if (part.name && part.input !== undefined && (part.id || part.ID)) {
               const toolCallId = part.id || part.ID;
@@ -920,6 +963,7 @@ export default function WorkspacePage() {
           isStreaming: false,
           toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
           toolResults: toolResults.length > 0 ? toolResults : undefined,
+          images: images.length > 0 ? images : undefined,
         };
       });
       

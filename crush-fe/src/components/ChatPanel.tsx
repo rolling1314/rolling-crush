@@ -86,17 +86,14 @@ const MessageImages = memo(({ images }: { images: ImageAttachment[] }) => {
   
   return (
     <>
-      <div className="flex flex-wrap gap-2 mt-2">
+      <div className="flex flex-wrap gap-2 mb-2">
         {images.map((img, idx) => (
           <div key={idx} className="relative group cursor-pointer" onClick={() => setSelectedImage(img.url)}>
             <img 
               src={img.url} 
               alt={img.filename}
-              className="max-h-40 max-w-[200px] object-contain rounded border border-green-500/30 hover:border-green-400 transition-colors"
+              className="max-h-48 max-w-[240px] object-cover rounded-lg border border-white/10 hover:border-white/30 transition-colors shadow-sm"
             />
-            <span className="absolute bottom-0 left-0 right-0 bg-black/70 text-[10px] text-green-300 truncate px-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              {img.filename}
-            </span>
           </div>
         ))}
       </div>
@@ -104,20 +101,20 @@ const MessageImages = memo(({ images }: { images: ImageAttachment[] }) => {
       {/* Full-size image modal */}
       {selectedImage && (
         <div 
-          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4 backdrop-blur-sm"
           onClick={() => setSelectedImage(null)}
         >
           <div className="relative max-w-full max-h-full">
             <img 
               src={selectedImage} 
               alt="Full size"
-              className="max-w-full max-h-[90vh] object-contain rounded"
+              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
             />
             <button
               onClick={() => setSelectedImage(null)}
-              className="absolute top-2 right-2 p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
+              className="absolute -top-12 right-0 p-2 text-white/70 hover:text-white transition-colors"
             >
-              <X size={20} />
+              <X size={24} />
             </button>
           </div>
         </div>
@@ -172,21 +169,20 @@ const UserMessageRenderer = memo(({ content, images }: { content: string; images
     return { text, files };
   }, [content]);
 
-  if (files.length === 0 && (!images || images.length === 0)) {
-    return <span className="whitespace-pre-wrap">{text}</span>;
-  }
-
   return (
-    <div className="flex flex-col gap-2">
-      <span className="whitespace-pre-wrap">{text}</span>
-      
-      {/* Display attached images */}
+    <div className="flex flex-col gap-1">
+      {/* Display attached images at the top */}
       {images && images.length > 0 && (
         <MessageImages images={images} />
       )}
-      
+
+      {files.length === 0 && <span className="whitespace-pre-wrap">{text}</span>}
+
       {files.length > 0 && (
-      <div className="bg-blue-900/20 border border-blue-700/30 rounded-md overflow-hidden">
+        <>
+            <span className="whitespace-pre-wrap">{text}</span>
+            <div className="bg-blue-900/20 border border-blue-700/30 rounded-md overflow-hidden mt-2">
+
         <button 
           onClick={() => setIsExpanded(!isExpanded)}
           className="flex items-center gap-2 w-full px-3 py-2 text-xs text-blue-300 hover:bg-blue-800/30 transition-colors text-left"
@@ -247,6 +243,7 @@ const UserMessageRenderer = memo(({ content, images }: { content: string; images
           </div>
         )}
       </div>
+        </>
       )}
     </div>
   );

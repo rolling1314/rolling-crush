@@ -1,4 +1,4 @@
-import { BackendMessage, Message, ToolCall, ToolResult, ContentPart, FinishInfo } from '../types';
+import { BackendMessage, Message, ToolCall, ToolResult, ContentPart, FinishInfo, ImageAttachment } from '../types';
 
 export const parseBackendMessages = (backendMessages: BackendMessage[]): Message[] => {
   const messages: Message[] = [];
@@ -21,11 +21,36 @@ export const parseBackendMessages = (backendMessages: BackendMessage[]): Message
     if (msg.Role === 'user') {
       // Extract text content
       const content = msg.Parts.find(p => p.text)?.text || '';
+
+      // Extract images
+      const images: ImageAttachment[] = msg.Parts
+        .filter(p => p.Path && p.MIMEType && p.MIMEType.startsWith('image/'))
+        .map(p => {
+            // Convert absolute URL to relative for proxy if needed
+            // The backend returns absolute URLs like http://localhost:9000/crush-images/...
+            // We want to use the proxy at /crush-images/...
+            let url = p.Path!;
+            if (url.includes('/crush-images/')) {
+                const parts = url.split('/crush-images/');
+                if (parts.length > 1) {
+                    url = `/crush-images/${parts[1]}`;
+                }
+            }
+
+            const filename = url.split('/').pop() || 'image.png';
+            return {
+                url: url,
+                filename: filename,
+                mime_type: p.MIMEType!,
+            };
+        });
+
       messages.push({
         id: msg.ID,
         role: 'user',
         content,
         timestamp,
+        images: images.length > 0 ? images : undefined
       });
       lastAssistantMessage = null; // Reset
     } else if (msg.Role === 'assistant') {

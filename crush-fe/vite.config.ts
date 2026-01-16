@@ -15,6 +15,10 @@ export default defineConfig({
         target: 'ws://localhost:8002',
         ws: true,
         changeOrigin: true,
+      },
+      '/crush-images': {
+        target: 'http://localhost:9000',
+        changeOrigin: true,
       }
     }
   }
