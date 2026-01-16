@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
@@ -96,6 +97,14 @@ func (s *Server) handleTestProviderConnection(c *gin.Context) {
 		return
 	}
 
+	// 打印请求参数（API Key 只显示后4位）
+	maskedKey := req.APIKey
+	if len(maskedKey) > 4 {
+		maskedKey = "****" + maskedKey[len(maskedKey)-4:]
+	}
+	fmt.Printf("[TestProviderConnection] provider=%s, model=%s, api_key=%s, base_url=%s\n",
+		req.Provider, req.Model, maskedKey, req.BaseURL)
+
 	if s.config == nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Config not available"})
 		return
@@ -155,6 +164,14 @@ func (s *Server) handleConfigureProvider(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
+
+	// 打印请求参数（API Key 只显示后4位）
+	maskedKey := req.APIKey
+	if len(maskedKey) > 4 {
+		maskedKey = "****" + maskedKey[len(maskedKey)-4:]
+	}
+	fmt.Printf("[ConfigureProvider] provider=%s, model=%s, api_key=%s, base_url=%s\n",
+		req.Provider, req.Model, maskedKey, req.BaseURL)
 
 	if s.config == nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Config not available"})

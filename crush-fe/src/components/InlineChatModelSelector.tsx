@@ -62,6 +62,9 @@ export function InlineChatModelSelector({
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  
+  // 本地保存用户当前选择的 provider/model（用于测试连接）
+  const [localSelection, setLocalSelection] = useState<{provider: string, model: string} | null>(null);
 
   // 是否为老会话模式
   const isExistingSession = !!sessionId;
@@ -106,15 +109,18 @@ export function InlineChatModelSelector({
 
   const loadSessionConfig = async () => {
     if (!sessionId) return;
+    console.log('[loadSessionConfig] loading config for session:', sessionId);
     try {
       setLoading(true);
       const token = localStorage.getItem('jwt_token');
       const response = await axios.get(`${API_URL}/sessions/${sessionId}/config`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      console.log('[loadSessionConfig] received:', response.data);
       setSessionConfig(response.data);
       // 同步到 selectedConfig
       if (response.data.provider && response.data.model) {
+        console.log('[loadSessionConfig] calling onConfigChange with server config');
         onConfigChange({
           provider: response.data.provider,
           model: response.data.model,
@@ -200,21 +206,35 @@ export function InlineChatModelSelector({
   };
 
   const handleSelectModel = (modelId: string, providerId: string) => {
-    onConfigChange({
+    console.log('[handleSelectModel] selected:', { providerId, modelId });
+    
+    // 保存到本地状态（用于测试连接）
+    setLocalSelection({ provider: providerId, model: modelId });
+    
+    const newConfig = {
       ...selectedConfig,
       provider: providerId,
       model: modelId,
       is_auto: false
-    });
+    };
+    
+    onConfigChange(newConfig);
     // 选完模型后总是显示 API key 输入界面
     // 用户可以修改或确认 key
     setShowApiKeyInput(true);
   };
 
   const testApiKey = async () => {
-    const provider = selectedConfig.provider;
-    const model = selectedConfig.model;
-    const apiKey = tempApiKey || sessionConfig?.api_key;
+    // 优先使用本地保存的用户选择，其次用 selectedConfig
+    const provider = localSelection?.provider || selectedConfig.provider;
+    const model = localSelection?.model || selectedConfig.model;
+    // 只使用用户新输入的 tempApiKey 进行测试
+    const apiKey = tempApiKey;
+    
+    // 调试日志
+    console.log('[testApiKey] localSelection:', localSelection);
+    console.log('[testApiKey] selectedConfig:', selectedConfig);
+    console.log('[testApiKey] will send:', { provider, model });
     
     if (!provider || !model || !apiKey) return;
     
@@ -240,6 +260,10 @@ export function InlineChatModelSelector({
 
   const handleSaveApiKey = async () => {
     if (!tempApiKey.trim()) return;
+    
+    // 使用本地选择的 provider/model
+    const provider = localSelection?.provider || selectedConfig.provider;
+    const model = localSelection?.model || selectedConfig.model;
 
     // 对于老会话，保存到后端
     if (isExistingSession && sessionId) {
@@ -247,8 +271,8 @@ export function InlineChatModelSelector({
         setSaving(true);
         const token = localStorage.getItem('jwt_token');
         await axios.put(`${API_URL}/sessions/${sessionId}/config`, {
-          provider: selectedConfig.provider,
-          model: selectedConfig.model,
+          provider: provider,
+          model: model,
           api_key: tempApiKey
         }, {
           headers: { Authorization: `Bearer ${token}` }
@@ -258,10 +282,13 @@ export function InlineChatModelSelector({
         setSessionConfig(prev => prev ? { ...prev, api_key: '****' + tempApiKey.slice(-4) } : null);
         onConfigChange({
           ...selectedConfig,
+          provider: provider,
+          model: model,
           api_key: tempApiKey
         });
         onConfigSaved?.();
         setTempApiKey('');
+        setLocalSelection(null);
         setShowApiKeyInput(false);
         setIsOpen(false);
       } catch (error) {
@@ -273,9 +300,12 @@ export function InlineChatModelSelector({
       // 新会话，只更新本地状态
       onConfigChange({
         ...selectedConfig,
+        provider: provider,
+        model: model,
         api_key: tempApiKey
       });
       setTempApiKey('');
+      setLocalSelection(null);
       setShowApiKeyInput(false);
       setIsOpen(false);
     }
