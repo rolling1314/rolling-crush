@@ -542,6 +542,9 @@ export default function WorkspacePage() {
       console.log('=== Converted message ===');
       console.log('Message ID:', convertedMsg.id);
       console.log('Role:', convertedMsg.role);
+      console.log('Content length:', convertedMsg.content?.length || 0);
+      console.log('Content preview:', convertedMsg.content?.substring(0, 50));
+      console.log('isStreaming:', convertedMsg.isStreaming);
       console.log('Tool calls:', convertedMsg.toolCalls?.map(tc => ({ id: tc.id, name: tc.name, finished: tc.finished })));
       
       setMessages(prev => {
@@ -550,11 +553,15 @@ export default function WorkspacePage() {
         
         if (existingIndex !== -1) {
           // 更新现有消息（流式更新）
+          console.log('[STREAM UPDATE] Updating existing message at index:', existingIndex);
+          console.log('[STREAM UPDATE] Old content length:', prev[existingIndex].content?.length || 0);
+          console.log('[STREAM UPDATE] New content length:', convertedMsg.content?.length || 0);
           const newMessages = [...prev];
           newMessages[existingIndex] = convertedMsg;
           return newMessages;
         } else {
           // 添加新消息
+          console.log('[NEW MESSAGE] Adding new message, total will be:', prev.length + 1);
           return [...prev, convertedMsg];
         }
       });

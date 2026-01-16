@@ -156,6 +156,7 @@ func (s *Server) SendToSession(sessionID string, msg interface{}) {
 	defer s.mutex.Unlock()
 
 	sentCount := 0
+	totalClients := len(s.clients)
 	for client, clientSessionID := range s.clients {
 		if clientSessionID == sessionID {
 			err := client.WriteMessage(websocket.TextMessage, jsonMsg)
@@ -168,7 +169,8 @@ func (s *Server) SendToSession(sessionID string, msg interface{}) {
 			}
 		}
 	}
-	slog.Debug("SendToSession completed", "session_id", sessionID, "sent_to_clients", sentCount)
+	// 使用 Info 级别以便调试
+	fmt.Printf("[WS SEND] session_id=%s, sent_to=%d/%d clients\n", sessionID, sentCount, totalClients)
 }
 
 // UpdateClientSession updates the session ID for a specific client connection
