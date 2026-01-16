@@ -1189,6 +1189,7 @@ export default function WorkspacePage() {
       type: 'permission_response',
       id: request.id,
       tool_call_id: toolCallId,
+      session_id: request.session_id,  // Include session_id for Redis state update
       granted,
       denied: !granted
     };

@@ -56,15 +56,16 @@ func (app *WSApp) HandleClientMessage(rawMsg []byte) {
 	fmt.Println("Raw message:", string(rawMsg))
 
 	type ClientMsg struct {
-		Type       string              `json:"type"`
-		Content    string              `json:"content"`
-		SessionID  string              `json:"sessionID"` // Optional: if frontend sends it
-		ID         string              `json:"id"`
-		ToolCallID string              `json:"tool_call_id"`
-		Granted    bool                `json:"granted"`
-		Denied     bool                `json:"denied"`
-		Images     []WSImageAttachment `json:"images"`    // Image attachments
-		LastMsgID  string              `json:"lastMsgId"` // For reconnection - last received Redis stream message ID
+		Type            string              `json:"type"`
+		Content         string              `json:"content"`
+		SessionID       string              `json:"sessionID"`   // Optional: if frontend sends it (camelCase)
+		SessionIDSnake  string              `json:"session_id"`  // Optional: for permission_response (snake_case)
+		ID              string              `json:"id"`
+		ToolCallID      string              `json:"tool_call_id"`
+		Granted         bool                `json:"granted"`
+		Denied          bool                `json:"denied"`
+		Images          []WSImageAttachment `json:"images"`    // Image attachments
+		LastMsgID       string              `json:"lastMsgId"` // For reconnection - last received Redis stream message ID
 	}
 
 	var msg ClientMsg
@@ -83,7 +84,15 @@ func (app *WSApp) HandleClientMessage(rawMsg []byte) {
 
 	// Handle permission responses
 	if msg.Type == "permission_response" {
-		app.handlePermissionResponse(msg.ID, msg.ToolCallID, msg.Granted, msg.Denied)
+		// Get session ID from snake_case field (from permission_response)
+		sessionID := msg.SessionIDSnake
+		if sessionID == "" {
+			sessionID = msg.SessionID // Fallback to camelCase
+		}
+		if sessionID == "" {
+			sessionID = app.currentSessionID // Fallback to current session
+		}
+		app.handlePermissionResponse(msg.ID, msg.ToolCallID, sessionID, msg.Granted, msg.Denied)
 		return
 	}
 
@@ -118,21 +127,35 @@ func (app *WSApp) HandleClientMessage(rawMsg []byte) {
 }
 
 // handlePermissionResponse handles permission grant/deny responses
-func (app *WSApp) handlePermissionResponse(id, toolCallID string, granted, denied bool) {
+func (app *WSApp) handlePermissionResponse(id, toolCallID, sessionID string, granted, denied bool) {
 	ctx := context.Background()
 	permissionChan := app.Permissions.Subscribe(ctx)
 
 	permissionReq := permission.PermissionRequest{
 		ID:         id,
 		ToolCallID: toolCallID,
+		SessionID:  sessionID,
 	}
 
 	if granted {
-		slog.Info("Permission granted by client", "tool_call_id", toolCallID)
+		slog.Info("Permission granted by client", "tool_call_id", toolCallID, "session_id", sessionID)
 		app.Permissions.Grant(permissionReq)
 	} else if denied {
-		slog.Info("Permission denied by client", "tool_call_id", toolCallID)
+		slog.Info("Permission denied by client", "tool_call_id", toolCallID, "session_id", sessionID)
 		app.Permissions.Deny(permissionReq)
+	}
+
+	// Also update Redis permission status directly to ensure it's updated
+	if app.RedisStream != nil {
+		status := "denied"
+		if granted {
+			status = "granted"
+		}
+		if err := app.RedisStream.UpdatePermissionStatus(ctx, sessionID, toolCallID, status); err != nil {
+			slog.Warn("Failed to update permission status in Redis", "error", err, "session_id", sessionID, "tool_call_id", toolCallID)
+		} else {
+			slog.Info("Permission status updated in Redis", "session_id", sessionID, "tool_call_id", toolCallID, "status", status)
+		}
 	}
 
 	// Clean up subscription
@@ -423,6 +446,20 @@ func (app *WSApp) handleReconnection(sessionID string, lastMsgID string) {
 					"status":     state.Status,
 				}
 				app.WSServer.SendToSession(sessionID, toolCallMsg)
+
+				// If tool is not pending, it means permission was already granted/denied
+				// Send permission_notification to clear the permission card in frontend
+				if state.Status != "pending" {
+					granted := state.Status == "running" || state.Status == "completed"
+					denied := state.Status == "error" || state.Status == "cancelled"
+					permNotif := map[string]interface{}{
+						"Type":         "permission_notification",
+						"tool_call_id": state.ID,
+						"granted":      granted,
+						"denied":       denied,
+					}
+					app.WSServer.SendToSession(sessionID, permNotif)
+				}
 			}
 		}
 	}
