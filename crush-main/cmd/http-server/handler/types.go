@@ -176,3 +176,48 @@ type ConfigureProviderRequest struct {
 	ReasoningEffort string `json:"reasoning_effort"`
 	SetAsDefault    bool   `json:"set_as_default"` // Reserved but not used
 }
+
+// SendVerificationCodeRequest represents a request to send verification code
+type SendVerificationCodeRequest struct {
+	Email string `json:"email" binding:"required,email"`
+	Type  string `json:"type" binding:"required"` // "register" or "reset_password"
+}
+
+// SendVerificationCodeResponse represents the response for sending verification code
+type SendVerificationCodeResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+// VerifyEmailCodeRequest represents a request to verify email code
+type VerifyEmailCodeRequest struct {
+	Email string `json:"email" binding:"required,email"`
+	Code  string `json:"code" binding:"required"`
+	Type  string `json:"type" binding:"required"` // "register" or "reset_password"
+}
+
+// VerifyEmailCodeResponse represents the response for verifying email code
+type VerifyEmailCodeResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+// RegisterWithCodeRequest represents a registration request with verification code
+type RegisterWithCodeRequest struct {
+	Username string `json:"username" binding:"required"`
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required,min=6"`
+	Code     string `json:"code" binding:"required"`
+}
+
+// ForgotPasswordRequest represents a request to initiate password reset
+type ForgotPasswordRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+// ResetPasswordRequest represents a request to reset password
+type ResetPasswordRequest struct {
+	Email       string `json:"email" binding:"required,email"`
+	Code        string `json:"code" binding:"required"`
+	NewPassword string `json:"new_password" binding:"required,min=6"`
+}

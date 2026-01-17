@@ -12,6 +12,7 @@ import (
 	"github.com/rolling1314/rolling-crush/domain/session"
 	"github.com/rolling1314/rolling-crush/domain/toolcall"
 	"github.com/rolling1314/rolling-crush/domain/user"
+	"github.com/rolling1314/rolling-crush/infra/email"
 	"github.com/rolling1314/rolling-crush/infra/postgres"
 	"github.com/rolling1314/rolling-crush/infra/sandbox"
 	"github.com/rolling1314/rolling-crush/pkg/config"
@@ -29,12 +30,17 @@ type Server struct {
 	db              *postgres.Queries
 	config          *config.Config
 	sandboxClient   *sandbox.Client
+	emailService    *email.Service
 }
 
 // New creates a new HTTP server instance
 func New(port string, userService user.Service, projectService project.Service, sessionService session.Service, messageService message.Service, toolCallService toolcall.Service, queries *postgres.Queries, cfg *config.Config) *Server {
 	gin.SetMode(gin.DebugMode)
 	engine := gin.Default()
+
+	// Initialize email service
+	appCfg := config.GetGlobalAppConfig()
+	emailService := email.NewService(&appCfg.Email)
 
 	return &Server{
 		port:            port,
@@ -47,6 +53,7 @@ func New(port string, userService user.Service, projectService project.Service, 
 		db:              queries,
 		config:          cfg,
 		sandboxClient:   sandbox.GetDefaultClient(),
+		emailService:    emailService,
 	}
 }
 
@@ -72,6 +79,12 @@ func (s *Server) Start() error {
 			// GitHub OAuth routes
 			authGroup.GET("/github", s.handleGitHubLogin)
 			authGroup.GET("/github/callback", s.handleGitHubCallback) // Also keep this for consistency
+			// Email verification routes
+			authGroup.POST("/send-code", s.handleSendVerificationCode)
+			authGroup.POST("/verify-code", s.handleVerifyEmailCode)
+			authGroup.POST("/register-with-code", s.handleRegisterWithCode)
+			authGroup.POST("/forgot-password", s.handleForgotPassword)
+			authGroup.POST("/reset-password", s.handleResetPassword)
 		}
 
 		// Project routes

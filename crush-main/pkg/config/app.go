@@ -19,6 +19,19 @@ type AppConfig struct {
 	Sandbox   SandboxConfig   `yaml:"sandbox"`
 	Storage   StorageConfig   `yaml:"storage"`
 	AutoModel AutoModelConfig `yaml:"auto_model"`
+	Email     EmailConfig     `yaml:"email"`
+}
+
+// EmailConfig holds email SMTP settings.
+type EmailConfig struct {
+	SMTPHost    string `yaml:"smtp_host"`
+	SMTPPort    string `yaml:"smtp_port"`
+	Username    string `yaml:"username"`
+	Password    string `yaml:"password"`
+	FromAddress string `yaml:"from_address"`
+	FromName    string `yaml:"from_name"`
+	UseSSL      bool   `yaml:"use_ssl"`
+	CodeExpire  int    `yaml:"code_expire"` // Verification code expire time in minutes
 }
 
 // ServerConfig holds server settings.
@@ -161,6 +174,23 @@ func findConfigFile() string {
 
 // overrideWithEnvApp overrides config values with environment variables if they exist.
 func overrideWithEnvApp(config *AppConfig) {
+	// Email overrides
+	if v := os.Getenv("EMAIL_SMTP_HOST"); v != "" {
+		config.Email.SMTPHost = v
+	}
+	if v := os.Getenv("EMAIL_SMTP_PORT"); v != "" {
+		config.Email.SMTPPort = v
+	}
+	if v := os.Getenv("EMAIL_USERNAME"); v != "" {
+		config.Email.Username = v
+	}
+	if v := os.Getenv("EMAIL_PASSWORD"); v != "" {
+		config.Email.Password = v
+	}
+	if v := os.Getenv("EMAIL_FROM_ADDRESS"); v != "" {
+		config.Email.FromAddress = v
+	}
+
 	// Database overrides
 	if v := os.Getenv("POSTGRES_HOST"); v != "" {
 		config.Database.Host = v
@@ -301,6 +331,16 @@ func getDefaultAppConfig() *AppConfig {
 				Bucket:    "crush-images",
 				UseSSL:    false,
 			},
+		},
+		Email: EmailConfig{
+			SMTPHost:    "smtp.163.com",
+			SMTPPort:    "465",
+			Username:    "",
+			Password:    "",
+			FromAddress: "",
+			FromName:    "Crush",
+			UseSSL:      true,
+			CodeExpire:  5,
 		},
 	}
 }
