@@ -314,14 +314,18 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 		},
 		OnReasoningStart: func(id string, reasoning fantasy.ReasoningContent) error {
 			currentAssistant.AppendReasoningContent(reasoning.Text)
-			return a.messages.Update(genCtx, *currentAssistant)
+			// Only publish to frontend, don't write to DB during streaming
+			a.messages.PublishUpdate(*currentAssistant)
+			return nil
 		},
 		OnReasoningDelta: func(id string, text string) error {
 			// DEBUG: 打印推理/思考流式输出
 			fmt.Printf("[REASONING] %s", text)
 
 			currentAssistant.AppendReasoningContent(text)
-			return a.messages.Update(genCtx, *currentAssistant)
+			// Only publish to frontend, don't write to DB during streaming
+			a.messages.PublishUpdate(*currentAssistant)
+			return nil
 		},
 		OnReasoningEnd: func(id string, reasoning fantasy.ReasoningContent) error {
 			// handle anthropic signature
@@ -341,7 +345,9 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 				}
 			}
 			currentAssistant.FinishThinking()
-			return a.messages.Update(genCtx, *currentAssistant)
+			// Only publish to frontend, don't write to DB during streaming
+			a.messages.PublishUpdate(*currentAssistant)
+			return nil
 		},
 		OnTextDelta: func(id string, text string) error {
 			// Strip leading newline from initial text content. This is is
@@ -355,7 +361,9 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 			fmt.Printf("[STREAM TEXT] %s", text)
 
 			currentAssistant.AppendContent(text)
-			return a.messages.Update(genCtx, *currentAssistant)
+			// Only publish to frontend, don't write to DB during streaming
+			a.messages.PublishUpdate(*currentAssistant)
+			return nil
 		},
 		OnToolInputStart: func(id string, toolName string) error {
 			// DEBUG: 打印工具调用开始
@@ -400,7 +408,9 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 				})
 			}
 
-			return a.messages.Update(genCtx, *currentAssistant)
+			// Only publish to frontend, don't write to DB during streaming
+			a.messages.PublishUpdate(*currentAssistant)
+			return nil
 		},
 		OnRetry: func(err *fantasy.ProviderError, delay time.Duration) {
 			// TODO: implement
@@ -446,7 +456,9 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 				})
 			}
 
-			return a.messages.Update(genCtx, *currentAssistant)
+			// Only publish to frontend, don't write to DB during streaming
+			a.messages.PublishUpdate(*currentAssistant)
+			return nil
 		},
 		OnToolResult: func(result fantasy.ToolResultContent) error {
 			var resultContent string
@@ -753,7 +765,9 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		},
 		OnReasoningDelta: func(id string, text string) error {
 			summaryMessage.AppendReasoningContent(text)
-			return a.messages.Update(genCtx, summaryMessage)
+			// Only publish to frontend, don't write to DB during streaming
+			a.messages.PublishUpdate(summaryMessage)
+			return nil
 		},
 		OnReasoningEnd: func(id string, reasoning fantasy.ReasoningContent) error {
 			// Handle anthropic signature.
@@ -763,11 +777,15 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 				}
 			}
 			summaryMessage.FinishThinking()
-			return a.messages.Update(genCtx, summaryMessage)
+			// Only publish to frontend, don't write to DB during streaming
+			a.messages.PublishUpdate(summaryMessage)
+			return nil
 		},
 		OnTextDelta: func(id, text string) error {
 			summaryMessage.AppendContent(text)
-			return a.messages.Update(genCtx, summaryMessage)
+			// Only publish to frontend, don't write to DB during streaming
+			a.messages.PublishUpdate(summaryMessage)
+			return nil
 		},
 	})
 	if err != nil {

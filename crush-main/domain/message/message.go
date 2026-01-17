@@ -24,6 +24,10 @@ type Service interface {
 	pubsub.Suscriber[Message]
 	Create(ctx context.Context, sessionID string, params CreateMessageParams) (Message, error)
 	Update(ctx context.Context, message Message) error
+	// PublishUpdate publishes a message update event to subscribers without writing to database.
+	// This is used for streaming updates where we want real-time frontend updates but don't need
+	// to persist every delta to the database. Call Update() when the message is complete.
+	PublishUpdate(message Message)
 	Get(ctx context.Context, id string) (Message, error)
 	List(ctx context.Context, sessionID string) ([]Message, error)
 	Delete(ctx context.Context, id string) error
@@ -126,6 +130,14 @@ func (s *service) Update(ctx context.Context, message Message) error {
 	message.UpdatedAt = time.Now().Unix()
 	s.Publish(pubsub.UpdatedEvent, message)
 	return nil
+}
+
+// PublishUpdate publishes a message update event to subscribers without writing to database.
+// This is used for streaming updates where we want real-time frontend updates but don't need
+// to persist every delta to the database.
+func (s *service) PublishUpdate(message Message) {
+	message.UpdatedAt = time.Now().Unix()
+	s.Publish(pubsub.UpdatedEvent, message)
 }
 
 func (s *service) Get(ctx context.Context, id string) (Message, error) {

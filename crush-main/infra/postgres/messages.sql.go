@@ -8,6 +8,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"fmt"
 )
 
 const createMessage = `-- name: CreateMessage :one
@@ -164,6 +165,7 @@ type UpdateMessageParams struct {
 }
 
 func (q *Queries) UpdateMessage(ctx context.Context, arg UpdateMessageParams) error {
+	fmt.Println("postgre存储消息")
 	_, err := q.exec(ctx, q.updateMessageStmt, updateMessage, arg.Parts, arg.FinishedAt, arg.ID)
 	return err
 }
