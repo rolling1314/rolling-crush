@@ -452,6 +452,7 @@ const MessageGroup = memo(({
     if (
       prevMsg.id !== nextMsg.id ||
       prevMsg.content !== nextMsg.content ||
+      prevMsg.reasoning !== nextMsg.reasoning ||  // Add reasoning comparison for streaming thinking updates
       prevMsg.isStreaming !== nextMsg.isStreaming ||
       prevMsg.toolCalls?.length !== nextMsg.toolCalls?.length
     ) {
