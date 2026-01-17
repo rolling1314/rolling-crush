@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rolling1314/rolling-crush/domain/project"
 	"github.com/rolling1314/rolling-crush/infra/sandbox"
+	"github.com/rolling1314/rolling-crush/pkg/config"
 )
 
 // handleCreateProject handles project creation
@@ -41,10 +42,14 @@ func (s *Server) handleCreateProject(c *gin.Context) {
 		"backend_port", sandboxResp.BackendPort,
 		"workdir", sandboxResp.Workdir)
 
-	// Set default values
+	// Set default values - use config's external_ip if not provided in request
 	externalIP := req.ExternalIP
 	if externalIP == "" {
-		externalIP = "localhost"
+		appCfg := config.GetGlobalAppConfig()
+		externalIP = appCfg.Sandbox.ExternalIP
+		if externalIP == "" {
+			externalIP = "localhost"
+		}
 	}
 	workspacePath := req.WorkspacePath
 	if workspacePath == "" {

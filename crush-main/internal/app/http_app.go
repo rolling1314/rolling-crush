@@ -43,6 +43,22 @@ func NewHTTPApp(ctx context.Context, conn *sql.DB, cfg *config.Config, port stri
 	messages := message.NewService(q)
 	toolCalls := toolcall.NewService(q)
 
+	// Initialize storage client from app config (must be before creating HTTPServer)
+	appCfg := config.GetGlobalAppConfig()
+	if err := storage.InitGlobalClientFromConfig(appCfg); err != nil {
+		slog.Warn("Failed to initialize storage client from config, trying default config", "error", err)
+		// Fallback to default initialization
+		if err := storage.InitGlobalMinIOClient(); err != nil {
+			slog.Warn("Failed to initialize storage client, image upload will be unavailable", "error", err)
+		}
+	}
+
+	// Initialize sandbox client from app config (must be before creating HTTPServer)
+	if appCfg != nil && appCfg.Sandbox.BaseURL != "" {
+		sandbox.SetDefaultClient(appCfg.Sandbox.BaseURL)
+		slog.Info("Sandbox client configured", "base_url", appCfg.Sandbox.BaseURL)
+	}
+
 	app := &HTTPApp{
 		Users:     users,
 		Projects:  projects,
@@ -54,22 +70,6 @@ func NewHTTPApp(ctx context.Context, conn *sql.DB, cfg *config.Config, port stri
 		db:     conn,
 
 		HTTPServer: apihttp.New(port, users, projects, sessions, messages, toolCalls, q, cfg),
-	}
-
-	// Initialize storage client from app config
-	appCfg := config.GetGlobalAppConfig()
-	if err := storage.InitGlobalClientFromConfig(appCfg); err != nil {
-		slog.Warn("Failed to initialize storage client from config, trying default config", "error", err)
-		// Fallback to default initialization
-		if err := storage.InitGlobalMinIOClient(); err != nil {
-			slog.Warn("Failed to initialize storage client, image upload will be unavailable", "error", err)
-		}
-	}
-
-	// Initialize sandbox client from app config
-	if appCfg != nil && appCfg.Sandbox.BaseURL != "" {
-		sandbox.SetDefaultClient(appCfg.Sandbox.BaseURL)
-		slog.Info("Sandbox client configured", "base_url", appCfg.Sandbox.BaseURL)
 	}
 
 	return app, nil

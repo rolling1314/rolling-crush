@@ -41,6 +41,7 @@ development:
   sandbox:
     base_url: "http://localhost:8888"
     timeout: 300  # 超时时间（秒）
+    external_ip: "localhost"  # 项目容器的外部访问 IP（用于 iframe 预览）
   
   # 对象存储配置（MinIO/OSS）
   storage:
@@ -68,60 +69,61 @@ development:
     api_key: "your-zhipu-api-key"                        # API Key
     base_url: "https://open.bigmodel.cn/api/paas/v4"     # API 端点
 
-# 生产环境配置
+# 生产环境配置（与开发环境保持一致）
 production:
   # 服务器配置
   server:
     http_port: "8001"
     ws_port: "8002"
-    debug: false
+    debug: true          # 与开发环境一致
 
   # 认证配置
   auth:
-    jwt_secret: "your-secure-jwt-secret-change-this"  # 重要：请修改为安全的随机密钥
+    jwt_secret: "crush-dev-jwt-secret-change-in-production-2024"  # 与开发环境一致
     token_expire_hour: 24
 
   # 数据库配置
   database:
-    host: "your-production-db-host"
+    host: "localhost"
     port: 5432
     user: "crush"
-    password: "your-secure-password"
+    password: "123456"
     database: "crush"
-    sslmode: "require"
-    max_open_conns: 50
-    max_idle_conns: 10
+    sslmode: "disable"
+    max_open_conns: 25
+    max_idle_conns: 5
 
   # Redis 配置
   redis:
-    host: "your-redis-host"
+    host: "localhost"
     port: 6379
-    password: "your-redis-password"
+    password: "123456"
     db: 0
-    pool_size: 20
-    stream_max_len: 5000
-    stream_ttl: 7200
+    pool_size: 10
+    stream_max_len: 1000
+    stream_ttl: 3600
   
   # 沙箱服务配置
   sandbox:
-    base_url: "http://your-sandbox-host:8888"
+    base_url: "http://localhost:8888"
     timeout: 300
+    external_ip: "your-production-ip"  # 项目容器的外部访问 IP（用于 iframe 预览）
   
   # 对象存储配置
   storage:
     type: "minio"
     minio:
-      endpoint: "your-minio-host:9000"
-      access_key: "your-access-key"
-      secret_key: "your-secret-key"
+      endpoint: "localhost:9000"
+      access_key: "minioadmin"
+      secret_key: "minioadmin123"
       bucket: "crush-images"
       use_ssl: false
-      public_endpoint: "your-public-endpoint"
+      public_endpoint: ""
     oss:
       endpoint: "oss-cn-hangzhou.aliyuncs.com"
       access_key_id: "your-access-key-id"
       access_key_secret: "your-access-key-secret"
-      bucket: "crush-images-prod"
+      bucket: "crush-images"
       use_ssl: true
 
   # Auto 模型配置（用户选择 "Auto" 时使用的默认模型）

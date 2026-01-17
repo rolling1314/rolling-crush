@@ -81,8 +81,9 @@ type DatabaseConfig struct {
 
 // SandboxConfig holds sandbox service settings.
 type SandboxConfig struct {
-	BaseURL string `yaml:"base_url"`
-	Timeout int    `yaml:"timeout"`
+	BaseURL    string `yaml:"base_url"`
+	Timeout    int    `yaml:"timeout"`
+	ExternalIP string `yaml:"external_ip"` // External IP for project containers (used for iframe preview)
 }
 
 // StorageConfig holds object storage settings.
@@ -319,8 +320,9 @@ func getDefaultAppConfig() *AppConfig {
 			StreamTTL:    3600,
 		},
 		Sandbox: SandboxConfig{
-			BaseURL: "http://localhost:8888",
-			Timeout: 300,
+			BaseURL:    "http://localhost:8888",
+			Timeout:    300,
+			ExternalIP: "localhost",
 		},
 		Storage: StorageConfig{
 			Type: "minio",
