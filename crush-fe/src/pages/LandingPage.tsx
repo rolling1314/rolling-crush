@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Code, CornerDownLeft, AlertCircle, X, Mail, ArrowLeft } from 'lucide-react';
+import { Code, CornerDownLeft, AlertCircle, ArrowLeft } from 'lucide-react';
 
-type AuthMode = 'login' | 'register' | 'verify' | 'forgot' | 'reset';
+type AuthMode = 'login' | 'register' | 'forgot';
 
 const LandingPage = () => {
   const navigate = useNavigate();
@@ -13,18 +13,13 @@ const LandingPage = () => {
   const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [username, setUsername] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
-
-  // Modal state
-  const [showVerifyModal, setShowVerifyModal] = useState(false);
-  const [verifyType, setVerifyType] = useState<'register' | 'reset_password'>('register');
+  const [codeSent, setCodeSent] = useState(false);
 
   useEffect(() => {
     // Generate random stars
@@ -50,6 +45,14 @@ const LandingPage = () => {
     }
   }, [countdown]);
 
+  // Reset code sent state when switching modes
+  useEffect(() => {
+    setCodeSent(false);
+    setVerificationCode('');
+    setError('');
+    setSuccess('');
+  }, [mode]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -71,11 +74,11 @@ const LandingPage = () => {
         localStorage.setItem('email', data.user.email);
         navigate('/projects');
       } else {
-        setError(data.message || '登录失败，请检查邮箱和密码');
+        setError(data.message || 'Login failed. Please check your credentials.');
       }
     } catch (err) {
       console.error('Login error:', err);
-      setError('无法连接到服务器，请检查网络连接');
+      setError('Unable to connect to server.');
     } finally {
       setIsLoading(false);
     }
@@ -83,7 +86,17 @@ const LandingPage = () => {
 
   const handleSendVerificationCode = async (type: 'register' | 'reset_password') => {
     if (!email) {
-      setError('请输入邮箱地址');
+      setError('Please enter your email');
+      return;
+    }
+
+    if (type === 'register' && !password) {
+      setError('Please enter your password');
+      return;
+    }
+
+    if (type === 'register' && password.length < 6) {
+      setError('Password must be at least 6 characters');
       return;
     }
 
@@ -100,16 +113,15 @@ const LandingPage = () => {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        setVerifyType(type);
-        setShowVerifyModal(true);
+        setCodeSent(true);
         setCountdown(60);
-        setSuccess('验证码已发送到您的邮箱');
+        setSuccess('Verification code sent to your email');
       } else {
-        setError(data.error || data.message || '发送验证码失败');
+        setError(data.error || data.message || 'Failed to send verification code');
       }
     } catch (err) {
       console.error('Send code error:', err);
-      setError('无法连接到服务器');
+      setError('Unable to connect to server');
     } finally {
       setIsLoading(false);
     }
@@ -117,16 +129,15 @@ const LandingPage = () => {
 
   const handleRegisterWithCode = async () => {
     if (!verificationCode) {
-      setError('请输入验证码');
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError('两次输入的密码不一致');
+      setError('Please enter verification code');
       return;
     }
 
     setError('');
     setIsLoading(true);
+
+    // Use email prefix as username
+    const username = email.split('@')[0];
 
     try {
       const response = await fetch('/api/auth/register-with-code', {
@@ -142,14 +153,13 @@ const LandingPage = () => {
         localStorage.setItem('username', data.user.username);
         localStorage.setItem('user_id', data.user.id);
         localStorage.setItem('email', data.user.email);
-        setShowVerifyModal(false);
         navigate('/projects');
       } else {
-        setError(data.error || data.message || '注册失败');
+        setError(data.error || data.message || 'Registration failed');
       }
     } catch (err) {
       console.error('Register error:', err);
-      setError('无法连接到服务器');
+      setError('Unable to connect to server');
     } finally {
       setIsLoading(false);
     }
@@ -157,15 +167,11 @@ const LandingPage = () => {
 
   const handleResetPassword = async () => {
     if (!verificationCode) {
-      setError('请输入验证码');
+      setError('Please enter verification code');
       return;
     }
-    if (newPassword !== confirmPassword) {
-      setError('两次输入的密码不一致');
-      return;
-    }
-    if (newPassword.length < 6) {
-      setError('密码长度至少6位');
+    if (!newPassword || newPassword.length < 6) {
+      setError('Password must be at least 6 characters');
       return;
     }
 
@@ -182,19 +188,18 @@ const LandingPage = () => {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        setShowVerifyModal(false);
-        setSuccess('密码重置成功，请使用新密码登录');
+        setSuccess('Password reset successful. Please login.');
         setMode('login');
         setPassword('');
         setNewPassword('');
-        setConfirmPassword('');
         setVerificationCode('');
+        setCodeSent(false);
       } else {
-        setError(data.error || data.message || '重置密码失败');
+        setError(data.error || data.message || 'Password reset failed');
       }
     } catch (err) {
       console.error('Reset password error:', err);
-      setError('无法连接到服务器');
+      setError('Unable to connect to server');
     } finally {
       setIsLoading(false);
     }
@@ -228,7 +233,7 @@ const LandingPage = () => {
         </div>
       )}
       {success && (
-        <div className="flex items-center gap-2 p-3 bg-emerald-900/20 border border-emerald-900/50 rounded-lg text-sm text-emerald-300">
+        <div className="flex items-center gap-2 p-3 bg-green-900/20 border border-green-900/50 rounded-lg text-sm text-green-300">
           {success}
         </div>
       )}
@@ -237,18 +242,18 @@ const LandingPage = () => {
         <input
           ref={emailInputRef}
           type="email"
-          placeholder="输入邮箱地址"
+          placeholder="Enter your email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all"
+          className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/30 transition-all"
           required
         />
         <input
           type="password"
-          placeholder="密码"
+          placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all"
+          className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/30 transition-all"
           required
         />
       </div>
@@ -256,10 +261,10 @@ const LandingPage = () => {
       <div className="flex justify-end">
         <button
           type="button"
-          onClick={() => { setMode('forgot'); setError(''); setSuccess(''); }}
-          className="text-sm text-gray-400 hover:text-cyan-400 transition-colors"
+          onClick={() => setMode('forgot')}
+          className="text-sm text-gray-400 hover:text-white transition-colors"
         >
-          忘记密码？
+          Forgot password?
         </button>
       </div>
 
@@ -268,17 +273,17 @@ const LandingPage = () => {
         disabled={isLoading}
         className="w-full py-2.5 bg-[#333] hover:bg-[#444] text-white rounded-lg font-medium transition-colors disabled:opacity-50"
       >
-        {isLoading ? '登录中...' : '登录'}
+        {isLoading ? 'Signing in...' : 'Continue with email'}
       </button>
 
       <p className="text-center text-sm text-gray-500">
-        还没有账号？{' '}
+        Don't have an account?{' '}
         <button
           type="button"
-          onClick={() => { setMode('register'); setError(''); setSuccess(''); }}
-          className="text-cyan-400 hover:text-cyan-300 transition-colors"
+          onClick={() => setMode('register')}
+          className="text-white hover:text-gray-300 transition-colors"
         >
-          注册
+          Sign up
         </button>
       </p>
     </form>
@@ -292,75 +297,82 @@ const LandingPage = () => {
           {error}
         </div>
       )}
+      {success && (
+        <div className="flex items-center gap-2 p-3 bg-green-900/20 border border-green-900/50 rounded-lg text-sm text-green-300">
+          {success}
+        </div>
+      )}
       
       <div className="space-y-3">
         <input
-          type="text"
-          placeholder="用户名"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all"
-          required
-        />
-        <input
           type="email"
-          placeholder="邮箱地址"
+          placeholder="Enter your email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all"
+          className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/30 transition-all"
           required
+          disabled={codeSent}
         />
         <input
           type="password"
-          placeholder="密码（至少6位）"
+          placeholder="Password (min 6 chars)"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all"
+          className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/30 transition-all"
           required
           minLength={6}
+          disabled={codeSent}
         />
-        <input
-          type="password"
-          placeholder="确认密码"
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all"
-          required
-          minLength={6}
-        />
+
+        {!codeSent ? (
+          <button
+            type="button"
+            onClick={() => handleSendVerificationCode('register')}
+            disabled={isLoading}
+            className="w-full py-2.5 bg-[#333] hover:bg-[#444] text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+          >
+            {isLoading ? 'Sending...' : 'Get verification code'}
+          </button>
+        ) : (
+          <>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Enter 6-digit code"
+                value={verificationCode}
+                onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                className="flex-1 px-4 py-2.5 bg-[#1a1a1a] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/30 transition-all text-center tracking-widest"
+                maxLength={6}
+              />
+              <button
+                type="button"
+                onClick={() => handleSendVerificationCode('register')}
+                disabled={countdown > 0 || isLoading}
+                className="px-4 py-2.5 bg-[#222] hover:bg-[#333] text-gray-400 rounded-lg text-sm transition-colors disabled:opacity-50 whitespace-nowrap"
+              >
+                {countdown > 0 ? `${countdown}s` : 'Resend'}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={handleRegisterWithCode}
+              disabled={isLoading || verificationCode.length !== 6}
+              className="w-full py-2.5 bg-[#333] hover:bg-[#444] text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              {isLoading ? 'Creating account...' : 'Create account'}
+            </button>
+          </>
+        )}
       </div>
 
-      <button
-        type="button"
-        onClick={() => {
-          if (!username || !email || !password || !confirmPassword) {
-            setError('请填写所有字段');
-            return;
-          }
-          if (password !== confirmPassword) {
-            setError('两次输入的密码不一致');
-            return;
-          }
-          if (password.length < 6) {
-            setError('密码长度至少6位');
-            return;
-          }
-          handleSendVerificationCode('register');
-        }}
-        disabled={isLoading}
-        className="w-full py-2.5 bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white rounded-lg font-medium transition-all disabled:opacity-50"
-      >
-        {isLoading ? '发送中...' : '获取验证码'}
-      </button>
-
       <p className="text-center text-sm text-gray-500">
-        已有账号？{' '}
+        Already have an account?{' '}
         <button
           type="button"
-          onClick={() => { setMode('login'); setError(''); setSuccess(''); }}
-          className="text-cyan-400 hover:text-cyan-300 transition-colors"
+          onClick={() => setMode('login')}
+          className="text-white hover:text-gray-300 transition-colors"
         >
-          登录
+          Sign in
         </button>
       </p>
     </div>
@@ -370,11 +382,11 @@ const LandingPage = () => {
     <div className="space-y-4">
       <button
         type="button"
-        onClick={() => { setMode('login'); setError(''); setSuccess(''); }}
+        onClick={() => setMode('login')}
         className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm"
       >
         <ArrowLeft size={16} />
-        返回登录
+        Back to login
       </button>
 
       {error && (
@@ -383,131 +395,70 @@ const LandingPage = () => {
           {error}
         </div>
       )}
+      {success && (
+        <div className="flex items-center gap-2 p-3 bg-green-900/20 border border-green-900/50 rounded-lg text-sm text-green-300">
+          {success}
+        </div>
+      )}
       
       <div className="space-y-3">
         <input
           type="email"
-          placeholder="输入注册邮箱"
+          placeholder="Enter your email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-pink-500/50 focus:ring-1 focus:ring-pink-500/50 transition-all"
+          className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/30 transition-all"
           required
+          disabled={codeSent}
         />
-      </div>
 
-      <button
-        type="button"
-        onClick={() => handleSendVerificationCode('reset_password')}
-        disabled={isLoading}
-        className="w-full py-2.5 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white rounded-lg font-medium transition-all disabled:opacity-50"
-      >
-        {isLoading ? '发送中...' : '发送重置验证码'}
-      </button>
-    </div>
-  );
-
-  const renderVerificationModal = () => (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="w-full max-w-md mx-4 bg-gradient-to-b from-[#0f1419] to-[#0a0a0a] rounded-2xl border border-white/10 overflow-hidden animate-fade-in-up">
-        {/* Header */}
-        <div className={`p-6 text-center ${verifyType === 'register' ? 'bg-gradient-to-r from-cyan-900/30 to-teal-900/30' : 'bg-gradient-to-r from-pink-900/30 to-rose-900/30'}`}>
+        {!codeSent ? (
           <button
-            onClick={() => { setShowVerifyModal(false); setVerificationCode(''); setError(''); }}
-            className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
+            type="button"
+            onClick={() => handleSendVerificationCode('reset_password')}
+            disabled={isLoading}
+            className="w-full py-2.5 bg-[#333] hover:bg-[#444] text-white rounded-lg font-medium transition-colors disabled:opacity-50"
           >
-            <X size={20} />
+            {isLoading ? 'Sending...' : 'Send reset code'}
           </button>
-          <h2 className={`text-xl font-semibold ${verifyType === 'register' ? 'text-cyan-400' : 'text-pink-400'}`}>
-            {verifyType === 'register' ? '欢迎注册' : '密码重置'}
-          </h2>
-        </div>
-
-        {/* Content */}
-        <div className="p-6 space-y-4">
-          <p className="text-gray-400 text-sm">
-            尊敬的用户：
-          </p>
-          <p className="text-gray-400 text-sm">
-            {verifyType === 'register' 
-              ? '您正在进行注册操作，请输入以下验证码完成验证：' 
-              : '您正在进行密码重置操作，请输入验证码：'}
-          </p>
-
-          {error && (
-            <div className="flex items-center gap-2 p-3 bg-red-900/20 border border-red-900/50 rounded-lg text-sm text-red-300">
-              <AlertCircle size={16} />
-              {error}
+        ) : (
+          <>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Enter 6-digit code"
+                value={verificationCode}
+                onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                className="flex-1 px-4 py-2.5 bg-[#1a1a1a] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/30 transition-all text-center tracking-widest"
+                maxLength={6}
+              />
+              <button
+                type="button"
+                onClick={() => handleSendVerificationCode('reset_password')}
+                disabled={countdown > 0 || isLoading}
+                className="px-4 py-2.5 bg-[#222] hover:bg-[#333] text-gray-400 rounded-lg text-sm transition-colors disabled:opacity-50 whitespace-nowrap"
+              >
+                {countdown > 0 ? `${countdown}s` : 'Resend'}
+              </button>
             </div>
-          )}
-
-          {/* Verification code input */}
-          <div className={`p-4 rounded-xl border ${verifyType === 'register' ? 'bg-cyan-500/5 border-cyan-500/20' : 'bg-pink-500/5 border-pink-500/20'}`}>
             <input
-              type="text"
-              value={verificationCode}
-              onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              placeholder="输入6位验证码"
-              className={`w-full text-center text-3xl font-mono tracking-[0.5em] bg-transparent border-none outline-none ${verifyType === 'register' ? 'text-cyan-400' : 'text-pink-400'} placeholder-gray-600`}
-              maxLength={6}
+              type="password"
+              placeholder="New password (min 6 chars)"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/30 transition-all"
+              minLength={6}
             />
-          </div>
-
-          {/* Password fields for reset */}
-          {verifyType === 'reset_password' && (
-            <div className="space-y-3">
-              <input
-                type="password"
-                placeholder="新密码（至少6位）"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-pink-500/50 focus:ring-1 focus:ring-pink-500/50 transition-all"
-                minLength={6}
-              />
-              <input
-                type="password"
-                placeholder="确认新密码"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-pink-500/50 focus:ring-1 focus:ring-pink-500/50 transition-all"
-                minLength={6}
-              />
-            </div>
-          )}
-
-          {/* Tips */}
-          <div className="bg-white/5 rounded-lg p-4">
-            <p className={`text-sm font-medium mb-2 ${verifyType === 'register' ? 'text-cyan-400' : 'text-pink-400'}`}>
-              安全提示：
-            </p>
-            <ul className="text-xs text-gray-500 space-y-1 list-disc list-inside">
-              <li>验证码有效期为5分钟</li>
-              <li>请勿将验证码泄露给他人</li>
-              <li>如非本人操作，请忽略此邮件</li>
-            </ul>
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-3">
             <button
-              onClick={() => handleSendVerificationCode(verifyType)}
-              disabled={countdown > 0 || isLoading}
-              className="flex-1 py-2.5 bg-[#222] hover:bg-[#333] text-gray-300 rounded-lg font-medium transition-colors disabled:opacity-50"
-            >
-              {countdown > 0 ? `${countdown}秒后重发` : '重新发送'}
-            </button>
-            <button
-              onClick={verifyType === 'register' ? handleRegisterWithCode : handleResetPassword}
+              type="button"
+              onClick={handleResetPassword}
               disabled={isLoading || verificationCode.length !== 6}
-              className={`flex-1 py-2.5 text-white rounded-lg font-medium transition-all disabled:opacity-50 ${
-                verifyType === 'register' 
-                  ? 'bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500' 
-                  : 'bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500'
-              }`}
+              className="w-full py-2.5 bg-[#333] hover:bg-[#444] text-white rounded-lg font-medium transition-colors disabled:opacity-50"
             >
-              {isLoading ? '处理中...' : '确认'}
+              {isLoading ? 'Resetting...' : 'Reset password'}
             </button>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -637,9 +588,6 @@ const LandingPage = () => {
            </div>
         </div>
       </main>
-
-      {/* Verification Modal */}
-      {showVerifyModal && renderVerificationModal()}
     </div>
   );
 };
