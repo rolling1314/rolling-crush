@@ -39,6 +39,7 @@ func main() {
 	})
 	if err != nil {
 		slog.Error("Failed to initialize", "error", err)
+		fmt.Printf("ERROR: Failed to initialize: %v\n", err) // Print to stdout for visibility
 		os.Exit(1)
 	}
 
@@ -49,6 +50,7 @@ func main() {
 	httpApp, err := httpapp.NewHTTPApp(ctx, initResult.DB, initResult.Config, serverCfg.HTTPPort)
 	if err != nil {
 		slog.Error("Failed to create HTTP app", "error", err)
+		fmt.Printf("ERROR: Failed to create HTTP app: %v\n", err) // Print to stdout for visibility
 		os.Exit(1)
 	}
 	defer httpApp.Shutdown()
