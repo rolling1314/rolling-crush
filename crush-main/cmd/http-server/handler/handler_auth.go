@@ -20,7 +20,7 @@ var (
 	githubClientID     = getEnvOrDefault("GITHUB_CLIENT_ID", "Ov23liHJsgAHhcbppKO3")
 	githubClientSecret = getEnvOrDefault("GITHUB_CLIENT_SECRET", "35e742c45cae57f001c5a3a6f6cf058a4338d1b4")
 	githubRedirectURI  = getEnvOrDefault("GITHUB_REDIRECT_URI", "http://rollingcoding.com:8001/auth/github/callback")
-	frontendURL        = getEnvOrDefault("FRONTEND_URL", "rollingcoding.com")
+	frontendURL        = getEnvOrDefault("FRONTEND_URL", "http://rollingcoding.com")
 )
 
 func getEnvOrDefault(key, defaultValue string) string {
