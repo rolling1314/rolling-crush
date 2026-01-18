@@ -18,7 +18,7 @@ development:
 
   # 数据库配置
   database:
-    host: "localhost"
+    host: "120.26.101.52"
     port: 5432
     user: "crush"
     password: "123456"
@@ -36,13 +36,13 @@ development:
     pool_size: 10
     stream_max_len: 1000
     stream_ttl: 3600
-  
+
   # 沙箱服务配置
   sandbox:
     base_url: "http://localhost:8888"
     timeout: 300  # 超时时间（秒）
-    external_ip: "localhost"  # 项目容器的外部访问 IP（用于 iframe 预览）
-  
+    external_ip: "106.54.34.243"  # 项目容器的外部访问 IP（用于 iframe 预览和 DNS）
+
   # 对象存储配置（MinIO/OSS）
   storage:
     type: "minio"  # minio 或 oss
@@ -80,6 +80,11 @@ development:
     use_ssl: true                        # 是否使用 SSL
     code_expire: 5                       # 验证码有效期（分钟）
 
+  # Cloudflare DNS 配置（用于自动分配三级域名）
+  cloudflare:
+    api_token: "HBMEL2SWzLuqEE-hw-ccj4YjCLil6Bbx7LclzOOi"  # Cloudflare API Token
+    domain: "rollingcoding.com"                             # 基础域名
+
 # 生产环境配置
 production:
   # 服务器配置
@@ -113,13 +118,13 @@ production:
     pool_size: 10
     stream_max_len: 1000
     stream_ttl: 3600
-  
+
   # 沙箱服务配置
   sandbox:
     base_url: "http://106.54.34.243:8888"
     timeout: 300
     external_ip: "106.54.34.243"  # 项目容器的外部访问 IP（用于 iframe 预览）
-  
+
   # 对象存储配置
   storage:
     type: "minio"
@@ -154,3 +159,8 @@ production:
     from_name: "Crush"
     use_ssl: true
     code_expire: 5
+
+  # Cloudflare DNS 配置（用于自动分配三级域名）
+  cloudflare:
+    api_token: "HBMEL2SWzLuqEE-hw-ccj4YjCLil6Bbx7LclzOOi"  # Cloudflare API Token
+    domain: "rollingcoding.com"                             # 基础域名

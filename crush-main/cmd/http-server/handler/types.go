@@ -48,6 +48,7 @@ type ProjectRequest struct {
 	FrontendLanguage *string `json:"frontend_language,omitempty"`
 	BackendCommand   *string `json:"backend_command,omitempty"`
 	BackendLanguage  *string `json:"backend_language,omitempty"`
+	Subdomain        *string `json:"subdomain,omitempty"`
 	NeedDatabase     bool    `json:"need_database"`
 }
 
@@ -71,6 +72,7 @@ type ProjectResponse struct {
 	FrontendLanguage *string `json:"frontend_language,omitempty"`
 	BackendCommand   *string `json:"backend_command,omitempty"`
 	BackendLanguage  *string `json:"backend_language,omitempty"`
+	Subdomain        *string `json:"subdomain,omitempty"`
 	CreatedAt        int64   `json:"created_at"`
 	UpdatedAt        int64   `json:"updated_at"`
 }

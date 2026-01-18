@@ -19,10 +19,11 @@ INSERT INTO projects (
     frontend_language,
     backend_command,
     backend_language,
+    subdomain,
     created_at,
     updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
     EXTRACT(EPOCH FROM NOW()) * 1000,
     EXTRACT(EPOCH FROM NOW()) * 1000
 )
@@ -59,6 +60,7 @@ SET
     frontend_language = $16,
     backend_command = $17,
     backend_language = $18,
+    subdomain = $19,
     updated_at = EXTRACT(EPOCH FROM NOW()) * 1000
 WHERE id = $1
 RETURNING *;
@@ -73,4 +75,3 @@ FROM sessions s
 WHERE s.project_id = $1
 AND s.parent_session_id IS NULL
 ORDER BY s.created_at DESC;
-

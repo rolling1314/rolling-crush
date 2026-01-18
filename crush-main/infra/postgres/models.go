@@ -53,6 +53,7 @@ type Project struct {
 	FrontendLanguage sql.NullString `json:"frontend_language"`
 	BackendCommand   sql.NullString `json:"backend_command"`
 	BackendLanguage  sql.NullString `json:"backend_language"`
+	Subdomain        sql.NullString `json:"subdomain"`
 }
 
 type Session struct {

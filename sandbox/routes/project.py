@@ -2,10 +2,12 @@
 项目管理路由
 """
 
+import os
 import time
 import socket
 import docker
 import traceback
+import subprocess
 from flask import Blueprint, request, jsonify
 from sandbox import Sandbox
 
@@ -190,5 +192,132 @@ def delete_project():
             
     except Exception as e:
         print(f"❌ [POST /projects/delete] 异常: {str(e)}", flush=True)
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@project_bp.route('/projects/configure-domain', methods=['POST'])
+def configure_domain():
+    """配置项目域名 - 添加nginx配置和更新vite配置"""
+    try:
+        data = request.json
+        container_id = data.get('container_id')
+        subdomain = data.get('subdomain')  # 三级域名前缀，如 "abc1234567"
+        frontend_port = data.get('frontend_port')  # 主机端口
+        domain = data.get('domain', 'rollingcoding.com')  # 基础域名
+        
+        print(f"\n📨 [POST /projects/configure-domain] 收到配置域名请求", flush=True)
+        print(f"   容器ID: {container_id}", flush=True)
+        print(f"   三级域名: {subdomain}.{domain}", flush=True)
+        print(f"   前端端口: {frontend_port}", flush=True)
+        
+        if not container_id:
+            return jsonify({"error": "container_id is required"}), 400
+        if not subdomain:
+            return jsonify({"error": "subdomain is required"}), 400
+        if not frontend_port:
+            return jsonify({"error": "frontend_port is required"}), 400
+        
+        full_subdomain = f"{subdomain}.{domain}"
+        nginx_config_path = f"/etc/nginx/sites-available/{domain}.conf"
+        
+        # 1. 生成并添加 nginx server block
+        nginx_server_block = f'''
+# {full_subdomain} - 项目子域名反向代理
+server {{
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name {full_subdomain};
+    location / {{
+        proxy_pass http://127.0.0.1:{frontend_port};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }}
+}}
+'''
+        
+        print(f"   正在添加 nginx 配置...", flush=True)
+        try:
+            # 追加 nginx 配置到文件
+            with open(nginx_config_path, 'a') as f:
+                f.write(nginx_server_block)
+            print(f"   ✅ nginx 配置已添加", flush=True)
+        except Exception as e:
+            print(f"   ❌ 添加 nginx 配置失败: {e}", flush=True)
+            return jsonify({"error": f"Failed to add nginx config: {str(e)}"}), 500
+        
+        # 2. 更新容器内的 vite.config.ts
+        vite_config_content = f'''import {{ defineConfig }} from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({{
+  plugins: [react()],
+  server: {{
+    host: '0.0.0.0',
+    port: 5173,
+    allowedHosts: [
+      '{full_subdomain}',
+      '.{domain}',
+    ],
+  }},
+}})
+'''
+        
+        print(f"   正在更新容器内 vite.config.ts...", flush=True)
+        try:
+            # 连接 Docker
+            docker_socket = Sandbox._detect_docker_socket()
+            if docker_socket:
+                client = docker.DockerClient(base_url=docker_socket)
+            else:
+                client = docker.from_env()
+            
+            # 获取容器
+            container = client.containers.get(container_id)
+            
+            # 写入 vite.config.ts 到容器
+            # 使用 docker exec 来写入文件
+            exec_result = container.exec_run(
+                cmd=['sh', '-c', f'cat > /workspace/frontend/vite.config.ts << \'EOF\'\n{vite_config_content}\nEOF'],
+                workdir='/workspace'
+            )
+            
+            if exec_result.exit_code != 0:
+                print(f"   ⚠️ 更新 vite.config.ts 可能失败: {exec_result.output.decode()}", flush=True)
+            else:
+                print(f"   ✅ vite.config.ts 已更新", flush=True)
+                
+        except docker.errors.NotFound:
+            print(f"   ⚠️ 容器不存在，跳过 vite 配置: {container_id}", flush=True)
+        except Exception as e:
+            print(f"   ⚠️ 更新 vite.config.ts 失败: {e}", flush=True)
+            # 不返回错误，因为 nginx 配置已经成功
+        
+        # 3. 重新加载 nginx
+        print(f"   正在重新加载 nginx...", flush=True)
+        try:
+            result = subprocess.run(['nginx', '-s', 'reload'], capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"   ⚠️ nginx 重载失败: {result.stderr}", flush=True)
+            else:
+                print(f"   ✅ nginx 已重新加载", flush=True)
+        except Exception as e:
+            print(f"   ⚠️ nginx 重载失败: {e}", flush=True)
+        
+        print(f"✅ [POST /projects/configure-domain] 域名配置完成: {full_subdomain}", flush=True)
+        
+        return jsonify({
+            "status": "ok",
+            "subdomain": full_subdomain,
+            "message": f"Domain {full_subdomain} configured successfully"
+        })
+        
+    except Exception as e:
+        print(f"❌ [POST /projects/configure-domain] 异常: {str(e)}", flush=True)
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500

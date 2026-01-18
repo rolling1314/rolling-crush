@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
@@ -12,6 +13,7 @@ import (
 	"github.com/rolling1314/rolling-crush/domain/session"
 	"github.com/rolling1314/rolling-crush/domain/toolcall"
 	"github.com/rolling1314/rolling-crush/domain/user"
+	"github.com/rolling1314/rolling-crush/infra/cloudflare"
 	"github.com/rolling1314/rolling-crush/infra/email"
 	"github.com/rolling1314/rolling-crush/infra/postgres"
 	"github.com/rolling1314/rolling-crush/infra/sandbox"
@@ -20,17 +22,18 @@ import (
 
 // Server represents the HTTP server
 type Server struct {
-	port            string
-	engine          *gin.Engine
-	userService     user.Service
-	projectService  project.Service
-	sessionService  session.Service
-	messageService  message.Service
-	toolCallService toolcall.Service
-	db              *postgres.Queries
-	config          *config.Config
-	sandboxClient   *sandbox.Client
-	emailService    *email.Service
+	port             string
+	engine           *gin.Engine
+	userService      user.Service
+	projectService   project.Service
+	sessionService   session.Service
+	messageService   message.Service
+	toolCallService  toolcall.Service
+	db               *postgres.Queries
+	config           *config.Config
+	sandboxClient    *sandbox.Client
+	emailService     *email.Service
+	cloudflareClient *cloudflare.Client
 }
 
 // New creates a new HTTP server instance
@@ -42,18 +45,31 @@ func New(port string, userService user.Service, projectService project.Service, 
 	appCfg := config.GetGlobalAppConfig()
 	emailService := email.NewService(&appCfg.Email)
 
+	// Initialize Cloudflare client
+	var cloudflareClient *cloudflare.Client
+	fmt.Printf("🔧 Cloudflare config: api_token=%q, domain=%q\n", appCfg.Cloudflare.APIToken, appCfg.Cloudflare.Domain)
+	if appCfg.Cloudflare.APIToken != "" && appCfg.Cloudflare.Domain != "" {
+		cloudflareClient = cloudflare.NewClient(appCfg.Cloudflare.APIToken, appCfg.Cloudflare.Domain)
+		fmt.Printf("✅ Cloudflare client initialized for domain: %s\n", appCfg.Cloudflare.Domain)
+		slog.Info("Cloudflare client initialized", "domain", appCfg.Cloudflare.Domain)
+	} else {
+		fmt.Println("❌ Cloudflare client NOT initialized: missing api_token or domain")
+		slog.Warn("Cloudflare client not initialized: missing api_token or domain in config")
+	}
+
 	return &Server{
-		port:            port,
-		engine:          engine,
-		userService:     userService,
-		projectService:  projectService,
-		sessionService:  sessionService,
-		messageService:  messageService,
-		toolCallService: toolCallService,
-		db:              queries,
-		config:          cfg,
-		sandboxClient:   sandbox.GetDefaultClient(),
-		emailService:    emailService,
+		port:             port,
+		engine:           engine,
+		userService:      userService,
+		projectService:   projectService,
+		sessionService:   sessionService,
+		messageService:   messageService,
+		toolCallService:  toolCallService,
+		db:               queries,
+		config:           cfg,
+		sandboxClient:    sandbox.GetDefaultClient(),
+		emailService:     emailService,
+		cloudflareClient: cloudflareClient,
 	}
 }
 

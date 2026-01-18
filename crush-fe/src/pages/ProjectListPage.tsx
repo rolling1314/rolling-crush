@@ -36,6 +36,7 @@ interface Project {
   backend_port?: number;
   container_name?: string;
   need_database?: boolean;
+  subdomain?: string;
   created_at: number;
   updated_at: number;
 }

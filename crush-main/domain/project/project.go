@@ -30,6 +30,7 @@ type Project struct {
 	FrontendLanguage sql.NullString
 	BackendCommand   sql.NullString
 	BackendLanguage  sql.NullString
+	Subdomain        sql.NullString
 }
 
 type Service interface {
@@ -70,6 +71,7 @@ func (s *service) Create(ctx context.Context, userID, name, description, externa
 		FrontendLanguage: sql.NullString{Valid: false},
 		BackendCommand:   sql.NullString{Valid: false},
 		BackendLanguage:  sql.NullString{Valid: false},
+		Subdomain:        sql.NullString{Valid: false},
 	})
 	if err != nil {
 		return Project{}, err
@@ -118,6 +120,7 @@ func (s *service) Update(ctx context.Context, project Project) (Project, error) 
 		FrontendLanguage: project.FrontendLanguage,
 		BackendCommand:   project.BackendCommand,
 		BackendLanguage:  project.BackendLanguage,
+		Subdomain:        project.Subdomain,
 	})
 	if err != nil {
 		return Project{}, err
@@ -156,5 +159,6 @@ func (s *service) fromDBItem(item postgres.Project) Project {
 		FrontendLanguage: item.FrontendLanguage,
 		BackendCommand:   item.BackendCommand,
 		BackendLanguage:  item.BackendLanguage,
+		Subdomain:        item.Subdomain,
 	}
 }

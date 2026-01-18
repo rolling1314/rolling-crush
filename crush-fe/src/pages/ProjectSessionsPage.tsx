@@ -13,6 +13,7 @@ interface Project {
   external_ip: string;
   frontend_port: number;
   workspace_path: string;
+  subdomain?: string;
 }
 
 export default function ProjectSessionsPage() {
@@ -96,7 +97,7 @@ export default function ProjectSessionsPage() {
               <p className="text-gray-600 mb-3">{project.description}</p>
             )}
             <div className="flex gap-4 text-sm text-gray-500">
-              <span>📍 {project.external_ip}:{project.frontend_port}</span>
+              <span>📍 {project.subdomain || `${project.external_ip}:${project.frontend_port}`}</span>
               <span>📁 {project.workspace_path}</span>
             </div>
           </div>

@@ -430,6 +430,35 @@ func (c *Client) DeleteProject(ctx context.Context, req DeleteProjectRequest) (*
 	return &resp, nil
 }
 
+// ConfigureDomainRequest 配置域名请求
+type ConfigureDomainRequest struct {
+	ContainerID  string `json:"container_id"`
+	Subdomain    string `json:"subdomain"`     // 三级域名前缀，如 "abc1234567"
+	FrontendPort int32  `json:"frontend_port"` // 主机端口
+	Domain       string `json:"domain"`        // 基础域名，如 "rollingcoding.com"
+}
+
+// ConfigureDomainResponse 配置域名响应
+type ConfigureDomainResponse struct {
+	Status    string `json:"status"`
+	Subdomain string `json:"subdomain"` // 完整三级域名
+	Message   string `json:"message"`
+	Error     string `json:"error,omitempty"`
+}
+
+// ConfigureDomain 配置项目域名（nginx + vite）
+func (c *Client) ConfigureDomain(ctx context.Context, req ConfigureDomainRequest) (*ConfigureDomainResponse, error) {
+	var resp ConfigureDomainResponse
+	err := c.doRequest(ctx, "POST", "/projects/configure-domain", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != "" {
+		return &resp, fmt.Errorf("sandbox error: %s", resp.Error)
+	}
+	return &resp, nil
+}
+
 // GetDefaultClient 获取默认的沙箱客户端（单例）
 var defaultClient *Client
 

@@ -12,14 +12,21 @@ import (
 
 // AppConfig holds the complete application configuration.
 type AppConfig struct {
-	Server    ServerConfig    `yaml:"server"`
-	Auth      AuthConfig      `yaml:"auth"`
-	Database  DatabaseConfig  `yaml:"database"`
-	Redis     RedisConfig     `yaml:"redis"`
-	Sandbox   SandboxConfig   `yaml:"sandbox"`
-	Storage   StorageConfig   `yaml:"storage"`
-	AutoModel AutoModelConfig `yaml:"auto_model"`
-	Email     EmailConfig     `yaml:"email"`
+	Server     ServerConfig     `yaml:"server"`
+	Auth       AuthConfig       `yaml:"auth"`
+	Database   DatabaseConfig   `yaml:"database"`
+	Redis      RedisConfig      `yaml:"redis"`
+	Sandbox    SandboxConfig    `yaml:"sandbox"`
+	Storage    StorageConfig    `yaml:"storage"`
+	AutoModel  AutoModelConfig  `yaml:"auto_model"`
+	Email      EmailConfig      `yaml:"email"`
+	Cloudflare CloudflareConfig `yaml:"cloudflare"`
+}
+
+// CloudflareConfig holds Cloudflare DNS settings.
+type CloudflareConfig struct {
+	APIToken string `yaml:"api_token"` // Cloudflare API Token
+	Domain   string `yaml:"domain"`    // Base domain (e.g., "rollingcoding.com")
 }
 
 // EmailConfig holds email SMTP settings.
@@ -261,6 +268,14 @@ func overrideWithEnvApp(config *AppConfig) {
 	if v := os.Getenv("REDIS_DB"); v != "" {
 		fmt.Sscanf(v, "%d", &config.Redis.DB)
 	}
+
+	// Cloudflare overrides
+	if v := os.Getenv("CLOUDFLARE_API_TOKEN"); v != "" {
+		config.Cloudflare.APIToken = v
+	}
+	if v := os.Getenv("CLOUDFLARE_DOMAIN"); v != "" {
+		config.Cloudflare.Domain = v
+	}
 }
 
 // GetGlobalAppConfig returns the global application configuration instance.
@@ -343,6 +358,10 @@ func getDefaultAppConfig() *AppConfig {
 			FromName:    "Crush",
 			UseSSL:      true,
 			CodeExpire:  5,
+		},
+		Cloudflare: CloudflareConfig{
+			APIToken: "",
+			Domain:   "rollingcoding.com",
 		},
 	}
 }

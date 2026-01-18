@@ -19,6 +19,7 @@ interface Project {
   external_ip: string;
   frontend_port: number;
   workspace_path: string;
+  subdomain?: string;  // 三级域名，如 "abc123.rollingcoding.com"
 }
 
 interface SessionModelConfig {
@@ -1677,7 +1678,7 @@ export default function WorkspacePage() {
             >
               <div className="flex-1 bg-white relative">
                 <iframe 
-                  src={project ? `http://${project.external_ip}:${project.frontend_port}` : 'about:blank'}
+                  src={project ? (project.subdomain ? `https://${project.subdomain}` : `http://${project.external_ip}:${project.frontend_port}`) : 'about:blank'}
                   className="absolute inset-0 w-full h-full border-none"
                   title="Application Preview"
                   allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone; midi; clipboard-read; clipboard-write"

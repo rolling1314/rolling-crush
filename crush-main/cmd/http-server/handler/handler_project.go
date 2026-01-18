@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"math/big"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -11,6 +13,22 @@ import (
 	"github.com/rolling1314/rolling-crush/infra/sandbox"
 	"github.com/rolling1314/rolling-crush/pkg/config"
 )
+
+// generateSubdomain generates a random 10-character alphanumeric subdomain
+func generateSubdomain() string {
+	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, 10)
+	for i := range b {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		if err != nil {
+			// Fallback to a simple counter if crypto/rand fails
+			b[i] = charset[i%len(charset)]
+		} else {
+			b[i] = charset[n.Int64()]
+		}
+	}
+	return string(b)
+}
 
 // handleCreateProject handles project creation
 func (s *Server) handleCreateProject(c *gin.Context) {
@@ -43,9 +61,9 @@ func (s *Server) handleCreateProject(c *gin.Context) {
 		"workdir", sandboxResp.Workdir)
 
 	// Set default values - use config's external_ip if not provided in request
+	appCfg := config.GetGlobalAppConfig()
 	externalIP := req.ExternalIP
 	if externalIP == "" {
-		appCfg := config.GetGlobalAppConfig()
 		externalIP = appCfg.Sandbox.ExternalIP
 		if externalIP == "" {
 			externalIP = "localhost"
@@ -54,6 +72,54 @@ func (s *Server) handleCreateProject(c *gin.Context) {
 	workspacePath := req.WorkspacePath
 	if workspacePath == "" {
 		workspacePath = "/workspace"
+	}
+
+	// Generate subdomain
+	subdomain := generateSubdomain()
+	domain := appCfg.Cloudflare.Domain
+	if domain == "" {
+		domain = "rollingcoding.com"
+	}
+	fullSubdomain := fmt.Sprintf("%s.%s", subdomain, domain)
+
+	slog.Info("Generated subdomain", "subdomain", subdomain, "full_subdomain", fullSubdomain)
+
+	// Configure domain in sandbox (nginx + vite)
+	if s.sandboxClient != nil {
+		_, err := s.sandboxClient.ConfigureDomain(c.Request.Context(), sandbox.ConfigureDomainRequest{
+			ContainerID:  sandboxResp.ContainerID,
+			Subdomain:    subdomain,
+			FrontendPort: sandboxResp.FrontendPort,
+			Domain:       domain,
+		})
+		if err != nil {
+			slog.Warn("Failed to configure domain in sandbox", "error", err, "subdomain", fullSubdomain)
+			// Don't fail the request, continue without domain configuration
+		} else {
+			slog.Info("Domain configured in sandbox", "subdomain", fullSubdomain)
+		}
+	}
+
+	// Add DNS record to Cloudflare
+	fmt.Printf("🔍 Checking Cloudflare: client_nil=%v, api_token_empty=%v, domain=%s\n",
+		s.cloudflareClient == nil,
+		appCfg.Cloudflare.APIToken == "",
+		appCfg.Cloudflare.Domain)
+
+	if s.cloudflareClient != nil && appCfg.Cloudflare.APIToken != "" {
+		fmt.Printf("📤 Calling Cloudflare API: subdomain=%s, ip=%s\n", subdomain, externalIP)
+		err := s.cloudflareClient.AddOrUpdateDNSRecord(c.Request.Context(), subdomain, externalIP)
+		if err != nil {
+			fmt.Printf("❌ Cloudflare DNS failed: %v\n", err)
+			slog.Error("Failed to add DNS record to Cloudflare", "error", err, "subdomain", fullSubdomain, "ip", externalIP)
+		} else {
+			fmt.Printf("✅ Cloudflare DNS added: %s -> %s\n", fullSubdomain, externalIP)
+			slog.Info("DNS record added to Cloudflare successfully", "subdomain", fullSubdomain, "ip", externalIP)
+		}
+	} else {
+		fmt.Printf("⚠️ Skipping Cloudflare: client_nil=%v, api_token_empty=%v\n",
+			s.cloudflareClient == nil, appCfg.Cloudflare.APIToken == "")
+		slog.Warn("Skipping Cloudflare DNS configuration", "subdomain", fullSubdomain)
 	}
 
 	// Create project record
@@ -77,6 +143,9 @@ func (s *Server) handleCreateProject(c *gin.Context) {
 	proj.ContainerName = sql.NullString{String: sandboxResp.ContainerID, Valid: true}
 	// Working directory is /workspace
 	proj.WorkdirPath = sql.NullString{String: sandboxResp.Workdir, Valid: true}
+	// Store the subdomain
+	proj.Subdomain = sql.NullString{String: fullSubdomain, Valid: true}
+
 	if req.BackendLanguage != nil && *req.BackendLanguage != "" {
 		proj.BackendLanguage = sql.NullString{String: *req.BackendLanguage, Valid: true}
 		if sandboxResp.BackendPort != nil {
@@ -89,7 +158,8 @@ func (s *Server) handleCreateProject(c *gin.Context) {
 		"container_id", sandboxResp.ContainerID,
 		"workdir", sandboxResp.Workdir,
 		"frontend_port", sandboxResp.FrontendPort,
-		"backend_port", sandboxResp.BackendPort)
+		"backend_port", sandboxResp.BackendPort,
+		"subdomain", fullSubdomain)
 
 	// If database is needed, configure database connection info
 	if req.NeedDatabase {
@@ -108,7 +178,7 @@ func (s *Server) handleCreateProject(c *gin.Context) {
 		return
 	}
 
-	slog.Info("Project created successfully", "project_id", proj.ID)
+	slog.Info("Project created successfully", "project_id", proj.ID, "subdomain", fullSubdomain)
 
 	c.JSON(http.StatusOK, projectToResponse(proj))
 }
@@ -170,6 +240,7 @@ func (s *Server) handleUpdateProject(c *gin.Context) {
 		FrontendLanguage: ptrToNullString(req.FrontendLanguage),
 		BackendCommand:   ptrToNullString(req.BackendCommand),
 		BackendLanguage:  ptrToNullString(req.BackendLanguage),
+		Subdomain:        ptrToNullString(req.Subdomain),
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
@@ -269,6 +340,7 @@ func projectToResponse(proj project.Project) ProjectResponse {
 		FrontendLanguage: nullStringToPtr(proj.FrontendLanguage),
 		BackendCommand:   nullStringToPtr(proj.BackendCommand),
 		BackendLanguage:  nullStringToPtr(proj.BackendLanguage),
+		Subdomain:        nullStringToPtr(proj.Subdomain),
 		CreatedAt:        proj.CreatedAt,
 		UpdatedAt:        proj.UpdatedAt,
 	}

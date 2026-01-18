@@ -11,7 +11,7 @@ development:
     debug: true
   
   database:
-    host: "localhost"
+    host: "120.26.101.52"
     port: 5432
     user: "crush"
     password: "123456"
@@ -30,7 +30,7 @@ production:
     debug: false
   
   database:
-    host: "120.26.101.52"  # 修改为你的生产数据库地址
+    host: "43.163.92.30"  # 修改为你的生产数据库地址
     port: 5432
     user: "crush"
     password: "123456"  # 修改为你的生产数据库密码
