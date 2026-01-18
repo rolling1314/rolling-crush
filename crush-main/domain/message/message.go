@@ -28,6 +28,11 @@ type Service interface {
 	// This is used for streaming updates where we want real-time frontend updates but don't need
 	// to persist every delta to the database. Call Update() when the message is complete.
 	PublishUpdate(message Message)
+	// PublishDelta publishes a streaming delta event. This sends only the incremental change
+	// rather than the full message, reducing bandwidth and improving streaming performance.
+	PublishDelta(delta StreamDelta)
+	// SubscribeDeltas returns a channel that receives StreamDelta events for incremental updates.
+	SubscribeDeltas(ctx context.Context) <-chan pubsub.Event[StreamDelta]
 	Get(ctx context.Context, id string) (Message, error)
 	List(ctx context.Context, sessionID string) ([]Message, error)
 	Delete(ctx context.Context, id string) error
@@ -36,13 +41,15 @@ type Service interface {
 
 type service struct {
 	*pubsub.Broker[Message]
-	q postgres.Querier
+	deltaBroker *pubsub.Broker[StreamDelta]
+	q           postgres.Querier
 }
 
 func NewService(q postgres.Querier) Service {
 	return &service{
-		Broker: pubsub.NewBroker[Message](),
-		q:      q,
+		Broker:      pubsub.NewBroker[Message](),
+		deltaBroker: pubsub.NewBroker[StreamDelta](),
+		q:           q,
 	}
 }
 
@@ -138,6 +145,17 @@ func (s *service) Update(ctx context.Context, message Message) error {
 func (s *service) PublishUpdate(message Message) {
 	message.UpdatedAt = time.Now().Unix()
 	s.Publish(pubsub.UpdatedEvent, message)
+}
+
+// PublishDelta publishes a streaming delta event. This sends only the incremental change
+// rather than the full message, reducing bandwidth and improving streaming performance.
+func (s *service) PublishDelta(delta StreamDelta) {
+	s.deltaBroker.Publish(pubsub.UpdatedEvent, delta)
+}
+
+// SubscribeDeltas returns a channel that receives StreamDelta events for incremental updates.
+func (s *service) SubscribeDeltas(ctx context.Context) <-chan pubsub.Event[StreamDelta] {
+	return s.deltaBroker.Subscribe(ctx)
 }
 
 func (s *service) Get(ctx context.Context, id string) (Message, error) {

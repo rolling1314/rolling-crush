@@ -314,8 +314,8 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 		},
 		OnReasoningStart: func(id string, reasoning fantasy.ReasoningContent) error {
 			currentAssistant.AppendReasoningContent(reasoning.Text)
-			// Only publish to frontend, don't write to DB during streaming
-			a.messages.PublishUpdate(*currentAssistant)
+			// Publish incremental delta instead of full message
+			a.messages.PublishDelta(message.NewReasoningDelta(currentAssistant.ID, call.SessionID, reasoning.Text))
 			return nil
 		},
 		OnReasoningDelta: func(id string, text string) error {
@@ -323,8 +323,8 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 			fmt.Printf("[REASONING] %s", text)
 
 			currentAssistant.AppendReasoningContent(text)
-			// Only publish to frontend, don't write to DB during streaming
-			a.messages.PublishUpdate(*currentAssistant)
+			// Publish incremental delta instead of full message
+			a.messages.PublishDelta(message.NewReasoningDelta(currentAssistant.ID, call.SessionID, text))
 			return nil
 		},
 		OnReasoningEnd: func(id string, reasoning fantasy.ReasoningContent) error {
@@ -345,8 +345,8 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 				}
 			}
 			currentAssistant.FinishThinking()
-			// Only publish to frontend, don't write to DB during streaming
-			a.messages.PublishUpdate(*currentAssistant)
+			// Reasoning end doesn't need delta - the signatures are not streamed
+			// Full message update will happen on step finish
 			return nil
 		},
 		OnTextDelta: func(id string, text string) error {
@@ -361,8 +361,8 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 			fmt.Printf("[STREAM TEXT] %s", text)
 
 			currentAssistant.AppendContent(text)
-			// Only publish to frontend, don't write to DB during streaming
-			a.messages.PublishUpdate(*currentAssistant)
+			// Publish incremental delta instead of full message
+			a.messages.PublishDelta(message.NewTextDelta(currentAssistant.ID, call.SessionID, text))
 			return nil
 		},
 		OnToolInputStart: func(id string, toolName string) error {
@@ -408,8 +408,8 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 				})
 			}
 
-			// Only publish to frontend, don't write to DB during streaming
-			a.messages.PublishUpdate(*currentAssistant)
+			// Publish tool call delta to notify frontend about new tool call
+			a.messages.PublishDelta(message.NewToolCallDelta(currentAssistant.ID, call.SessionID, id, toolName))
 			return nil
 		},
 		OnRetry: func(err *fantasy.ProviderError, delay time.Duration) {
@@ -456,8 +456,8 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 				})
 			}
 
-			// Only publish to frontend, don't write to DB during streaming
-			a.messages.PublishUpdate(*currentAssistant)
+			// Publish tool call input delta - this is the complete input for the tool call
+			a.messages.PublishDelta(message.NewToolCallInputDelta(currentAssistant.ID, call.SessionID, tc.ToolCallID, tc.Input))
 			return nil
 		},
 		OnToolResult: func(result fantasy.ToolResultContent) error {
@@ -555,6 +555,8 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 			if sessionErr != nil {
 				return sessionErr
 			}
+			// Publish finish delta to notify frontend streaming is complete for this message
+			a.messages.PublishDelta(message.NewFinishDelta(currentAssistant.ID, call.SessionID, string(finishReason)))
 			return a.messages.Update(genCtx, *currentAssistant)
 		},
 		StopWhen: []fantasy.StopCondition{
@@ -765,8 +767,8 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		},
 		OnReasoningDelta: func(id string, text string) error {
 			summaryMessage.AppendReasoningContent(text)
-			// Only publish to frontend, don't write to DB during streaming
-			a.messages.PublishUpdate(summaryMessage)
+			// Publish incremental delta instead of full message
+			a.messages.PublishDelta(message.NewReasoningDelta(summaryMessage.ID, sessionID, text))
 			return nil
 		},
 		OnReasoningEnd: func(id string, reasoning fantasy.ReasoningContent) error {
@@ -777,14 +779,13 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 				}
 			}
 			summaryMessage.FinishThinking()
-			// Only publish to frontend, don't write to DB during streaming
-			a.messages.PublishUpdate(summaryMessage)
+			// Reasoning end doesn't need delta - signatures are not streamed
 			return nil
 		},
 		OnTextDelta: func(id, text string) error {
 			summaryMessage.AppendContent(text)
-			// Only publish to frontend, don't write to DB during streaming
-			a.messages.PublishUpdate(summaryMessage)
+			// Publish incremental delta instead of full message
+			a.messages.PublishDelta(message.NewTextDelta(summaryMessage.ID, sessionID, text))
 			return nil
 		},
 	})
@@ -798,6 +799,8 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		return err
 	}
 
+	// Publish finish delta before updating to DB
+	a.messages.PublishDelta(message.NewFinishDelta(summaryMessage.ID, sessionID, string(message.FinishReasonEndTurn)))
 	summaryMessage.AddFinish(message.FinishReasonEndTurn, "", "")
 	err = a.messages.Update(genCtx, summaryMessage)
 	if err != nil {

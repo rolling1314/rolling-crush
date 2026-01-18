@@ -125,3 +125,19 @@ export interface Session {
   created_at: number;
   updated_at: number;
 }
+
+// Stream delta for incremental message updates
+export interface StreamDelta {
+  Type: 'stream_delta';
+  message_id: string;
+  session_id: string;
+  delta_type: 'text' | 'reasoning' | 'tool_call_input' | 'tool_call' | 'finish';
+  content: string;
+  tool_call_id?: string;
+  tool_call_name?: string;
+  finish_reason?: string;
+  timestamp: number;
+  // Replay metadata (for reconnection)
+  _replay?: boolean;
+  _streamId?: string;
+}

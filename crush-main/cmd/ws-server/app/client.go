@@ -428,6 +428,21 @@ func (app *WSApp) handleReconnection(sessionID string, lastMsgID string) {
 			continue
 		}
 
+		// Handle stream_delta messages - send them directly without wrapping
+		if msg.Type == "stream_delta" {
+			var deltaPayload map[string]interface{}
+			if err := json.Unmarshal(msg.Payload, &deltaPayload); err != nil {
+				slog.Warn("Failed to unmarshal stream_delta payload", "error", err)
+				continue
+			}
+			// Add replay metadata and stream ID
+			deltaPayload["Type"] = "stream_delta"
+			deltaPayload["_replay"] = true
+			deltaPayload["_streamId"] = msg.ID
+			app.WSServer.SendToSession(sessionID, deltaPayload)
+			continue
+		}
+
 		var payload interface{}
 		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 			slog.Warn("Failed to unmarshal message payload", "error", err)

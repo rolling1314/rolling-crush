@@ -29,6 +29,8 @@ func (app *WSApp) setupEvents() {
 	wsSetupSubscriber(ctx, app.serviceEventsWG, "history", app.History.Subscribe, app.events)
 	wsSetupSubscriber(ctx, app.serviceEventsWG, "mcp", mcp.SubscribeEvents, app.events)
 	wsSetupSubscriber(ctx, app.serviceEventsWG, "lsp", SubscribeLSPEvents, app.events)
+	// Subscribe to stream delta events for incremental streaming
+	wsSetupSubscriber(ctx, app.serviceEventsWG, "deltas", app.Messages.SubscribeDeltas, app.events)
 	cleanupFunc := func() error {
 		cancel()
 		app.serviceEventsWG.Wait()
@@ -111,6 +113,12 @@ func (app *WSApp) handleEvent(msg tea.Msg) {
 	// DEBUG: 打印收到的事件类型
 	fmt.Printf("[EVENT] Received event type: %T\n", msg)
 
+	// Handle stream delta events for incremental streaming (highest priority for low latency)
+	if event, ok := msg.(pubsub.Event[message.StreamDelta]); ok {
+		app.handleStreamDeltaEvent(event)
+		return
+	}
+
 	// Send messages to specific session via WebSocket
 	if event, ok := msg.(pubsub.Event[message.Message]); ok {
 		app.handleMessageEvent(event)
@@ -135,6 +143,45 @@ func (app *WSApp) handleEvent(msg tea.Msg) {
 	if event, ok := msg.(pubsub.Event[session.Session]); ok {
 		app.handleSessionEvent(event)
 	}
+}
+
+// handleStreamDeltaEvent handles incremental streaming delta events
+func (app *WSApp) handleStreamDeltaEvent(event pubsub.Event[message.StreamDelta]) {
+	sessionID := event.Payload.SessionID
+	fmt.Printf("[DELTA] Sending delta to session: MessageID=%s, Type=%s, SessionID=%s, ContentLen=%d\n",
+		event.Payload.MessageID, event.Payload.DeltaType, sessionID, len(event.Payload.Content))
+
+	// Publish delta to Redis stream for buffering (enables reconnection replay)
+	if app.RedisStream != nil {
+		ctx := context.Background()
+		if err := app.RedisStream.PublishMessage(ctx, sessionID, "stream_delta", event.Payload); err != nil {
+			slog.Warn("Failed to publish delta to Redis stream", "error", err)
+		}
+	}
+
+	// Build the delta message for WebSocket
+	deltaMsg := map[string]interface{}{
+		"Type":       "stream_delta",
+		"message_id": event.Payload.MessageID,
+		"session_id": sessionID,
+		"delta_type": string(event.Payload.DeltaType),
+		"content":    event.Payload.Content,
+		"timestamp":  event.Payload.Timestamp,
+	}
+
+	// Add optional fields if present
+	if event.Payload.ToolCallID != "" {
+		deltaMsg["tool_call_id"] = event.Payload.ToolCallID
+	}
+	if event.Payload.ToolCallName != "" {
+		deltaMsg["tool_call_name"] = event.Payload.ToolCallName
+	}
+	if event.Payload.FinishReason != "" {
+		deltaMsg["finish_reason"] = event.Payload.FinishReason
+	}
+
+	// Send via WebSocket - always try to send (SendToSession handles missing clients)
+	app.WSServer.SendToSession(sessionID, deltaMsg)
 }
 
 // handleMessageEvent handles message events

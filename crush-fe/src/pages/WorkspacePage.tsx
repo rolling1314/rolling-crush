@@ -374,6 +374,9 @@ export default function WorkspacePage() {
       if (data._type === 'message') {
         // 这是一个标准消息，直接处理 payload
         handleReplayedMessage(originalPayload);
+      } else if (data._type === 'stream_delta') {
+        // 增量消息重放
+        handleStreamDelta(data);
       } else if (data._type === 'permission_request') {
         // 权限请求
         handlePermissionRequestMessage(originalPayload);
@@ -381,6 +384,12 @@ export default function WorkspacePage() {
         // Session 更新
         handleSessionUpdateMessage(originalPayload);
       }
+      return;
+    }
+    
+    // 处理增量流式消息（stream_delta）- 优先处理，因为这是主要的流式传输方式
+    if (data.Type === 'stream_delta' || data.type === 'stream_delta') {
+      handleStreamDelta(data);
       return;
     }
     
@@ -630,6 +639,111 @@ export default function WorkspacePage() {
         }
       });
     }
+  };
+
+  // Helper function to handle stream delta (incremental updates)
+  const handleStreamDelta = (delta: any) => {
+    const messageId = delta.message_id;
+    const deltaType = delta.delta_type || delta.DeltaType;
+    const content = delta.content || '';
+    
+    console.log('[STREAM DELTA]', deltaType, 'for message:', messageId, 'content length:', content.length);
+    
+    // 保存 Redis stream ID 用于重连时恢复消息
+    if (delta._streamId && currentSessionIdRef.current) {
+      setLastStreamId(currentSessionIdRef.current, delta._streamId);
+    }
+    
+    setMessages(prev => {
+      const existingIndex = prev.findIndex(m => m.id === messageId);
+      
+      if (existingIndex === -1) {
+        // 消息不存在，需要先创建（这应该很少发生，因为消息创建时会先发送完整消息）
+        console.warn('[STREAM DELTA] Message not found, creating placeholder:', messageId);
+        const newMessage: Message = {
+          id: messageId,
+          role: 'assistant',
+          content: '',
+          reasoning: undefined,
+          timestamp: delta.timestamp || Date.now(),
+          isStreaming: true,
+        };
+        return [...prev, newMessage];
+      }
+      
+      const newMessages = [...prev];
+      const existingMsg = newMessages[existingIndex];
+      
+      // 根据 delta_type 更新对应的字段
+      switch (deltaType) {
+        case 'text':
+          newMessages[existingIndex] = {
+            ...existingMsg,
+            content: (existingMsg.content || '') + content,
+            isStreaming: true,
+          };
+          break;
+          
+        case 'reasoning':
+          newMessages[existingIndex] = {
+            ...existingMsg,
+            reasoning: (existingMsg.reasoning || '') + content,
+            isStreaming: true,
+          };
+          break;
+          
+        case 'tool_call':
+          // 新的工具调用开始
+          const newToolCall: ToolCall = {
+            id: delta.tool_call_id || '',
+            name: delta.tool_call_name || '',
+            input: '',
+            finished: false,
+            status: 'pending',
+          };
+          newMessages[existingIndex] = {
+            ...existingMsg,
+            toolCalls: [...(existingMsg.toolCalls || []), newToolCall],
+            isStreaming: true,
+          };
+          break;
+          
+        case 'tool_call_input':
+          // 工具调用输入增量更新
+          if (existingMsg.toolCalls && delta.tool_call_id) {
+            const updatedToolCalls = existingMsg.toolCalls.map(tc => {
+              if (tc.id === delta.tool_call_id) {
+                return {
+                  ...tc,
+                  input: (tc.input || '') + content,
+                };
+              }
+              return tc;
+            });
+            newMessages[existingIndex] = {
+              ...existingMsg,
+              toolCalls: updatedToolCalls,
+              isStreaming: true,
+            };
+          }
+          break;
+          
+        case 'finish':
+          // 消息流式传输完成
+          newMessages[existingIndex] = {
+            ...existingMsg,
+            isStreaming: false,
+          };
+          setIsProcessing(false);
+          break;
+          
+        default:
+          console.warn('[STREAM DELTA] Unknown delta type:', deltaType);
+          return prev;
+      }
+      
+      return newMessages;
+    });
   };
 
   // Helper function to handle permission request messages
