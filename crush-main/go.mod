@@ -64,7 +64,7 @@ require (
 	golang.org/x/text v0.31.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
-	mvdan.cc/sh/moreinterp v0.0.0-20250902163504-3cf4fd5717a5
+	mvdan.cc/sh/moreinterp v0.0.0-20251226130044-773eb7b92782
 	mvdan.cc/sh/v3 v3.12.1-0.20250902163504-3cf4fd5717a5
 )
 
@@ -174,7 +174,7 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tinylib/msgp v1.3.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
-	github.com/u-root/u-root v0.14.1-0.20250807200646-5e7721023dc7 // indirect
+	github.com/u-root/u-root v0.15.1-0.20251208185023-2f8c7e763cf8 // indirect
 	github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
