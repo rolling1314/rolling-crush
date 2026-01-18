@@ -114,8 +114,10 @@ start_http_server() {
     fi
     
     print_info "启动 HTTP Server..."
+    print_info "配置文件: ${PROJECT_ROOT}/config.yaml"
     
-    cd "${PROJECT_ROOT}/cmd/http-server"
+    # 从 PROJECT_ROOT 启动，加载 crush-main/config.yaml
+    cd "${PROJECT_ROOT}"
     
     APP_ENV="${APP_ENV}" nohup "${HTTP_SERVER_BIN}" > "${HTTP_SERVER_LOG}" 2>&1 &
     local pid=$!
@@ -141,8 +143,10 @@ start_ws_server() {
     fi
     
     print_info "启动 WebSocket Server..."
+    print_info "配置文件: ${PROJECT_ROOT}/config.yaml"
     
-    cd "${PROJECT_ROOT}/cmd/ws-server"
+    # 从 PROJECT_ROOT 启动，加载 crush-main/config.yaml
+    cd "${PROJECT_ROOT}"
     
     APP_ENV="${APP_ENV}" nohup "${WS_SERVER_BIN}" > "${WS_SERVER_LOG}" 2>&1 &
     local pid=$!
@@ -267,6 +271,7 @@ show_status() {
     print_info "========== 服务信息 =========="
     echo ""
     echo "环境: ${APP_ENV}"
+    echo "配置文件: ${PROJECT_ROOT}/config.yaml"
     echo ""
     echo "HTTP Server:"
     echo "  - URL: http://localhost:8001"

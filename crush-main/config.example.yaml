@@ -1,4 +1,4 @@
-# Crush 应用配置文件示例
+# Crush 应用配置文件
 # 复制此文件为 config.yaml 并根据实际情况修改配置
 # 通过环境变量 APP_ENV 来指定使用哪个环境（development 或 production）
 # 例如: export APP_ENV=production
@@ -64,22 +64,33 @@ development:
 
   # Auto 模型配置（用户选择 "Auto" 时使用的默认模型）
   auto_model:
-    provider: "zhipu"                                    # 提供商 ID
-    model: "glm-4-plus"                                  # 模型 ID
-    api_key: "your-zhipu-api-key"                        # API Key
+    provider: "zai"                                      # 提供商 ID
+    model: "glm-4.5"                                     # 模型 ID
+    api_key: "4493a0d8858b4b61ba39d629da80cbf2.sbBl8GkPGS2cKNx8"  # API Key
     base_url: "https://open.bigmodel.cn/api/paas/v4"     # API 端点
 
-# 生产环境配置（与开发环境保持一致）
+  # 邮件服务配置（用于邮箱验证和密码重置）
+  email:
+    smtp_host: "smtp.163.com"            # SMTP 服务器地址
+    smtp_port: "465"                     # SMTP 端口（465 为 SSL，587 为 TLS）
+    username: "ld1779494931@163.com"     # 邮箱账号
+    password: "JSiygEevMwKu44Xs"         # 邮箱应用专用密码
+    from_address: "ld1779494931@163.com" # 发件人地址
+    from_name: "Crush"                   # 发件人名称
+    use_ssl: true                        # 是否使用 SSL
+    code_expire: 5                       # 验证码有效期（分钟）
+
+# 生产环境配置
 production:
   # 服务器配置
   server:
     http_port: "8001"
     ws_port: "8002"
-    debug: true          # 与开发环境一致
+    debug: false
 
   # 认证配置
   auth:
-    jwt_secret: "crush-dev-jwt-secret-change-in-production-2024"  # 与开发环境一致
+    jwt_secret: "your-secure-jwt-secret-change-this"  # 重要：请修改为安全的随机密钥
     token_expire_hour: 24
 
   # 数据库配置
@@ -105,9 +116,9 @@ production:
   
   # 沙箱服务配置
   sandbox:
-    base_url: "http://localhost:8888"
+    base_url: "http://106.54.34.243:8888"
     timeout: 300
-    external_ip: "your-production-ip"  # 项目容器的外部访问 IP（用于 iframe 预览）
+    external_ip: "106.54.34.243"  # 项目容器的外部访问 IP（用于 iframe 预览）
   
   # 对象存储配置
   storage:
@@ -123,12 +134,23 @@ production:
       endpoint: "oss-cn-hangzhou.aliyuncs.com"
       access_key_id: "your-access-key-id"
       access_key_secret: "your-access-key-secret"
-      bucket: "crush-images"
+      bucket: "crush-images-prod"
       use_ssl: true
 
   # Auto 模型配置（用户选择 "Auto" 时使用的默认模型）
   auto_model:
-    provider: "zhipu"                                    # 提供商 ID
-    model: "glm-4-plus"                                  # 模型 ID
-    api_key: "your-zhipu-api-key"                        # API Key
+    provider: "zai"                                      # 提供商 ID
+    model: "glm-4.5"                                     # 模型 ID
+    api_key: "4493a0d8858b4b61ba39d629da80cbf2.sbBl8GkPGS2cKNx8"  # API Key
     base_url: "https://open.bigmodel.cn/api/paas/v4"     # API 端点
+
+  # 邮件服务配置（用于邮箱验证和密码重置）
+  email:
+    smtp_host: "smtp.163.com"
+    smtp_port: "465"
+    username: "ld1779494931@163.com"
+    password: "JSiygEevMwKu44Xs"
+    from_address: "ld1779494931@163.com"
+    from_name: "Crush"
+    use_ssl: true
+    code_expire: 5
