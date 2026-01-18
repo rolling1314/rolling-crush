@@ -259,7 +259,7 @@ export default defineConfig({{
   plugins: [react()],
   server: {{
     host: '0.0.0.0',
-    port: 5173,
+    port: {frontend_port},
     allowedHosts: [
       '{full_subdomain}',
       '.{domain}',
