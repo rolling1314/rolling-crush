@@ -56,6 +56,13 @@ type Querier interface {
 	CancelSessionToolCalls(ctx context.Context, sessionID string) error
 	DeleteToolCall(ctx context.Context, id string) error
 	DeleteSessionToolCalls(ctx context.Context, sessionID string) error
+	// Permission tracking
+	UpdateToolCallAwaitingPermission(ctx context.Context, arg UpdateToolCallAwaitingPermissionParams) error
+	ListAwaitingPermissionToolCalls(ctx context.Context, sessionID string) ([]ToolCall, error)
+	UpdateToolCallPermissionGranted(ctx context.Context, id string) error
+	UpdateToolCallPermissionTimeout(ctx context.Context, id string) error
+	ListTimedOutPermissionRequests(ctx context.Context, timeoutMs int64) ([]ToolCall, error)
+	CancelAwaitingPermissionToolCalls(ctx context.Context, sessionID string) error
 }
 
 var _ Querier = (*Queries)(nil)

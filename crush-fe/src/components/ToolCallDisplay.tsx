@@ -553,6 +553,8 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = memo(({
   const isSuccess = status ? status === 'completed' : (result && !result.is_error);
   const isExecuting = status ? status === 'running' : (toolCall.finished && !result);
   const isCancelled = status === 'cancelled';
+  const isAwaitingPermission = status === 'awaiting_permission';
+  const isTimeout = status === 'timeout';
 
   // Parse parameters - handle empty/undefined input
   const { main: mainParam, extra: extraParams } = useMemo(() => 
@@ -567,8 +569,11 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = memo(({
 
   // Get status icon and color
   const getStatusIcon = () => {
-    if (needsPermission && isPending) {
+    if (isAwaitingPermission || (needsPermission && isPending)) {
       return <span className="text-orange-500">{ICONS.pending}</span>;
+    }
+    if (isTimeout) {
+      return <span className="text-yellow-500">{ICONS.error}</span>;
     }
     if (isPending) {
       return <span className="text-emerald-600 animate-pulse">{ICONS.working}</span>;
@@ -727,6 +732,26 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = memo(({
             {preview}
             <div className="text-gray-500 text-xs italic pl-4 mt-2">
               Canceled.
+            </div>
+          </>
+        );
+      }
+      if (isAwaitingPermission) {
+        return (
+          <>
+            {preview}
+            <div className="text-orange-400 text-xs pl-4 mt-2 flex items-center gap-2">
+              <span className="animate-pulse">●</span> Awaiting permission...
+            </div>
+          </>
+        );
+      }
+      if (isTimeout) {
+        return (
+          <>
+            {preview}
+            <div className="text-yellow-500 text-xs pl-4 mt-2">
+              ⏱ Permission request timed out
             </div>
           </>
         );

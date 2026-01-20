@@ -84,7 +84,9 @@ func NewWriteTool(lspClients *csync.Map[string, *lsp.Client], permissions permis
 			oldContent = oldResp.Content
 		}
 		
-		p := permissions.Request(
+		granted, err := RequestPermissionWithTimeoutSimple(
+			ctx,
+			permissions,
 			permission.CreatePermissionRequest{
 				SessionID:   sessionID,
 				Path:        fsext.PathOrPrefix(filePath, workingDir),
@@ -99,7 +101,10 @@ func NewWriteTool(lspClients *csync.Map[string, *lsp.Client], permissions permis
 				},
 			},
 		)
-		if !p {
+		if err != nil {
+			return fantasy.ToolResponse{}, err
+		}
+		if !granted {
 			return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
 		}
 

@@ -121,7 +121,9 @@ func createNewFile(edit editContext, filePath, content string, call fantasy.Tool
 		return fantasy.NewTextErrorResponse(fmt.Sprintf("file already exists: %s", filePath)), nil
 	}
 
-	p := edit.permissions.Request(
+	granted, err := RequestPermissionWithTimeoutSimple(
+		edit.ctx,
+		edit.permissions,
 		permission.CreatePermissionRequest{
 			SessionID:   sessionID,
 			Path:        fsext.PathOrPrefix(filePath, edit.workingDir),
@@ -136,7 +138,10 @@ func createNewFile(edit editContext, filePath, content string, call fantasy.Tool
 			},
 		},
 	)
-	if !p {
+	if err != nil {
+		return fantasy.ToolResponse{}, err
+	}
+	if !granted {
 		return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
 	}
 
@@ -280,7 +285,9 @@ func deleteContent(edit editContext, filePath, oldString string, replaceAll bool
 		newContent, _ = fsext.ToWindowsLineEndings(newContent)
 	}
 
-	p := edit.permissions.Request(
+	granted, err := RequestPermissionWithTimeoutSimple(
+		edit.ctx,
+		edit.permissions,
 		permission.CreatePermissionRequest{
 			SessionID:   sessionID,
 			Path:        fsext.PathOrPrefix(filePath, edit.workingDir),
@@ -295,7 +302,10 @@ func deleteContent(edit editContext, filePath, oldString string, replaceAll bool
 			},
 		},
 	)
-	if !p {
+	if err != nil {
+		return fantasy.ToolResponse{}, err
+	}
+	if !granted {
 		return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
 	}
 
@@ -403,7 +413,9 @@ func replaceContent(edit editContext, filePath, oldString, newString string, rep
 		newContent, _ = fsext.ToWindowsLineEndings(newContent)
 	}
 
-	p := edit.permissions.Request(
+	granted, err := RequestPermissionWithTimeoutSimple(
+		edit.ctx,
+		edit.permissions,
 		permission.CreatePermissionRequest{
 			SessionID:   sessionID,
 			Path:        fsext.PathOrPrefix(filePath, edit.workingDir),
@@ -418,7 +430,10 @@ func replaceContent(edit editContext, filePath, oldString, newString string, rep
 			},
 		},
 	)
-	if !p {
+	if err != nil {
+		return fantasy.ToolResponse{}, err
+	}
+	if !granted {
 		return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
 	}
 

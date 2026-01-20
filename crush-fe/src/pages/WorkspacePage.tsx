@@ -431,11 +431,17 @@ export default function WorkspacePage() {
         session_id: data.session_id,
         tool_call_id: data.tool_call_id,
         tool_name: data.tool_name,
-        action: data.action
+        action: data.action,
+        path: data.path,
+        original_prompt: data.original_prompt,
+        _resumed: data._resumed  // Flag for resumed permission from previous session
       };
       
       console.log('Parsed PermissionRequest:', request);
       console.log('Tool call ID to add to map:', request.tool_call_id);
+      if (request._resumed) {
+        console.log('=== This is a RESUMED permission request ===');
+      }
       
       setPendingPermissions(prev => {
         const next = new Map(prev);
@@ -754,8 +760,17 @@ export default function WorkspacePage() {
       session_id: payload.session_id,
       tool_call_id: payload.tool_call_id,
       tool_name: payload.tool_name,
-      action: payload.action
+      action: payload.action,
+      path: payload.path,
+      original_prompt: payload.original_prompt,
+      _resumed: payload._resumed  // Flag indicating this is a resumed permission from previous session
     };
+    
+    if (request._resumed) {
+      console.log('=== Resumed permission request from previous session ===');
+      console.log('Tool call ID:', request.tool_call_id);
+      console.log('Tool name:', request.tool_name);
+    }
     
     setPendingPermissions(prev => {
       const next = new Map(prev);

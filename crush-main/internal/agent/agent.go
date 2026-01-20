@@ -984,6 +984,9 @@ func (a *sessionAgent) getSessionMessages(ctx context.Context, session session.S
 }
 
 func (a *sessionAgent) generateTitle(ctx context.Context, session *session.Session, prompt string) {
+	fmt.Printf("[TITLE] 🏷️ 开始生成标题 | sessionID=%s\n", session.ID)
+	defer fmt.Printf("[TITLE] 🏷️ 标题生成完成 | sessionID=%s\n", session.ID)
+
 	if prompt == "" {
 		return
 	}

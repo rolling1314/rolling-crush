@@ -149,7 +149,9 @@ func NewViewTool(lspClients *csync.Map[string, *lsp.Client], permissions permiss
 				relPath, err := filepath.Rel(absWorkingDir, absFilePath)
 				if err != nil || strings.HasPrefix(relPath, "..") {
 					// File is outside working directory, request permission
-					granted := permissions.Request(
+					granted, permErr := RequestPermissionWithTimeoutSimple(
+						ctx,
+						permissions,
 						permission.CreatePermissionRequest{
 							SessionID:   sessionID,
 							Path:        absFilePath,
@@ -161,6 +163,9 @@ func NewViewTool(lspClients *csync.Map[string, *lsp.Client], permissions permiss
 						},
 					)
 
+					if permErr != nil {
+						return fantasy.ToolResponse{}, permErr
+					}
 					if !granted {
 						return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
 					}

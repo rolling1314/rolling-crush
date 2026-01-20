@@ -83,3 +83,58 @@ WHERE id = $1;
 -- name: DeleteSessionToolCalls :exec
 DELETE FROM tool_calls
 WHERE session_id = $1;
+
+-- name: UpdateToolCallAwaitingPermission :exec
+-- Update a tool call to awaiting_permission status with permission metadata
+UPDATE tool_calls
+SET
+    status = 'awaiting_permission',
+    permission_requested_at = EXTRACT(EPOCH FROM NOW()) * 1000,
+    original_prompt = $2,
+    permission_action = $3,
+    permission_path = $4,
+    updated_at = EXTRACT(EPOCH FROM NOW()) * 1000
+WHERE id = $1;
+
+-- name: ListAwaitingPermissionToolCalls :many
+-- List all tool calls that are waiting for user permission
+SELECT * FROM tool_calls
+WHERE session_id = $1 AND status = 'awaiting_permission'
+ORDER BY permission_requested_at ASC;
+
+-- name: UpdateToolCallPermissionGranted :exec
+-- Update a tool call when permission is granted, changing status back to running
+UPDATE tool_calls
+SET
+    status = 'running',
+    started_at = CASE WHEN started_at IS NULL THEN EXTRACT(EPOCH FROM NOW()) * 1000 ELSE started_at END,
+    updated_at = EXTRACT(EPOCH FROM NOW()) * 1000
+WHERE id = $1 AND status = 'awaiting_permission';
+
+-- name: UpdateToolCallPermissionTimeout :exec
+-- Update a tool call when permission request times out
+UPDATE tool_calls
+SET
+    status = 'timeout',
+    error_message = 'Permission request timed out',
+    is_error = true,
+    finished_at = EXTRACT(EPOCH FROM NOW()) * 1000,
+    updated_at = EXTRACT(EPOCH FROM NOW()) * 1000
+WHERE id = $1 AND status = 'awaiting_permission';
+
+-- name: ListTimedOutPermissionRequests :many
+-- List all permission requests that have timed out (older than specified milliseconds)
+SELECT * FROM tool_calls
+WHERE status = 'awaiting_permission' 
+  AND permission_requested_at IS NOT NULL
+  AND permission_requested_at < (EXTRACT(EPOCH FROM NOW()) * 1000 - $1)
+ORDER BY permission_requested_at ASC;
+
+-- name: CancelAwaitingPermissionToolCalls :exec
+-- Cancel all awaiting_permission tool calls for a session
+UPDATE tool_calls
+SET
+    status = 'cancelled',
+    finished_at = EXTRACT(EPOCH FROM NOW()) * 1000,
+    updated_at = EXTRACT(EPOCH FROM NOW()) * 1000
+WHERE session_id = $1 AND status = 'awaiting_permission';

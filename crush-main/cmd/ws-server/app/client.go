@@ -12,6 +12,7 @@ import (
 	"github.com/rolling1314/rolling-crush/domain/message"
 	"github.com/rolling1314/rolling-crush/domain/permission"
 	"github.com/rolling1314/rolling-crush/infra/storage"
+	"github.com/rolling1314/rolling-crush/internal/agent"
 )
 
 // WSImageAttachment represents an image attached to a message
@@ -58,8 +59,8 @@ func (app *WSApp) HandleClientMessage(rawMsg []byte) {
 	type ClientMsg struct {
 		Type            string              `json:"type"`
 		Content         string              `json:"content"`
-		SessionID       string              `json:"sessionID"`   // Optional: if frontend sends it (camelCase)
-		SessionIDSnake  string              `json:"session_id"`  // Optional: for permission_response (snake_case)
+		SessionID       string              `json:"sessionID"`  // Optional: if frontend sends it (camelCase)
+		SessionIDSnake  string              `json:"session_id"` // Optional: for permission_response (snake_case)
 		ID              string              `json:"id"`
 		ToolCallID      string              `json:"tool_call_id"`
 		Granted         bool                `json:"granted"`
@@ -144,10 +145,29 @@ func (app *WSApp) handlePermissionResponse(id, toolCallID, sessionID string, gra
 		Path:       path,
 	}
 
+	// Check if this is a resumed permission request (tool call in awaiting_permission status)
+	// If so, handle it specially to re-run the original task
+	if app.db != nil && toolCallID != "" {
+		toolCall, err := app.db.GetToolCall(ctx, toolCallID)
+		if err == nil && toolCall.Status == "awaiting_permission" {
+			slog.Info("[GOROUTINE] Handling resumed permission response",
+				"tool_call_id", toolCallID,
+				"session_id", sessionID,
+				"granted", granted || allowForSession,
+			)
+			app.handleResumedPermissionResponse(ctx, toolCallID, sessionID, granted || allowForSession, toolName, action, path)
+			// Clean up subscription
+			go func() {
+				<-permissionChan
+			}()
+			return
+		}
+	}
+
 	if allowForSession {
 		// Allow for session: grant now and add to session allowlist
-		slog.Info("Permission granted for session by client", 
-			"tool_call_id", toolCallID, 
+		slog.Info("Permission granted for session by client",
+			"tool_call_id", toolCallID,
 			"session_id", sessionID,
 			"tool_name", toolName,
 			"action", action,
@@ -317,6 +337,39 @@ func (app *WSApp) processImageAttachments(images []WSImageAttachment) []message.
 	return attachments
 }
 
+// runAgentViaPool submits an agent task to the worker pool for execution.
+// Returns an error if the pool is full or shutting down.
+// This method provides bounded concurrency control.
+func (app *WSApp) runAgentViaPool(sessionID, content string, attachments []message.Attachment) error {
+	if app.AgentWorkerPool == nil {
+		// Fall back to direct execution if pool not initialized
+		slog.Warn("[GOROUTINE] Worker pool not available, falling back to direct execution")
+		app.runAgentAsync(sessionID, content, attachments)
+		return nil
+	}
+
+	task := agent.AgentTask{
+		SessionID:   sessionID,
+		Prompt:      content,
+		Attachments: attachments,
+		ResultChan:  make(chan agent.AgentTaskResult, 1),
+	}
+
+	if err := app.AgentWorkerPool.Submit(context.Background(), task); err != nil {
+		slog.Error("[GOROUTINE] Failed to submit task to worker pool",
+			"session_id", sessionID,
+			"error", err,
+		)
+		return err
+	}
+
+	slog.Info("[GOROUTINE] Task submitted to worker pool",
+		"session_id", sessionID,
+		"pool_stats", app.AgentWorkerPool.Stats(),
+	)
+	return nil
+}
+
 // runAgentAsync runs the agent asynchronously
 func (app *WSApp) runAgentAsync(sessionID, content string, attachments []message.Attachment) {
 	fmt.Println("\n=== About to call AgentCoordinator.Run in goroutine ===")
@@ -327,6 +380,9 @@ func (app *WSApp) runAgentAsync(sessionID, content string, attachments []message
 	}
 
 	go func() {
+		fmt.Printf("\n[GOROUTINE] 🚀 Session Agent Goroutine 创建 | sessionID=%s\n", sessionID)
+		defer fmt.Printf("[GOROUTINE] 🛑 Session Agent Goroutine 退出 | sessionID=%s\n", sessionID)
+
 		fmt.Println("\n=== Inside goroutine, calling AgentCoordinator.Run ===")
 		fmt.Printf("Goroutine 中的附件数量: %d\n", len(attachments))
 
@@ -517,6 +573,9 @@ func (app *WSApp) handleReconnection(sessionID string, lastMsgID string) {
 		}
 	}
 
+	// Check for awaiting_permission tool calls from database (suspended tasks from previous session)
+	app.checkAndSendAwaitingPermissionToolCalls(ctx, sessionID)
+
 	// Update last read ID
 	if newLastID != "" {
 		if err := app.RedisStream.SetLastReadID(ctx, sessionID, newLastID); err != nil {
@@ -611,4 +670,138 @@ func wsFetchImageFromURL(url string) ([]byte, string, error) {
 	}
 
 	return data, mimeType, nil
+}
+
+// checkAndSendAwaitingPermissionToolCalls checks the database for tool calls
+// that are awaiting permission and sends them to the client
+func (app *WSApp) checkAndSendAwaitingPermissionToolCalls(ctx context.Context, sessionID string) {
+	if app.db == nil {
+		slog.Debug("Database not available, skipping awaiting permission check")
+		return
+	}
+
+	// Query awaiting_permission tool calls from database
+	toolCalls, err := app.db.ListAwaitingPermissionToolCalls(ctx, sessionID)
+	if err != nil {
+		slog.Warn("Failed to list awaiting permission tool calls", "sessionID", sessionID, "error", err)
+		return
+	}
+
+	if len(toolCalls) == 0 {
+		slog.Debug("No awaiting permission tool calls found", "sessionID", sessionID)
+		return
+	}
+
+	slog.Info("[GOROUTINE] Found awaiting permission tool calls on reconnect",
+		"sessionID", sessionID,
+		"count", len(toolCalls),
+	)
+
+	// Send each awaiting permission tool call as a permission request to the client
+	for _, tc := range toolCalls {
+		permMsg := map[string]interface{}{
+			"Type":            "permission_request",
+			"id":              tc.ID,
+			"session_id":      tc.SessionID,
+			"tool_call_id":    tc.ID,
+			"tool_name":       tc.Name,
+			"description":     fmt.Sprintf("Tool %s requires permission (resumed from previous session)", tc.Name),
+			"action":          tc.PermissionAction.String,
+			"path":            tc.PermissionPath.String,
+			"original_prompt": tc.OriginalPrompt.String,
+			"_resumed":        true, // Mark as resumed for frontend
+		}
+
+		// Parse input if available
+		if tc.Input.Valid && tc.Input.String != "" {
+			var params interface{}
+			if err := json.Unmarshal([]byte(tc.Input.String), &params); err == nil {
+				permMsg["params"] = params
+			}
+		}
+
+		app.WSServer.SendToSession(sessionID, permMsg)
+		slog.Info("[GOROUTINE] Sent awaiting permission request to client",
+			"sessionID", sessionID,
+			"toolCallID", tc.ID,
+			"toolName", tc.Name,
+		)
+	}
+}
+
+// handleResumedPermissionResponse handles permission response for a resumed (previously timed out) tool call
+// It updates the database and re-submits the original task to the agent
+func (app *WSApp) handleResumedPermissionResponse(ctx context.Context, toolCallID, sessionID string, granted bool, toolName, action, path string) {
+	if app.db == nil {
+		slog.Warn("Database not available, cannot handle resumed permission response")
+		return
+	}
+
+	// Get the tool call from database
+	toolCall, err := app.db.GetToolCall(ctx, toolCallID)
+	if err != nil {
+		slog.Warn("Failed to get tool call for resumed permission", "toolCallID", toolCallID, "error", err)
+		return
+	}
+
+	// Verify it's in awaiting_permission status
+	if toolCall.Status != "awaiting_permission" {
+		slog.Debug("Tool call not in awaiting_permission status, ignoring",
+			"toolCallID", toolCallID,
+			"status", toolCall.Status,
+		)
+		return
+	}
+
+	if granted {
+		slog.Info("[GOROUTINE] Resumed permission granted, re-submitting task",
+			"sessionID", sessionID,
+			"toolCallID", toolCallID,
+			"toolName", toolCall.Name,
+		)
+
+		// Update tool call status to running
+		if err := app.db.UpdateToolCallPermissionGranted(ctx, toolCallID); err != nil {
+			slog.Error("Failed to update tool call permission granted", "error", err)
+		}
+
+		// Add to session allowlist so the re-run will pass permission check
+		if app.RedisStream != nil {
+			// Grant for session via the permission service which handles allowlist properly
+			permReq := permission.PermissionRequest{
+				ID:         toolCallID,
+				SessionID:  sessionID,
+				ToolCallID: toolCallID,
+				ToolName:   toolName,
+				Action:     action,
+				Path:       path,
+			}
+			app.Permissions.GrantForSession(permReq)
+		}
+
+		// Re-submit the original task to the agent
+		if toolCall.OriginalPrompt.Valid && toolCall.OriginalPrompt.String != "" {
+			slog.Info("[GOROUTINE] Re-running agent with original prompt",
+				"sessionID", sessionID,
+				"prompt_length", len(toolCall.OriginalPrompt.String),
+			)
+			// Run agent async with the original prompt
+			app.runAgentAsync(sessionID, toolCall.OriginalPrompt.String, nil)
+		} else {
+			slog.Warn("No original prompt found for resumed task, cannot re-run",
+				"sessionID", sessionID,
+				"toolCallID", toolCallID,
+			)
+		}
+	} else {
+		slog.Info("[GOROUTINE] Resumed permission denied",
+			"sessionID", sessionID,
+			"toolCallID", toolCallID,
+		)
+
+		// Update tool call status to cancelled
+		if err := app.db.CancelToolCall(ctx, toolCallID); err != nil {
+			slog.Error("Failed to cancel tool call for denied permission", "error", err)
+		}
+	}
 }

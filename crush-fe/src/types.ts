@@ -10,7 +10,7 @@ export type FileNode = {
 };
 
 // Tool call and result types
-export type ToolCallStatus = 'pending' | 'running' | 'completed' | 'error' | 'cancelled';
+export type ToolCallStatus = 'pending' | 'running' | 'completed' | 'error' | 'cancelled' | 'awaiting_permission' | 'timeout';
 
 export interface ToolCall {
   id: string;
@@ -80,6 +80,9 @@ export interface PermissionRequest {
   tool_call_id: string;
   tool_name: string;
   action?: string;
+  path?: string;
+  original_prompt?: string;  // For resumed permission requests
+  _resumed?: boolean;        // True if this is a resumed request from a previous session
 }
 
 export type Message = {

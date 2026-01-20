@@ -8,13 +8,17 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/rolling1314/rolling-crush/internal/pkg/csync"
 	"github.com/rolling1314/rolling-crush/internal/pubsub"
 )
 
-var ErrorPermissionDenied = errors.New("user denied permission")
+var (
+	ErrorPermissionDenied  = errors.New("user denied permission")
+	ErrorPermissionTimeout = errors.New("permission request timed out")
+)
 
 // AllowlistChecker is an interface for checking session-level tool allowlist.
 // This is typically implemented by the Redis stream service.
@@ -59,6 +63,10 @@ type PermissionRequest struct {
 	Path        string `json:"path"`
 }
 
+// PermissionTimeoutCallback is called when a permission request times out.
+// It allows the caller to persist the pending state (e.g., to database).
+type PermissionTimeoutCallback func(req PermissionRequest, originalPrompt string)
+
 type Service interface {
 	pubsub.Suscriber[PermissionRequest]
 	GrantPersistent(permission PermissionRequest)
@@ -66,6 +74,11 @@ type Service interface {
 	GrantForSession(permission PermissionRequest)
 	Deny(permission PermissionRequest)
 	Request(opts CreatePermissionRequest) bool
+	// RequestWithTimeout requests permission with a timeout duration.
+	// If timeout occurs, the onTimeout callback is called with the permission request.
+	// Returns (granted, error) where error is ErrorPermissionTimeout on timeout,
+	// ErrorPermissionDenied on denial, or nil on success.
+	RequestWithTimeout(ctx context.Context, opts CreatePermissionRequest, timeout time.Duration, originalPrompt string, onTimeout PermissionTimeoutCallback) (bool, error)
 	AutoApproveSession(sessionID string)
 	SetSkipRequests(skip bool)
 	SkipRequests() bool
@@ -305,6 +318,160 @@ func (s *permissionService) Request(opts CreatePermissionRequest) bool {
 	s.Publish(pubsub.CreatedEvent, permission)
 
 	return <-respCh
+}
+
+// RequestWithTimeout requests permission with a timeout.
+// Returns (granted, error) where error is:
+// - nil if granted
+// - ErrorPermissionDenied if denied
+// - ErrorPermissionTimeout if timeout occurs
+// - ctx.Err() if context is cancelled
+func (s *permissionService) RequestWithTimeout(ctx context.Context, opts CreatePermissionRequest, timeout time.Duration, originalPrompt string, onTimeout PermissionTimeoutCallback) (bool, error) {
+	if s.skip {
+		return true, nil
+	}
+
+	// Get or create per-session mutex
+	sessionMu, _ := s.sessionRequestMu.Get(opts.SessionID)
+	if sessionMu == nil {
+		sessionMu = &sync.Mutex{}
+		s.sessionRequestMu.Set(opts.SessionID, sessionMu)
+	}
+	sessionMu.Lock()
+	defer sessionMu.Unlock()
+
+	// Check if the tool/action combination is in the static allowlist
+	commandKey := opts.ToolName + ":" + opts.Action
+	if slices.Contains(s.allowedTools, commandKey) || slices.Contains(s.allowedTools, opts.ToolName) {
+		return true, nil
+	}
+
+	s.autoApproveSessionsMu.RLock()
+	autoApprove := s.autoApproveSessions[opts.SessionID]
+	s.autoApproveSessionsMu.RUnlock()
+
+	if autoApprove {
+		return true, nil
+	}
+
+	fileInfo, err := os.Stat(opts.Path)
+	dir := opts.Path
+	if err == nil {
+		if fileInfo.IsDir() {
+			dir = opts.Path
+		} else {
+			dir = filepath.Dir(opts.Path)
+		}
+	}
+
+	if dir == "." {
+		dir = s.workingDir
+	}
+
+	// Check Redis session allowlist (if available)
+	s.allowlistCheckerMu.RLock()
+	checker := s.allowlistChecker
+	s.allowlistCheckerMu.RUnlock()
+
+	if checker != nil {
+		allowed, err := checker.IsToolAllowedInSession(ctx, opts.SessionID, opts.ToolName, opts.Action, dir)
+		if err != nil {
+			slog.Warn("Failed to check session allowlist",
+				"error", err,
+				"session_id", opts.SessionID,
+				"tool_name", opts.ToolName,
+			)
+		} else if allowed {
+			slog.Debug("Tool auto-approved from session allowlist",
+				"session_id", opts.SessionID,
+				"tool_name", opts.ToolName,
+				"action", opts.Action,
+			)
+			return true, nil
+		}
+	}
+
+	permission := PermissionRequest{
+		ID:          uuid.New().String(),
+		Path:        dir,
+		SessionID:   opts.SessionID,
+		ToolCallID:  opts.ToolCallID,
+		ToolName:    opts.ToolName,
+		Description: opts.Description,
+		Action:      opts.Action,
+		Params:      opts.Params,
+	}
+
+	// Check in-memory session permissions (for backward compatibility)
+	s.sessionPermissionsMu.RLock()
+	for _, p := range s.sessionPermissions {
+		if p.ToolName == permission.ToolName && p.Action == permission.Action && p.SessionID == permission.SessionID && p.Path == permission.Path {
+			s.sessionPermissionsMu.RUnlock()
+			return true, nil
+		}
+	}
+	s.sessionPermissionsMu.RUnlock()
+
+	// Set active request for this session
+	s.sessionActiveRequest.Set(opts.SessionID, &permission)
+
+	respCh := make(chan bool, 1)
+	s.pendingRequests.Set(permission.ID, respCh)
+	defer func() {
+		s.pendingRequests.Del(permission.ID)
+		// Clear active request
+		if activeReq, ok := s.sessionActiveRequest.Get(permission.SessionID); ok && activeReq != nil && activeReq.ID == permission.ID {
+			s.sessionActiveRequest.Del(permission.SessionID)
+		}
+	}()
+
+	// Publish the request
+	s.Publish(pubsub.CreatedEvent, permission)
+
+	slog.Info("[GOROUTINE] Permission request started with timeout",
+		"permission_id", permission.ID,
+		"session_id", opts.SessionID,
+		"tool_name", opts.ToolName,
+		"timeout", timeout,
+	)
+
+	// Wait with timeout
+	select {
+	case granted := <-respCh:
+		if granted {
+			slog.Info("[GOROUTINE] Permission granted",
+				"permission_id", permission.ID,
+				"session_id", opts.SessionID,
+			)
+			return true, nil
+		}
+		slog.Info("[GOROUTINE] Permission denied",
+			"permission_id", permission.ID,
+			"session_id", opts.SessionID,
+		)
+		return false, ErrorPermissionDenied
+
+	case <-time.After(timeout):
+		slog.Warn("[GOROUTINE] Permission request timed out",
+			"permission_id", permission.ID,
+			"session_id", opts.SessionID,
+			"tool_name", opts.ToolName,
+			"timeout", timeout,
+		)
+		// Call the timeout callback to persist state
+		if onTimeout != nil {
+			onTimeout(permission, originalPrompt)
+		}
+		return false, ErrorPermissionTimeout
+
+	case <-ctx.Done():
+		slog.Info("[GOROUTINE] Permission request cancelled",
+			"permission_id", permission.ID,
+			"session_id", opts.SessionID,
+			"reason", ctx.Err(),
+		)
+		return false, ctx.Err()
+	}
 }
 
 func (s *permissionService) AutoApproveSession(sessionID string) {

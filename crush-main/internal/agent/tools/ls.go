@@ -82,7 +82,9 @@ func NewLsTool(permissions permission.Service, workingDir string, lsConfig confi
 					return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for accessing directories outside working directory")
 				}
 
-				granted := permissions.Request(
+				granted, permErr := RequestPermissionWithTimeoutSimple(
+					ctx,
+					permissions,
 					permission.CreatePermissionRequest{
 						SessionID:   sessionID,
 						Path:        absSearchPath,
@@ -94,6 +96,9 @@ func NewLsTool(permissions permission.Service, workingDir string, lsConfig confi
 					},
 				)
 
+				if permErr != nil {
+					return fantasy.ToolResponse{}, permErr
+				}
 				if !granted {
 					return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
 				}

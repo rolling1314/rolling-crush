@@ -58,7 +58,9 @@ func NewFetchTool(permissions permission.Service, workingDir string, client *htt
 
 			contextWorkingDir := GetWorkingDirFromContext(ctx)
 			effectiveWorkingDir := cmp.Or(contextWorkingDir, workingDir)
-			p := permissions.Request(
+			granted, err := RequestPermissionWithTimeoutSimple(
+				ctx,
+				permissions,
 				permission.CreatePermissionRequest{
 					SessionID:   sessionID,
 					Path:        effectiveWorkingDir,
@@ -70,7 +72,10 @@ func NewFetchTool(permissions permission.Service, workingDir string, client *htt
 				},
 			)
 
-			if !p {
+			if err != nil {
+				return fantasy.ToolResponse{}, err
+			}
+			if !granted {
 				return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
 			}
 

@@ -423,6 +423,9 @@ func (app *App) HandleClientMessage(rawMsg []byte) {
 
 	// Run the agent asynchronously
 	go func() {
+		fmt.Printf("\n[GOROUTINE] 🚀 Session Agent Goroutine 创建 | sessionID=%s\n", sessionID)
+		defer fmt.Printf("[GOROUTINE] 🛑 Session Agent Goroutine 退出 | sessionID=%s\n", sessionID)
+
 		fmt.Println("\n=== Inside goroutine, calling AgentCoordinator.Run ===")
 		fmt.Printf("Goroutine 中的附件数量: %d\n", len(attachments))
 

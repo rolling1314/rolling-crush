@@ -71,19 +71,23 @@ type Session struct {
 }
 
 type ToolCall struct {
-	ID           string         `json:"id"`
-	SessionID    string         `json:"session_id"`
-	MessageID    sql.NullString `json:"message_id"`
-	Name         string         `json:"name"`
-	Input        sql.NullString `json:"input"`
-	Status       string         `json:"status"`
-	Result       sql.NullString `json:"result"`
-	IsError      bool           `json:"is_error"`
-	ErrorMessage sql.NullString `json:"error_message"`
-	CreatedAt    int64          `json:"created_at"`
-	UpdatedAt    int64          `json:"updated_at"`
-	StartedAt    sql.NullInt64  `json:"started_at"`
-	FinishedAt   sql.NullInt64  `json:"finished_at"`
+	ID                    string         `json:"id"`
+	SessionID             string         `json:"session_id"`
+	MessageID             sql.NullString `json:"message_id"`
+	Name                  string         `json:"name"`
+	Input                 sql.NullString `json:"input"`
+	Status                string         `json:"status"`
+	Result                sql.NullString `json:"result"`
+	IsError               bool           `json:"is_error"`
+	ErrorMessage          sql.NullString `json:"error_message"`
+	CreatedAt             int64          `json:"created_at"`
+	UpdatedAt             int64          `json:"updated_at"`
+	StartedAt             sql.NullInt64  `json:"started_at"`
+	FinishedAt            sql.NullInt64  `json:"finished_at"`
+	PermissionRequestedAt sql.NullInt64  `json:"permission_requested_at"`
+	OriginalPrompt        sql.NullString `json:"original_prompt"`
+	PermissionAction      sql.NullString `json:"permission_action"`
+	PermissionPath        sql.NullString `json:"permission_path"`
 }
 
 type User struct {

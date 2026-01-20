@@ -328,3 +328,172 @@ func (q *Queries) DeleteSessionToolCalls(ctx context.Context, sessionID string) 
 	_, err := q.exec(ctx, q.deleteSessionToolCallsStmt, deleteSessionToolCalls, sessionID)
 	return err
 }
+
+const updateToolCallAwaitingPermission = `-- name: UpdateToolCallAwaitingPermission :exec
+UPDATE tool_calls
+SET
+    status = 'awaiting_permission',
+    permission_requested_at = EXTRACT(EPOCH FROM NOW()) * 1000,
+    original_prompt = $2,
+    permission_action = $3,
+    permission_path = $4,
+    updated_at = EXTRACT(EPOCH FROM NOW()) * 1000
+WHERE id = $1
+`
+
+type UpdateToolCallAwaitingPermissionParams struct {
+	ID               string         `json:"id"`
+	OriginalPrompt   sql.NullString `json:"original_prompt"`
+	PermissionAction sql.NullString `json:"permission_action"`
+	PermissionPath   sql.NullString `json:"permission_path"`
+}
+
+func (q *Queries) UpdateToolCallAwaitingPermission(ctx context.Context, arg UpdateToolCallAwaitingPermissionParams) error {
+	_, err := q.db.ExecContext(ctx, updateToolCallAwaitingPermission,
+		arg.ID,
+		arg.OriginalPrompt,
+		arg.PermissionAction,
+		arg.PermissionPath,
+	)
+	return err
+}
+
+const listAwaitingPermissionToolCalls = `-- name: ListAwaitingPermissionToolCalls :many
+SELECT id, session_id, message_id, name, input, status, result, is_error, error_message, created_at, updated_at, started_at, finished_at, permission_requested_at, original_prompt, permission_action, permission_path FROM tool_calls
+WHERE session_id = $1 AND status = 'awaiting_permission'
+ORDER BY permission_requested_at ASC
+`
+
+func (q *Queries) ListAwaitingPermissionToolCalls(ctx context.Context, sessionID string) ([]ToolCall, error) {
+	rows, err := q.db.QueryContext(ctx, listAwaitingPermissionToolCalls, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ToolCall{}
+	for rows.Next() {
+		var i ToolCall
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionID,
+			&i.MessageID,
+			&i.Name,
+			&i.Input,
+			&i.Status,
+			&i.Result,
+			&i.IsError,
+			&i.ErrorMessage,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.PermissionRequestedAt,
+			&i.OriginalPrompt,
+			&i.PermissionAction,
+			&i.PermissionPath,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateToolCallPermissionGranted = `-- name: UpdateToolCallPermissionGranted :exec
+UPDATE tool_calls
+SET
+    status = 'running',
+    started_at = CASE WHEN started_at IS NULL THEN EXTRACT(EPOCH FROM NOW()) * 1000 ELSE started_at END,
+    updated_at = EXTRACT(EPOCH FROM NOW()) * 1000
+WHERE id = $1 AND status = 'awaiting_permission'
+`
+
+func (q *Queries) UpdateToolCallPermissionGranted(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, updateToolCallPermissionGranted, id)
+	return err
+}
+
+const updateToolCallPermissionTimeout = `-- name: UpdateToolCallPermissionTimeout :exec
+UPDATE tool_calls
+SET
+    status = 'timeout',
+    error_message = 'Permission request timed out',
+    is_error = true,
+    finished_at = EXTRACT(EPOCH FROM NOW()) * 1000,
+    updated_at = EXTRACT(EPOCH FROM NOW()) * 1000
+WHERE id = $1 AND status = 'awaiting_permission'
+`
+
+func (q *Queries) UpdateToolCallPermissionTimeout(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, updateToolCallPermissionTimeout, id)
+	return err
+}
+
+const listTimedOutPermissionRequests = `-- name: ListTimedOutPermissionRequests :many
+SELECT id, session_id, message_id, name, input, status, result, is_error, error_message, created_at, updated_at, started_at, finished_at, permission_requested_at, original_prompt, permission_action, permission_path FROM tool_calls
+WHERE status = 'awaiting_permission' 
+  AND permission_requested_at IS NOT NULL
+  AND permission_requested_at < (EXTRACT(EPOCH FROM NOW()) * 1000 - $1)
+ORDER BY permission_requested_at ASC
+`
+
+func (q *Queries) ListTimedOutPermissionRequests(ctx context.Context, timeoutMs int64) ([]ToolCall, error) {
+	rows, err := q.db.QueryContext(ctx, listTimedOutPermissionRequests, timeoutMs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ToolCall{}
+	for rows.Next() {
+		var i ToolCall
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionID,
+			&i.MessageID,
+			&i.Name,
+			&i.Input,
+			&i.Status,
+			&i.Result,
+			&i.IsError,
+			&i.ErrorMessage,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.PermissionRequestedAt,
+			&i.OriginalPrompt,
+			&i.PermissionAction,
+			&i.PermissionPath,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const cancelAwaitingPermissionToolCalls = `-- name: CancelAwaitingPermissionToolCalls :exec
+UPDATE tool_calls
+SET
+    status = 'cancelled',
+    finished_at = EXTRACT(EPOCH FROM NOW()) * 1000,
+    updated_at = EXTRACT(EPOCH FROM NOW()) * 1000
+WHERE session_id = $1 AND status = 'awaiting_permission'
+`
+
+func (q *Queries) CancelAwaitingPermissionToolCalls(ctx context.Context, sessionID string) error {
+	_, err := q.db.ExecContext(ctx, cancelAwaitingPermissionToolCalls, sessionID)
+	return err
+}

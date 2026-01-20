@@ -21,6 +21,15 @@ type AppConfig struct {
 	AutoModel  AutoModelConfig  `yaml:"auto_model"`
 	Email      EmailConfig      `yaml:"email"`
 	Cloudflare CloudflareConfig `yaml:"cloudflare"`
+	Agent      AgentConfig      `yaml:"agent"`
+}
+
+// AgentConfig holds Agent worker pool and timeout settings.
+type AgentConfig struct {
+	MaxWorkers        int `yaml:"max_workers"`        // Maximum number of concurrent agent workers (default: 100)
+	TaskQueueSize     int `yaml:"task_queue_size"`    // Task queue capacity (default: 1000)
+	PermissionTimeout int `yaml:"permission_timeout"` // Permission request timeout in seconds (default: 300 = 5 min)
+	TaskTimeout       int `yaml:"task_timeout"`       // Maximum task execution time in seconds (default: 1800 = 30 min)
 }
 
 // CloudflareConfig holds Cloudflare DNS settings.
@@ -276,6 +285,20 @@ func overrideWithEnvApp(config *AppConfig) {
 	if v := os.Getenv("CLOUDFLARE_DOMAIN"); v != "" {
 		config.Cloudflare.Domain = v
 	}
+
+	// Agent overrides
+	if v := os.Getenv("AGENT_MAX_WORKERS"); v != "" {
+		fmt.Sscanf(v, "%d", &config.Agent.MaxWorkers)
+	}
+	if v := os.Getenv("AGENT_TASK_QUEUE_SIZE"); v != "" {
+		fmt.Sscanf(v, "%d", &config.Agent.TaskQueueSize)
+	}
+	if v := os.Getenv("AGENT_PERMISSION_TIMEOUT"); v != "" {
+		fmt.Sscanf(v, "%d", &config.Agent.PermissionTimeout)
+	}
+	if v := os.Getenv("AGENT_TASK_TIMEOUT"); v != "" {
+		fmt.Sscanf(v, "%d", &config.Agent.TaskTimeout)
+	}
 }
 
 // GetGlobalAppConfig returns the global application configuration instance.
@@ -362,6 +385,12 @@ func getDefaultAppConfig() *AppConfig {
 		Cloudflare: CloudflareConfig{
 			APIToken: "",
 			Domain:   "rollingcoding.com",
+		},
+		Agent: AgentConfig{
+			MaxWorkers:        100,  // 100 concurrent agent workers
+			TaskQueueSize:     1000, // 1000 tasks in queue
+			PermissionTimeout: 300,  // 5 minutes
+			TaskTimeout:       1800, // 30 minutes
 		},
 	}
 }

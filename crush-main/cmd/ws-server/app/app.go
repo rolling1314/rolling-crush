@@ -45,6 +45,7 @@ type WSApp struct {
 	Projects    project.Service
 
 	AgentCoordinator agent.Coordinator
+	AgentWorkerPool  agent.AgentWorkerPool // Worker pool for concurrent agent tasks
 
 	LSPClients *csync.Map[string, *lsp.Client]
 
@@ -168,6 +169,24 @@ func NewWSApp(ctx context.Context, conn *sql.DB, cfg *config.Config) (*WSApp, er
 	// cleanup database upon app shutdown
 	app.cleanupFuncs = append(app.cleanupFuncs, conn.Close, mcp.Close)
 
+	// Initialize the agent worker pool from app config
+	if appCfg != nil {
+		agentCfg := &appCfg.Agent
+		// Create worker pool with a task executor that runs the agent
+		executor := func(taskCtx context.Context, task agent.AgentTask) error {
+			if app.AgentCoordinator == nil {
+				return fmt.Errorf("agent coordinator not initialized")
+			}
+			_, err := app.AgentCoordinator.Run(taskCtx, task.SessionID, task.Prompt, task.Attachments...)
+			return err
+		}
+		app.AgentWorkerPool = agent.NewAgentWorkerPool(agentCfg, executor)
+		slog.Info("[GOROUTINE] Agent worker pool initialized",
+			"max_workers", agentCfg.MaxWorkers,
+			"queue_size", agentCfg.TaskQueueSize,
+		)
+	}
+
 	// Try to initialize agent if config is available
 	// In Web mode, agent may be initialized later when session config is loaded
 	if cfg.IsConfigured() {
@@ -195,6 +214,23 @@ func (app *WSApp) Config() *config.Config {
 
 // Shutdown performs a graceful shutdown of the application.
 func (app *WSApp) Shutdown() {
+	slog.Info("[GOROUTINE] Starting graceful shutdown")
+
+	// Shutdown the worker pool first (wait for running tasks to complete)
+	if app.AgentWorkerPool != nil {
+		slog.Info("[GOROUTINE] Shutting down agent worker pool")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := app.AgentWorkerPool.Shutdown(shutdownCtx); err != nil {
+			slog.Warn("[GOROUTINE] Worker pool shutdown timeout", "error", err)
+		}
+		cancel()
+		stats := app.AgentWorkerPool.Stats()
+		slog.Info("[GOROUTINE] Worker pool shutdown complete",
+			"completed_tasks", stats.CompletedTasks,
+			"failed_tasks", stats.FailedTasks,
+		)
+	}
+
 	if app.AgentCoordinator != nil {
 		app.AgentCoordinator.CancelAll()
 	}
@@ -219,6 +255,8 @@ func (app *WSApp) Shutdown() {
 			}
 		}
 	}
+
+	slog.Info("[GOROUTINE] Graceful shutdown complete")
 }
 
 // checkForUpdates checks for available updates.

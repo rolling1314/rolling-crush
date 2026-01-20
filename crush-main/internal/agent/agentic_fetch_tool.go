@@ -75,7 +75,9 @@ func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (
 				return fantasy.NewTextErrorResponse(err.Error()), nil
 			}
 
-			p := c.permissions.Request(
+			granted, err := tools.RequestPermissionWithTimeoutSimple(
+				ctx,
+				c.permissions,
 				permission.CreatePermissionRequest{
 					SessionID:   validationResult.SessionID,
 					Path:        c.cfg.WorkingDir(),
@@ -87,7 +89,10 @@ func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (
 				},
 			)
 
-			if !p {
+			if err != nil {
+				return fantasy.ToolResponse{}, err
+			}
+			if !granted {
 				return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
 			}
 
