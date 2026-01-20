@@ -53,7 +53,8 @@ func (app *WSApp) HandleClientDisconnect() {
 }
 
 // HandleClientMessage processes messages from the WebSocket client
-func (app *WSApp) HandleClientMessage(rawMsg []byte) {
+// updateSessionID is a callback to update the WebSocket client's session ID mapping
+func (app *WSApp) HandleClientMessage(rawMsg []byte, updateSessionID func(sessionID string)) {
 	fmt.Println("=== HandleClientMessage called ===")
 	fmt.Println("Raw message:", string(rawMsg))
 
@@ -84,6 +85,10 @@ func (app *WSApp) HandleClientMessage(rawMsg []byte) {
 
 	// Handle reconnection request - client wants to resume receiving messages
 	if msg.Type == "reconnect" {
+		// Update WebSocket client's session ID for reconnection
+		if msg.SessionID != "" && updateSessionID != nil {
+			updateSessionID(msg.SessionID)
+		}
 		app.handleReconnection(msg.SessionID, msg.LastMsgID)
 		return
 	}
@@ -112,6 +117,12 @@ func (app *WSApp) HandleClientMessage(rawMsg []byte) {
 	sessionID := app.resolveSessionID(msg.SessionID)
 	if sessionID == "" {
 		return
+	}
+
+	// Update WebSocket client's session ID mapping
+	// This ensures messages from the agent are routed back to this client
+	if updateSessionID != nil {
+		updateSessionID(sessionID)
 	}
 
 	// Mark session as connected

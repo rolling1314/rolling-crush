@@ -20,7 +20,8 @@ var upgrader = websocket.Upgrader{
 }
 
 // HandlerFunc defines the callback for processing incoming messages
-type HandlerFunc func(message []byte)
+// The second parameter is a function to update the client's session ID
+type HandlerFunc func(message []byte, updateSessionID func(sessionID string))
 
 // DisconnectFunc defines the callback for WebSocket disconnection
 type DisconnectFunc func()
@@ -115,7 +116,17 @@ func (s *Server) HandleConnections(w http.ResponseWriter, r *http.Request) {
 			fmt.Println("Handler exists:", s.handler != nil)
 			if s.handler != nil {
 				fmt.Println("Calling handler with message")
-				s.handler(msg)
+				// Create a closure to update this client's session ID
+				updateSessionID := func(sessionID string) {
+					s.mutex.Lock()
+					defer s.mutex.Unlock()
+					if _, exists := s.clients[ws]; exists {
+						oldSessionID := s.clients[ws]
+						s.clients[ws] = sessionID
+						slog.Info("Updated client session ID", "old_session_id", oldSessionID, "new_session_id", sessionID)
+					}
+				}
+				s.handler(msg, updateSessionID)
 				fmt.Println("Handler returned")
 			} else {
 				fmt.Println("WARNING: No handler set!")
