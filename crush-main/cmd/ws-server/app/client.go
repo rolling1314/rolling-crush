@@ -11,6 +11,7 @@ import (
 
 	"github.com/rolling1314/rolling-crush/domain/message"
 	"github.com/rolling1314/rolling-crush/domain/permission"
+	storeredis "github.com/rolling1314/rolling-crush/infra/redis"
 	"github.com/rolling1314/rolling-crush/infra/storage"
 	"github.com/rolling1314/rolling-crush/internal/agent"
 )
@@ -378,7 +379,8 @@ func (app *WSApp) runAgentViaPool(sessionID, content string, attachments []messa
 	return nil
 }
 
-// runAgentAsync runs the agent asynchronously
+// runAgentAsync runs the agent asynchronously (fallback when worker pool is not available)
+// Note: This uses the same lifecycle pattern as the worker pool for consistency
 func (app *WSApp) runAgentAsync(sessionID, content string, attachments []message.Attachment) {
 	fmt.Println("\n=== About to call AgentCoordinator.Run in goroutine ===")
 	fmt.Printf("准备传递的附件数量: %d\n", len(attachments))
@@ -391,50 +393,60 @@ func (app *WSApp) runAgentAsync(sessionID, content string, attachments []message
 		fmt.Printf("\n[GOROUTINE] 🚀 Session Agent Goroutine 创建 | sessionID=%s\n", sessionID)
 		defer fmt.Printf("[GOROUTINE] 🛑 Session Agent Goroutine 退出 | sessionID=%s\n", sessionID)
 
-		fmt.Println("\n=== Inside goroutine, calling AgentCoordinator.Run ===")
-		fmt.Printf("Goroutine 中的附件数量: %d\n", len(attachments))
+		ctx := context.Background()
 
-		// Mark generation as active in Redis
+		// === LIFECYCLE: Task Start ===
+		slog.Info("[LIFECYCLE] Agent task started (async)", "session_id", sessionID)
 		if app.RedisStream != nil {
-			ctx := context.Background()
+			if err := app.RedisStream.SetSessionRunningStatus(ctx, sessionID, storeredis.SessionStatusRunning); err != nil {
+				slog.Warn("Failed to set session running status", "error", err, "session_id", sessionID)
+			}
 			if err := app.RedisStream.SetActiveGeneration(ctx, sessionID, true); err != nil {
 				slog.Warn("Failed to mark generation as active", "error", err)
 			}
 		}
+		app.sendSessionStatusUpdate(sessionID, storeredis.SessionStatusRunning)
 
-		_, err := app.AgentCoordinator.Run(context.Background(), sessionID, content, attachments...)
+		// === Execute Agent ===
+		_, err := app.AgentCoordinator.Run(ctx, sessionID, content, attachments...)
 
-		// Mark generation as complete in Redis
+		// === LIFECYCLE: Task Complete ===
+		var finalStatus storeredis.SessionRunningStatus
+		var reason string
+		if err != nil {
+			if ctx.Err() == context.Canceled {
+				finalStatus = storeredis.SessionStatusCancelled
+				reason = "cancelled"
+			} else {
+				finalStatus = storeredis.SessionStatusError
+				reason = "error"
+			}
+		} else {
+			finalStatus = storeredis.SessionStatusCompleted
+			reason = "completed"
+		}
+
+		slog.Info("[LIFECYCLE] Agent task completed (async)", "session_id", sessionID, "reason", reason, "error", err)
+
 		if app.RedisStream != nil {
-			ctx := context.Background()
-			if err := app.RedisStream.SetActiveGeneration(ctx, sessionID, false); err != nil {
-				slog.Warn("Failed to mark generation as complete", "error", err)
+			if setErr := app.RedisStream.SetSessionRunningStatus(ctx, sessionID, finalStatus); setErr != nil {
+				slog.Warn("Failed to set session completed status", "error", setErr, "session_id", sessionID)
 			}
-
-			// Publish generation complete event
-			if err := app.RedisStream.PublishMessage(ctx, sessionID, "generation_complete", map[string]interface{}{
+			if setErr := app.RedisStream.SetActiveGeneration(ctx, sessionID, false); setErr != nil {
+				slog.Warn("Failed to mark generation as complete", "error", setErr)
+			}
+			if pubErr := app.RedisStream.PublishMessage(ctx, sessionID, "generation_complete", map[string]interface{}{
 				"session_id": sessionID,
+				"status":     string(finalStatus),
 				"error":      err != nil,
-			}); err != nil {
-				slog.Warn("Failed to publish generation complete event", "error", err)
+			}); pubErr != nil {
+				slog.Warn("Failed to publish generation complete event", "error", pubErr)
 			}
 		}
-
-		// Send generation complete to WebSocket if connected
-		isConnected, _ := app.connectedSessions.Get(sessionID)
-		if isConnected {
-			app.WSServer.SendToSession(sessionID, map[string]interface{}{
-				"Type":       "generation_complete",
-				"session_id": sessionID,
-				"error":      err != nil,
-			})
-		}
+		app.sendSessionStatusUpdate(sessionID, finalStatus)
 
 		if err != nil {
-			fmt.Println("Agent run error:", err)
 			slog.Error("Agent run error", "error", err)
-		} else {
-			fmt.Println("Agent run completed successfully")
 		}
 	}()
 	fmt.Println("Goroutine started, HandleClientMessage returning")
@@ -591,20 +603,31 @@ func (app *WSApp) handleReconnection(sessionID string, lastMsgID string) {
 		}
 	}
 
-	// Check if generation is still active
+	// Check session running status from Redis
+	sessionStatus, err := app.RedisStream.GetSessionRunningStatus(ctx, sessionID)
+	if err != nil {
+		slog.Warn("Failed to check session running status", "error", err)
+	}
+
+	// Check if generation is still active (for backward compatibility)
 	isActive, err := app.RedisStream.IsGenerationActive(ctx, sessionID)
 	if err != nil {
 		slog.Warn("Failed to check generation status", "error", err)
-	} else {
-		// Notify client about generation status
-		app.WSServer.SendToSession(sessionID, map[string]interface{}{
-			"Type":              "reconnection_status",
-			"session_id":        sessionID,
-			"messages_replayed": len(messages),
-			"generation_active": isActive,
-			"last_stream_id":    newLastID,
-		})
 	}
+
+	// Determine if session is running based on status or active generation
+	isRunning := sessionStatus == storeredis.SessionStatusRunning || isActive
+
+	// Notify client about reconnection status including session running status
+	app.WSServer.SendToSession(sessionID, map[string]interface{}{
+		"Type":              "reconnection_status",
+		"session_id":        sessionID,
+		"messages_replayed": len(messages),
+		"generation_active": isActive,
+		"session_status":    string(sessionStatus),
+		"is_running":        isRunning,
+		"last_stream_id":    newLastID,
+	})
 
 	// Send current session info including context_window
 	app.sendSessionUpdate(ctx, sessionID)

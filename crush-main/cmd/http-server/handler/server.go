@@ -124,6 +124,8 @@ func (s *Server) Start() error {
 			sessionGroup.GET("/:id/config", s.handleGetSessionConfig)
 			sessionGroup.PUT("/:id/config", s.handleUpdateSessionConfig)
 			sessionGroup.DELETE("/:id", s.handleDeleteSession)
+			// Session running status (for checking if agent is still processing)
+			sessionGroup.GET("/:id/status", s.handleGetSessionRunningStatus)
 			// Tool call routes
 			sessionGroup.GET("/:id/tool-calls", s.handleGetSessionToolCalls)
 			sessionGroup.GET("/:id/tool-calls/pending", s.handleGetPendingToolCalls)

@@ -20,11 +20,30 @@ const (
 	LastReadKeyPrefix = "crush:lastread:session:"
 	// ActiveGenerationKeyPrefix tracks if a generation is still active
 	ActiveGenerationKeyPrefix = "crush:active:session:"
+	// SessionRunningStatusKeyPrefix tracks session running status with 30-min TTL
+	SessionRunningStatusKeyPrefix = "crush:running:session:"
 	// PendingPermissionKeyPrefix tracks pending permission requests
 	PendingPermissionKeyPrefix = "crush:permission:pending:"
 	// SessionToolAllowlistKeyPrefix tracks session-level tool allowlist
 	SessionToolAllowlistKeyPrefix = "crush:allowlist:session:"
 )
+
+// SessionRunningStatus represents the running status of a session
+type SessionRunningStatus string
+
+const (
+	// SessionStatusRunning means the agent is currently processing
+	SessionStatusRunning SessionRunningStatus = "running"
+	// SessionStatusCompleted means the agent has finished processing
+	SessionStatusCompleted SessionRunningStatus = "completed"
+	// SessionStatusError means the agent encountered an error
+	SessionStatusError SessionRunningStatus = "error"
+	// SessionStatusCancelled means the agent was cancelled
+	SessionStatusCancelled SessionRunningStatus = "cancelled"
+)
+
+// SessionRunningStatusTTL is the TTL for session running status (30 minutes)
+const SessionRunningStatusTTL = 30 * time.Minute
 
 // StreamMessage represents a message stored in Redis stream.
 type StreamMessage struct {
@@ -300,6 +319,58 @@ func (s *StreamService) IsGenerationActive(ctx context.Context, sessionID string
 		return false, fmt.Errorf("failed to check active generation: %w", err)
 	}
 	return result > 0, nil
+}
+
+// sessionRunningStatusKey returns the Redis key for session running status.
+func (s *StreamService) sessionRunningStatusKey(sessionID string) string {
+	return SessionRunningStatusKeyPrefix + sessionID
+}
+
+// SetSessionRunningStatus sets the running status for a session with 30-minute TTL.
+func (s *StreamService) SetSessionRunningStatus(ctx context.Context, sessionID string, status SessionRunningStatus) error {
+	key := s.sessionRunningStatusKey(sessionID)
+	err := s.client.rdb.Set(ctx, key, string(status), SessionRunningStatusTTL).Err()
+	if err != nil {
+		return fmt.Errorf("failed to set session running status: %w", err)
+	}
+	slog.Debug("Set session running status",
+		"session_id", sessionID,
+		"status", status,
+	)
+	return nil
+}
+
+// GetSessionRunningStatus gets the running status for a session.
+// Returns empty string if not found (session is not running).
+func (s *StreamService) GetSessionRunningStatus(ctx context.Context, sessionID string) (SessionRunningStatus, error) {
+	key := s.sessionRunningStatusKey(sessionID)
+	result, err := s.client.rdb.Get(ctx, key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return "", nil // Not found means not running
+		}
+		return "", fmt.Errorf("failed to get session running status: %w", err)
+	}
+	return SessionRunningStatus(result), nil
+}
+
+// IsSessionRunning checks if a session is currently running (status is "running").
+func (s *StreamService) IsSessionRunning(ctx context.Context, sessionID string) (bool, error) {
+	status, err := s.GetSessionRunningStatus(ctx, sessionID)
+	if err != nil {
+		return false, err
+	}
+	return status == SessionStatusRunning, nil
+}
+
+// ClearSessionRunningStatus clears the running status for a session.
+func (s *StreamService) ClearSessionRunningStatus(ctx context.Context, sessionID string) error {
+	key := s.sessionRunningStatusKey(sessionID)
+	err := s.client.rdb.Del(ctx, key).Err()
+	if err != nil {
+		return fmt.Errorf("failed to clear session running status: %w", err)
+	}
+	return nil
 }
 
 // ClearStream deletes a session's message stream.

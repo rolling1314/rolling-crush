@@ -37,11 +37,11 @@ type AgentTaskResult struct {
 
 // PoolStats holds statistics about the worker pool
 type PoolStats struct {
-	ActiveWorkers int64
-	QueuedTasks   int
-	TotalTasks    int64
+	ActiveWorkers  int64
+	QueuedTasks    int
+	TotalTasks     int64
 	CompletedTasks int64
-	FailedTasks   int64
+	FailedTasks    int64
 }
 
 // AgentWorkerPool manages a pool of workers for executing agent tasks
@@ -59,10 +59,18 @@ type AgentWorkerPool interface {
 // TaskExecutor is the function type for executing agent tasks
 type TaskExecutor func(ctx context.Context, task AgentTask) error
 
+// TaskLifecycleCallback is called when task starts or completes
+// For OnComplete: err is the error from task execution (nil if success), reason is "completed", "error", "timeout", "cancelled", "shutdown"
+type TaskLifecycleCallback func(sessionID string, err error, reason string)
+
 // agentWorkerPool implements AgentWorkerPool
 type agentWorkerPool struct {
 	cfg      *config.AgentConfig
 	executor TaskExecutor
+
+	// Lifecycle callbacks
+	onTaskStart    TaskLifecycleCallback // Called when worker starts executing a task
+	onTaskComplete TaskLifecycleCallback // Called when worker finishes executing a task
 
 	// Task queue - buffered channel
 	taskQueue chan AgentTask
@@ -89,7 +97,9 @@ type agentWorkerPool struct {
 }
 
 // NewAgentWorkerPool creates a new agent worker pool
-func NewAgentWorkerPool(cfg *config.AgentConfig, executor TaskExecutor) AgentWorkerPool {
+// onTaskStart is called when a worker starts executing a task (can be nil)
+// onTaskComplete is called when a worker finishes executing a task (can be nil)
+func NewAgentWorkerPool(cfg *config.AgentConfig, executor TaskExecutor, onTaskStart, onTaskComplete TaskLifecycleCallback) AgentWorkerPool {
 	if cfg.MaxWorkers <= 0 {
 		cfg.MaxWorkers = 100 // default
 	}
@@ -98,11 +108,13 @@ func NewAgentWorkerPool(cfg *config.AgentConfig, executor TaskExecutor) AgentWor
 	}
 
 	pool := &agentWorkerPool{
-		cfg:       cfg,
-		executor:  executor,
-		taskQueue: make(chan AgentTask, cfg.TaskQueueSize),
-		workerSem: make(chan struct{}, cfg.MaxWorkers),
-		shutdownCh: make(chan struct{}),
+		cfg:            cfg,
+		executor:       executor,
+		onTaskStart:    onTaskStart,
+		onTaskComplete: onTaskComplete,
+		taskQueue:      make(chan AgentTask, cfg.TaskQueueSize),
+		workerSem:      make(chan struct{}, cfg.MaxWorkers),
+		shutdownCh:     make(chan struct{}),
 	}
 
 	// Start the dispatcher goroutine
@@ -188,24 +200,13 @@ func (p *agentWorkerPool) worker(workerID int64, task AgentTask) {
 		"active_workers", p.activeWorkers.Load(),
 	)
 
-	defer func() {
-		// Release worker slot
-		<-p.workerSem
-		p.activeWorkers.Add(-1)
-		p.wg.Done()
-
-		duration := time.Since(startTime)
-		slog.Info("[GOROUTINE] 🛑 Agent worker exited",
-			"worker_id", workerID,
-			"session_id", task.SessionID,
-			"duration_ms", duration.Milliseconds(),
-			"active_workers", p.activeWorkers.Load(),
-		)
-	}()
+	// Call onTaskStart callback - this is where session status should be set to "running"
+	if p.onTaskStart != nil {
+		p.onTaskStart(task.SessionID, nil, "started")
+	}
 
 	// Create context with task timeout
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(p.cfg.TaskTimeout)*time.Second)
-	defer cancel()
 
 	// Execute the task
 	var err error
@@ -233,6 +234,14 @@ func (p *agentWorkerPool) worker(workerID int64, task AgentTask) {
 		}
 	}
 
+	// Cancel context
+	cancel()
+
+	// Call onTaskComplete callback - this is where session status should be set to final status
+	if p.onTaskComplete != nil {
+		p.onTaskComplete(task.SessionID, err, reason)
+	}
+
 	// Send result back
 	if task.ResultChan != nil {
 		select {
@@ -252,6 +261,19 @@ func (p *agentWorkerPool) worker(workerID int64, task AgentTask) {
 		"session_id", task.SessionID,
 		"reason", reason,
 		"error", err,
+	)
+
+	// Release worker slot and update stats
+	<-p.workerSem
+	p.activeWorkers.Add(-1)
+	p.wg.Done()
+
+	duration := time.Since(startTime)
+	slog.Info("[GOROUTINE] 🛑 Agent worker exited",
+		"worker_id", workerID,
+		"session_id", task.SessionID,
+		"duration_ms", duration.Milliseconds(),
+		"active_workers", p.activeWorkers.Load(),
 	)
 }
 

@@ -223,3 +223,10 @@ type ResetPasswordRequest struct {
 	Code        string `json:"code" binding:"required"`
 	NewPassword string `json:"new_password" binding:"required,min=6"`
 }
+
+// SessionRunningStatusResponse represents the running status of a session
+type SessionRunningStatusResponse struct {
+	SessionID string `json:"session_id"`
+	Status    string `json:"status"`    // "running", "completed", "error", "cancelled", or empty if not found
+	IsRunning bool   `json:"is_running"` // Convenience field for frontend
+}

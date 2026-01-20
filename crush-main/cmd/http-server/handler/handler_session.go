@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
 	"github.com/gin-gonic/gin"
+	storeredis "github.com/rolling1314/rolling-crush/infra/redis"
 	"github.com/rolling1314/rolling-crush/pkg/config"
 )
 
@@ -420,4 +421,48 @@ func (s *Server) handleDeleteSession(c *gin.Context) {
 
 	slog.Info("Session deleted successfully", "session_id", sessionID)
 	c.JSON(http.StatusOK, gin.H{"message": "Session deleted successfully"})
+}
+
+// handleGetSessionRunningStatus returns the running status of a session from Redis
+func (s *Server) handleGetSessionRunningStatus(c *gin.Context) {
+	sessionID := c.Param("id")
+	if sessionID == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "session_id is required"})
+		return
+	}
+
+	// Get Redis stream service
+	redisStream := storeredis.GetGlobalStreamService()
+	if redisStream == nil {
+		// Redis not available, return empty status (means not running)
+		slog.Warn("Redis not available for session status check", "session_id", sessionID)
+		c.JSON(http.StatusOK, SessionRunningStatusResponse{
+			SessionID: sessionID,
+			Status:    "",
+			IsRunning: false,
+		})
+		return
+	}
+
+	// Get session running status from Redis
+	status, err := redisStream.GetSessionRunningStatus(c.Request.Context(), sessionID)
+	if err != nil {
+		slog.Error("Failed to get session running status", "session_id", sessionID, "error", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to get session status"})
+		return
+	}
+
+	isRunning := status == storeredis.SessionStatusRunning
+
+	slog.Debug("Session running status retrieved",
+		"session_id", sessionID,
+		"status", status,
+		"is_running", isRunning,
+	)
+
+	c.JSON(http.StatusOK, SessionRunningStatusResponse{
+		SessionID: sessionID,
+		Status:    string(status),
+		IsRunning: isRunning,
+	})
 }

@@ -172,7 +172,8 @@ func NewWSApp(ctx context.Context, conn *sql.DB, cfg *config.Config) (*WSApp, er
 	// Initialize the agent worker pool from app config
 	if appCfg != nil {
 		agentCfg := &appCfg.Agent
-		// Create worker pool with a task executor that runs the agent
+
+		// Task executor - only responsible for running the agent
 		executor := func(taskCtx context.Context, task agent.AgentTask) error {
 			if app.AgentCoordinator == nil {
 				return fmt.Errorf("agent coordinator not initialized")
@@ -180,7 +181,72 @@ func NewWSApp(ctx context.Context, conn *sql.DB, cfg *config.Config) (*WSApp, er
 			_, err := app.AgentCoordinator.Run(taskCtx, task.SessionID, task.Prompt, task.Attachments...)
 			return err
 		}
-		app.AgentWorkerPool = agent.NewAgentWorkerPool(agentCfg, executor)
+
+		// onTaskStart callback - called when worker starts executing a task
+		onTaskStart := func(sessionID string, _ error, _ string) {
+			ctx := context.Background()
+			slog.Info("[LIFECYCLE] Agent task started", "session_id", sessionID)
+
+			// Mark session as running in Redis (30-min TTL)
+			if app.RedisStream != nil {
+				if err := app.RedisStream.SetSessionRunningStatus(ctx, sessionID, storeredis.SessionStatusRunning); err != nil {
+					slog.Warn("Failed to set session running status", "error", err, "session_id", sessionID)
+				}
+				// Also set active generation for backward compatibility
+				if err := app.RedisStream.SetActiveGeneration(ctx, sessionID, true); err != nil {
+					slog.Warn("Failed to set active generation", "error", err)
+				}
+			}
+
+			// Send session status update to WebSocket clients
+			app.sendSessionStatusUpdate(sessionID, storeredis.SessionStatusRunning)
+		}
+
+		// onTaskComplete callback - called when worker finishes executing a task
+		onTaskComplete := func(sessionID string, err error, reason string) {
+			ctx := context.Background()
+			slog.Info("[LIFECYCLE] Agent task completed", "session_id", sessionID, "reason", reason, "error", err)
+
+			// Determine final status
+			var status storeredis.SessionRunningStatus
+			switch reason {
+			case "completed":
+				status = storeredis.SessionStatusCompleted
+			case "cancelled":
+				status = storeredis.SessionStatusCancelled
+			case "timeout":
+				status = storeredis.SessionStatusError
+			case "shutdown":
+				status = storeredis.SessionStatusCancelled
+			default:
+				status = storeredis.SessionStatusError
+			}
+
+			// Mark session as completed/error in Redis
+			if app.RedisStream != nil {
+				if setErr := app.RedisStream.SetSessionRunningStatus(ctx, sessionID, status); setErr != nil {
+					slog.Warn("Failed to set session completed status", "error", setErr, "session_id", sessionID)
+				}
+				// Clear active generation for backward compatibility
+				if setErr := app.RedisStream.SetActiveGeneration(ctx, sessionID, false); setErr != nil {
+					slog.Warn("Failed to clear active generation", "error", setErr)
+				}
+
+				// Publish generation complete event to Redis stream
+				if pubErr := app.RedisStream.PublishMessage(ctx, sessionID, "generation_complete", map[string]interface{}{
+					"session_id": sessionID,
+					"status":     string(status),
+					"error":      err != nil,
+				}); pubErr != nil {
+					slog.Warn("Failed to publish generation complete event", "error", pubErr)
+				}
+			}
+
+			// Send session status update to WebSocket clients
+			app.sendSessionStatusUpdate(sessionID, status)
+		}
+
+		app.AgentWorkerPool = agent.NewAgentWorkerPool(agentCfg, executor, onTaskStart, onTaskComplete)
 		slog.Info("[GOROUTINE] Agent worker pool initialized",
 			"max_workers", agentCfg.MaxWorkers,
 			"queue_size", agentCfg.TaskQueueSize,
@@ -257,6 +323,24 @@ func (app *WSApp) Shutdown() {
 	}
 
 	slog.Info("[GOROUTINE] Graceful shutdown complete")
+}
+
+// sendSessionStatusUpdate sends a session running status update to WebSocket clients.
+func (app *WSApp) sendSessionStatusUpdate(sessionID string, status storeredis.SessionRunningStatus) {
+	statusMsg := map[string]interface{}{
+		"Type":       "session_status",
+		"session_id": sessionID,
+		"status":     string(status),
+		"is_running": status == storeredis.SessionStatusRunning,
+	}
+
+	// Always try to send via WebSocket
+	app.WSServer.SendToSession(sessionID, statusMsg)
+
+	slog.Info("Sent session status update",
+		"session_id", sessionID,
+		"status", status,
+	)
 }
 
 // checkForUpdates checks for available updates.

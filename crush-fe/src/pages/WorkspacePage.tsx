@@ -101,6 +101,9 @@ export default function WorkspacePage() {
   // Persist per session in localStorage to survive page refresh
   const lastStreamIdRef = useRef<string>('');
   
+  // Ref to store latest handleWebSocketMessage to avoid closure issues
+  const handleWebSocketMessageRef = useRef<((data: any) => void) | null>(null);
+  
   // Helper to get/set last stream ID from localStorage
   const getLastStreamId = (sessionId: string): string => {
     return localStorage.getItem(`last_stream_id_${sessionId}`) || '';
@@ -110,6 +113,51 @@ export default function WorkspacePage() {
     lastStreamIdRef.current = streamId;
     if (sessionId && streamId) {
       localStorage.setItem(`last_stream_id_${sessionId}`, streamId);
+    }
+  };
+
+  // Helper to get/set session running status from localStorage (30-min cached)
+  const getSessionRunningStatus = (sessionId: string): { status: string; isRunning: boolean; timestamp: number } | null => {
+    const cached = localStorage.getItem(`session_status_${sessionId}`);
+    if (!cached) return null;
+    try {
+      const data = JSON.parse(cached);
+      // Check if cached data is still valid (within 30 minutes)
+      const thirtyMinutes = 30 * 60 * 1000;
+      if (Date.now() - data.timestamp > thirtyMinutes) {
+        localStorage.removeItem(`session_status_${sessionId}`);
+        return null;
+      }
+      return data;
+    } catch {
+      return null;
+    }
+  };
+  
+  const setSessionRunningStatus = (sessionId: string, status: string, isRunning: boolean) => {
+    if (sessionId) {
+      localStorage.setItem(`session_status_${sessionId}`, JSON.stringify({
+        status,
+        isRunning,
+        timestamp: Date.now()
+      }));
+    }
+  };
+
+  // Fetch session running status from API
+  const fetchSessionRunningStatus = async (sessionId: string): Promise<{ status: string; isRunning: boolean } | null> => {
+    try {
+      const token = localStorage.getItem('jwt_token');
+      const response = await axios.get(`${API_URL}/sessions/${sessionId}/status`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return {
+        status: response.data.status || '',
+        isRunning: response.data.is_running || false
+      };
+    } catch (error) {
+      console.error('Failed to fetch session running status:', error);
+      return null;
     }
   };
 
@@ -256,10 +304,45 @@ export default function WorkspacePage() {
     });
   };
 
-  // 当选择会话时加载消息历史
+  // 当选择会话时加载消息历史和检查运行状态
   useEffect(() => {
     if (currentSessionId) {
       loadSessionMessages(currentSessionId);
+      
+      // First, check cached session running status
+      const cachedStatus = getSessionRunningStatus(currentSessionId);
+      if (cachedStatus) {
+        console.log('Using cached session status:', cachedStatus);
+        setIsProcessing(cachedStatus.isRunning);
+      }
+      
+      // Then, fetch current status from API to ensure accuracy
+      // Only update if the current session hasn't changed
+      const sessionIdAtStart = currentSessionId;
+      fetchSessionRunningStatus(currentSessionId).then(apiStatus => {
+        // Guard: only update if we're still on the same session
+        if (currentSessionIdRef.current !== sessionIdAtStart) {
+          console.log('Session changed during API call, ignoring status update');
+          return;
+        }
+        
+        if (apiStatus) {
+          console.log('Session status from API:', apiStatus);
+          // Only update isProcessing from API if:
+          // 1. API says it's running (always trust "running" status), OR
+          // 2. We don't currently think we're processing (don't override local "running" state)
+          // This prevents race conditions where API returns stale "not running" status
+          // while we've already started a new request
+          if (apiStatus.isRunning) {
+            setIsProcessing(true);
+          }
+          // Note: We deliberately don't set isProcessing to false here
+          // Let WebSocket session_status/generation_complete messages handle that
+          setSessionRunningStatus(currentSessionId, apiStatus.status, apiStatus.isRunning);
+        }
+        // Remove: don't set isProcessing(false) based on API failure
+        // Let the actual session_status WebSocket messages control this
+      });
     }
   }, [currentSessionId]);
 
@@ -310,7 +393,10 @@ export default function WorkspacePage() {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        handleWebSocketMessage(data);
+        // Use ref to always call the latest handleWebSocketMessage (fixes closure issue)
+        if (handleWebSocketMessageRef.current) {
+          handleWebSocketMessageRef.current(data);
+        }
       } catch (error) {
         console.error('Failed to parse WebSocket message:', error);
       }
@@ -403,15 +489,30 @@ export default function WorkspacePage() {
       console.log('=== Reconnection status ===');
       console.log('Messages replayed:', data.messages_replayed);
       console.log('Generation still active:', data.generation_active);
+      console.log('Session status:', data.session_status);
+      console.log('Is running:', data.is_running);
       console.log('Last stream ID:', data.last_stream_id);
       
       if (data.last_stream_id && currentSessionIdRef.current) {
         setLastStreamId(currentSessionIdRef.current, data.last_stream_id);
       }
       
-      // 如果生成仍在进行，保持 isProcessing 状态
-      if (data.generation_active) {
+      // Update processing state based on session running status from backend
+      // Only set isProcessing if backend says it's running
+      // Don't set to false here - this prevents race condition when:
+      // 1. User sends message (isProcessing=true)
+      // 2. New WebSocket connects and sends reconnect
+      // 3. Backend returns is_running=false (agent hasn't started yet)
+      // 4. We would incorrectly set isProcessing=false
+      // Let session_status/generation_complete WebSocket messages handle setting to false
+      const isRunning = data.is_running || data.generation_active;
+      if (isRunning) {
         setIsProcessing(true);
+      }
+      
+      // Update cached status (still cache the backend response for page refresh scenarios)
+      if (data.session_id) {
+        setSessionRunningStatus(data.session_id, data.session_status || '', isRunning);
       }
       return;
     }
@@ -420,8 +521,31 @@ export default function WorkspacePage() {
     if (data.Type === 'generation_complete') {
       console.log('=== Generation complete ===');
       console.log('Session ID:', data.session_id);
+      console.log('Status:', data.status);
       console.log('Has error:', data.error);
       setIsProcessing(false);
+      // Update cached status
+      if (data.session_id) {
+        setSessionRunningStatus(data.session_id, data.status || 'completed', false);
+      }
+      return;
+    }
+
+    // 处理会话运行状态更新
+    if (data.Type === 'session_status') {
+      console.log('=== Session status update ===');
+      console.log('Session ID:', data.session_id);
+      console.log('Status:', data.status);
+      console.log('Is running:', data.is_running);
+      
+      // Update processing state if this is the current session
+      if (data.session_id === currentSessionIdRef.current) {
+        setIsProcessing(data.is_running);
+      }
+      // Update cached status
+      if (data.session_id) {
+        setSessionRunningStatus(data.session_id, data.status, data.is_running);
+      }
       return;
     }
     
@@ -604,10 +728,9 @@ export default function WorkspacePage() {
         }
       });
       
-      // 如果消息处理完成（不再流式传输），重置处理状态
-      if (!convertedMsg.isStreaming && convertedMsg.role === 'assistant') {
-        setIsProcessing(false);
-      }
+      // 注意：不要在单个消息完成时设置 setIsProcessing(false)
+      // Agent可能还在继续执行多步工具调用
+      // isProcessing 状态只应该由 generation_complete 或 session_status 消息控制
       
       // 如果消息包含工具调用结果，刷新文件树（因为工具可能修改了文件）
       // Use refs to get latest state inside WebSocket callback closure
@@ -652,6 +775,11 @@ export default function WorkspacePage() {
     }
   };
 
+  // Keep ref updated with latest handleWebSocketMessage to avoid stale closures
+  useEffect(() => {
+    handleWebSocketMessageRef.current = handleWebSocketMessage;
+  });
+
   // Helper function to handle stream delta (incremental updates)
   const handleStreamDelta = (delta: any) => {
     const messageId = delta.message_id;
@@ -672,8 +800,8 @@ export default function WorkspacePage() {
         // 消息不存在
         if (deltaType === 'finish') {
           // finish delta 到来但消息不存在，忽略（可能是状态还没同步）
+          // 注意：不要在这里设置 setIsProcessing(false)，让 generation_complete 来控制
           console.warn('[STREAM DELTA] Finish delta for non-existent message, ignoring:', messageId);
-          setIsProcessing(false);
           return prev;
         }
         // 创建新消息（比如错误消息直接通过 delta 发送）
@@ -747,23 +875,25 @@ export default function WorkspacePage() {
           break;
           
         case 'finish':
-          // 消息流式传输完成
+          // 消息流式传输完成（但agent可能还在继续执行下一步工具调用）
+          // 注意：不要在这里设置 setIsProcessing(false)
+          // isProcessing 状态只应该由 generation_complete 或 session_status 消息控制
           newMessages[existingIndex] = {
             ...existingMsg,
             isStreaming: false,
           };
-          setIsProcessing(false);
           break;
         
         case 'error':
           // 错误通知 - 显示 Toast，不修改消息
+          // 注意：不要在这里设置 setIsProcessing(false)
+          // 后端会发送 generation_complete 消息来控制状态
           console.log('[STREAM DELTA] Error notification:', content);
           setToasts(prev => [...prev, {
             id: `error-${Date.now()}`,
             message: content,
             type: 'error'
           }]);
-          setIsProcessing(false);
           return prev; // 不修改消息列表
           
         default:
@@ -1333,8 +1463,11 @@ export default function WorkspacePage() {
     wsRef.current.send(JSON.stringify(messageData));
     console.log('Message sent via WebSocket:', messageData);
     
-    // 设置处理中状态
+    // 设置处理中状态并更新缓存
     setIsProcessing(true);
+    if (sessionId) {
+      setSessionRunningStatus(sessionId, 'running', true);
+    }
   };
 
   // 取消当前请求
@@ -1357,6 +1490,8 @@ export default function WorkspacePage() {
     wsRef.current.send(JSON.stringify(cancelData));
     console.log('Cancel request sent:', cancelData);
     setIsProcessing(false);
+    // Update cached status
+    setSessionRunningStatus(currentSessionId, 'cancelled', false);
   };
 
   const handlePermissionResponse = (toolCallId: string, granted: boolean) => {
