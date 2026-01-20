@@ -127,8 +127,16 @@ func (app *WSApp) HandleClientMessage(rawMsg []byte) {
 	// Fetch image attachments if any
 	attachments := app.processImageAttachments(msg.Images)
 
-	// Run the agent asynchronously
-	app.runAgentAsync(sessionID, msg.Content, attachments)
+	// Run the agent via worker pool for bounded concurrency
+	if err := app.runAgentViaPool(sessionID, msg.Content, attachments); err != nil {
+		slog.Error("[GOROUTINE] Failed to submit agent task",
+			"session_id", sessionID,
+			"error", err,
+		)
+		// Send error message to client
+		app.sendErrorToClient(sessionID, "系统繁忙，请稍后重试 (503)")
+		return
+	}
 }
 
 // handlePermissionResponse handles permission grant/deny responses
@@ -779,14 +787,20 @@ func (app *WSApp) handleResumedPermissionResponse(ctx context.Context, toolCallI
 			app.Permissions.GrantForSession(permReq)
 		}
 
-		// Re-submit the original task to the agent
+		// Re-submit the original task to the agent via worker pool
 		if toolCall.OriginalPrompt.Valid && toolCall.OriginalPrompt.String != "" {
 			slog.Info("[GOROUTINE] Re-running agent with original prompt",
 				"sessionID", sessionID,
 				"prompt_length", len(toolCall.OriginalPrompt.String),
 			)
-			// Run agent async with the original prompt
-			app.runAgentAsync(sessionID, toolCall.OriginalPrompt.String, nil)
+			// Run agent via worker pool with the original prompt
+			if err := app.runAgentViaPool(sessionID, toolCall.OriginalPrompt.String, nil); err != nil {
+				slog.Error("[GOROUTINE] Failed to re-submit resumed task",
+					"session_id", sessionID,
+					"error", err,
+				)
+				app.sendErrorToClient(sessionID, "系统繁忙，无法恢复任务 (503)")
+			}
 		} else {
 			slog.Warn("No original prompt found for resumed task, cannot re-run",
 				"sessionID", sessionID,
@@ -804,4 +818,13 @@ func (app *WSApp) handleResumedPermissionResponse(ctx context.Context, toolCallI
 			slog.Error("Failed to cancel tool call for denied permission", "error", err)
 		}
 	}
+}
+
+// sendErrorToClient sends an error message to the client via WebSocket
+func (app *WSApp) sendErrorToClient(sessionID, errorMessage string) {
+	app.WSServer.SendToSession(sessionID, map[string]interface{}{
+		"Type":       "error",
+		"session_id": sessionID,
+		"error":      errorMessage,
+	})
 }

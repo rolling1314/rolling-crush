@@ -16,6 +16,8 @@ const (
 	DeltaTypeToolCall DeltaType = "tool_call"
 	// DeltaTypeFinish represents the end of streaming for a message
 	DeltaTypeFinish DeltaType = "finish"
+	// DeltaTypeError represents an error notification (shown as toast, not stored in chat)
+	DeltaTypeError DeltaType = "error"
 )
 
 // StreamDelta represents an incremental update to a message during streaming.
@@ -93,5 +95,16 @@ func NewFinishDelta(messageID, sessionID, finishReason string) StreamDelta {
 		DeltaType:    DeltaTypeFinish,
 		FinishReason: finishReason,
 		Timestamp:    time.Now().UnixMilli(),
+	}
+}
+
+// NewErrorDelta creates a delta for error notification (shown as toast in frontend)
+func NewErrorDelta(sessionID, errorMessage string) StreamDelta {
+	return StreamDelta{
+		MessageID: "",
+		SessionID: sessionID,
+		DeltaType: DeltaTypeError,
+		Content:   errorMessage,
+		Timestamp: time.Now().UnixMilli(),
 	}
 }

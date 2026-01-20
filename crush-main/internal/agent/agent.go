@@ -601,6 +601,12 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 		isCancelErr := errors.Is(err, context.Canceled)
 		isPermissionErr := errors.Is(err, permission.ErrorPermissionDenied)
 		if currentAssistant == nil {
+			// No assistant message was created yet, but we still need to show error to frontend
+			// Send error delta to show as toast notification (not stored in chat history)
+			if !isCancelErr && !isPermissionErr {
+				errMsg := formatErrorMessage(err.Error())
+				a.messages.PublishDelta(message.NewErrorDelta(call.SessionID, errMsg))
+			}
 			return result, err
 		}
 		// Ensure we finish thinking on error to close the reasoning state.
@@ -664,17 +670,31 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 		var fantasyErr *fantasy.Error
 		var providerErr *fantasy.ProviderError
 		const defaultTitle = "Provider Error"
+		var errorMessage string
 		if isCancelErr {
 			currentAssistant.AddFinish(message.FinishReasonCanceled, "User canceled request", "")
 		} else if isPermissionErr {
 			currentAssistant.AddFinish(message.FinishReasonPermissionDenied, "User denied permission", "")
 		} else if errors.As(err, &providerErr) {
 			currentAssistant.AddFinish(message.FinishReasonError, cmp.Or(stringext.Capitalize(providerErr.Title), defaultTitle), providerErr.Message)
+			errorMessage = providerErr.Message
 		} else if errors.As(err, &fantasyErr) {
 			currentAssistant.AddFinish(message.FinishReasonError, cmp.Or(stringext.Capitalize(fantasyErr.Title), defaultTitle), fantasyErr.Message)
+			errorMessage = fantasyErr.Message
 		} else {
 			currentAssistant.AddFinish(message.FinishReasonError, defaultTitle, err.Error())
+			errorMessage = err.Error()
 		}
+
+		// Send error message to frontend as toast notification (not stored in history)
+		if errorMessage != "" {
+			userFriendlyMsg := formatErrorMessage(errorMessage)
+			a.messages.PublishDelta(message.NewErrorDelta(call.SessionID, userFriendlyMsg))
+		}
+
+		// Publish finish delta to notify frontend streaming is complete
+		a.messages.PublishDelta(message.NewFinishDelta(currentAssistant.ID, call.SessionID, string(message.FinishReasonError)))
+
 		// Note: we use the parent context here because the genCtx has been
 		// cancelled.
 		updateErr := a.messages.Update(ctx, *currentAssistant)
@@ -1198,4 +1218,20 @@ func (a *sessionAgent) isClaudeCode() bool {
 	cfg := config.Get()
 	pc, ok := cfg.Providers.Get(a.largeModel.ModelCfg.Provider)
 	return ok && pc.ID == string(catwalk.InferenceProviderAnthropic) && pc.OAuthToken != nil
+}
+
+// formatErrorMessage converts technical error messages to user-friendly messages
+func formatErrorMessage(errMsg string) string {
+	switch {
+	case strings.Contains(errMsg, "余额不足") || strings.Contains(errMsg, "insufficient"):
+		return "余额不足，请充值后重试"
+	case strings.Contains(errMsg, "too many requests") || strings.Contains(errMsg, "rate limit"):
+		return "请求频率过高，请稍后重试"
+	case strings.Contains(errMsg, "context deadline exceeded") || strings.Contains(errMsg, "timeout"):
+		return "请求超时，请稍后重试"
+	case strings.Contains(errMsg, "无可用资源"):
+		return "无可用资源，请稍后重试"
+	default:
+		return errMsg
+	}
 }

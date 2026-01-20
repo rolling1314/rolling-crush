@@ -7,6 +7,7 @@ import { ChatSidebar } from '../components/ChatSidebar';
 import { FileTree } from '../components/FileTree';
 import { CodeEditor } from '../components/CodeEditor';
 import { InlineChatModelSelector } from '../components/InlineChatModelSelector';
+import { Toast, type ToastMessage } from '../components/Toast';
 import { type FileNode, type Message, type PermissionRequest, type ToolCall, type ToolResult, type Session, type ToolCallStatus, type ImageAttachment } from '../types';
 
 const API_URL = '/api';
@@ -76,6 +77,9 @@ export default function WorkspacePage() {
   
   // Processing state - 是否正在处理请求
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Toast notifications state
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
   
   // View mode state
   const [viewMode, setViewMode] = useState<'code' | 'preview'>('code');
@@ -665,13 +669,20 @@ export default function WorkspacePage() {
       const existingIndex = prev.findIndex(m => m.id === messageId);
       
       if (existingIndex === -1) {
-        // 消息不存在，需要先创建（这应该很少发生，因为消息创建时会先发送完整消息）
-        console.warn('[STREAM DELTA] Message not found, creating placeholder:', messageId);
+        // 消息不存在
+        if (deltaType === 'finish') {
+          // finish delta 到来但消息不存在，忽略（可能是状态还没同步）
+          console.warn('[STREAM DELTA] Finish delta for non-existent message, ignoring:', messageId);
+          setIsProcessing(false);
+          return prev;
+        }
+        // 创建新消息（比如错误消息直接通过 delta 发送）
+        console.warn('[STREAM DELTA] Message not found, creating new message:', messageId);
         const newMessage: Message = {
           id: messageId,
           role: 'assistant',
-          content: '',
-          reasoning: undefined,
+          content: deltaType === 'text' ? content : '',
+          reasoning: deltaType === 'reasoning' ? content : undefined,
           timestamp: delta.timestamp || Date.now(),
           isStreaming: true,
         };
@@ -743,6 +754,17 @@ export default function WorkspacePage() {
           };
           setIsProcessing(false);
           break;
+        
+        case 'error':
+          // 错误通知 - 显示 Toast，不修改消息
+          console.log('[STREAM DELTA] Error notification:', content);
+          setToasts(prev => [...prev, {
+            id: `error-${Date.now()}`,
+            message: content,
+            type: 'error'
+          }]);
+          setIsProcessing(false);
+          return prev; // 不修改消息列表
           
         default:
           console.warn('[STREAM DELTA] Unknown delta type:', deltaType);
@@ -1528,6 +1550,11 @@ export default function WorkspacePage() {
     navigate('/login');
   };
 
+  // Toast dismiss handler (must be before conditional returns to follow hooks rules)
+  const handleDismissToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
   // Loading state
   if (projectLoading) {
     return (
@@ -1571,6 +1598,9 @@ export default function WorkspacePage() {
 
   return (
     <div className="flex h-screen w-screen bg-black overflow-hidden">
+      {/* Toast notifications */}
+      <Toast toasts={toasts} onDismiss={handleDismissToast} />
+      
       {/* Left Side Container (Takes available space) */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* 1. Global Header for Left Section (Toggle) */}

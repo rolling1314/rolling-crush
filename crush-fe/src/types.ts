@@ -134,7 +134,7 @@ export interface StreamDelta {
   Type: 'stream_delta';
   message_id: string;
   session_id: string;
-  delta_type: 'text' | 'reasoning' | 'tool_call_input' | 'tool_call' | 'finish';
+  delta_type: 'text' | 'reasoning' | 'tool_call_input' | 'tool_call' | 'finish' | 'error';
   content: string;
   tool_call_id?: string;
   tool_call_name?: string;
