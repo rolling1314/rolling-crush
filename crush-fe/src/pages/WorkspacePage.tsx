@@ -715,26 +715,62 @@ export default function WorkspacePage() {
       
       // 更新消息中的工具调用状态
       setMessages(prev => {
-        return prev.map(msg => {
+        const newStatus = data.status as ToolCallStatus;
+        const isFinished = newStatus === 'completed' || newStatus === 'error' || newStatus === 'cancelled';
+        
+        // 先尝试在现有消息中查找并更新工具调用
+        let found = false;
+        const updatedMessages = prev.map(msg => {
           if (msg.toolCalls && msg.toolCalls.length > 0) {
-            const updatedToolCalls = msg.toolCalls.map(tc => {
-              if (tc.id === data.id) {
-                const newStatus = data.status as ToolCallStatus;
-                const isFinished = newStatus === 'completed' || newStatus === 'error' || newStatus === 'cancelled';
-                console.log('Updating tool call:', tc.id, 'from', tc.status, 'to', newStatus, 'finished:', isFinished);
-                return {
-                  ...tc,
-                  status: newStatus,
-                  finished: isFinished,
-                  input: data.input || tc.input,
-                };
-              }
-              return tc;
-            });
-            return { ...msg, toolCalls: updatedToolCalls };
+            const toolCallIndex = msg.toolCalls.findIndex(tc => tc.id === data.id);
+            if (toolCallIndex !== -1) {
+              found = true;
+              console.log('Updating existing tool call:', data.id, 'from', msg.toolCalls[toolCallIndex].status, 'to', newStatus);
+              const updatedToolCalls = msg.toolCalls.map(tc => {
+                if (tc.id === data.id) {
+                  return {
+                    ...tc,
+                    status: newStatus,
+                    finished: isFinished,
+                    input: data.input || tc.input,
+                    name: data.name || tc.name,
+                  };
+                }
+                return tc;
+              });
+              return { ...msg, toolCalls: updatedToolCalls };
+            }
           }
           return msg;
         });
+        
+        // 如果没找到，尝试通过 message_id 添加新的工具调用到对应消息
+        if (!found && data.message_id) {
+          console.log('Tool call not found in messages, trying to add to message:', data.message_id);
+          return updatedMessages.map(msg => {
+            if (msg.id === data.message_id) {
+              console.log('Adding tool call to message:', data.message_id);
+              const newToolCall: ToolCall = {
+                id: data.id,
+                name: data.name || '',
+                input: data.input || '',
+                finished: isFinished,
+                status: newStatus,
+              };
+              return {
+                ...msg,
+                toolCalls: [...(msg.toolCalls || []), newToolCall],
+              };
+            }
+            return msg;
+          });
+        }
+        
+        if (!found) {
+          console.log('Tool call not found and no message_id provided, ignoring update');
+        }
+        
+        return updatedMessages;
       });
       return; // 立即返回
     }
@@ -905,18 +941,41 @@ export default function WorkspacePage() {
           
         case 'tool_call':
           // 新的工具调用开始
-          const newToolCall: ToolCall = {
-            id: delta.tool_call_id || '',
-            name: delta.tool_call_name || '',
-            input: '',
-            finished: false,
-            status: 'pending',
-          };
-          newMessages[existingIndex] = {
-            ...existingMsg,
-            toolCalls: [...(existingMsg.toolCalls || []), newToolCall],
-            isStreaming: true,
-          };
+          const toolCallId = delta.tool_call_id || '';
+          const toolCallName = delta.tool_call_name || '';
+          
+          // 检查是否已存在相同 ID 的工具调用，避免重复
+          const existingToolCalls = existingMsg.toolCalls || [];
+          const existingToolCallIndex = existingToolCalls.findIndex(tc => tc.id === toolCallId);
+          
+          if (existingToolCallIndex !== -1) {
+            // 已存在，更新而不是追加
+            console.log('[STREAM DELTA] Tool call already exists, updating:', toolCallId);
+            const updatedToolCalls = existingToolCalls.map((tc, idx) => 
+              idx === existingToolCallIndex 
+                ? { ...tc, name: toolCallName || tc.name }
+                : tc
+            );
+            newMessages[existingIndex] = {
+              ...existingMsg,
+              toolCalls: updatedToolCalls,
+              isStreaming: true,
+            };
+          } else {
+            // 不存在，添加新的工具调用
+            const newToolCall: ToolCall = {
+              id: toolCallId,
+              name: toolCallName,
+              input: '',
+              finished: false,
+              status: 'pending',
+            };
+            newMessages[existingIndex] = {
+              ...existingMsg,
+              toolCalls: [...existingToolCalls, newToolCall],
+              isStreaming: true,
+            };
+          }
           break;
           
         case 'tool_call_input':

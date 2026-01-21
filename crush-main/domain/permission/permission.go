@@ -114,19 +114,49 @@ func (s *permissionService) GrantPersistent(permission PermissionRequest) {
 		ToolCallID: permission.ToolCallID,
 		Granted:    true,
 	})
+
+	// Track whether we found the channel
+	channelFound := false
+
+	// Try to find the channel by permission.ID first
 	respCh, ok := s.pendingRequests.Get(permission.ID)
 	if ok {
 		respCh <- true
+		channelFound = true
+		// Clear active request for this session
+		if activeReq, ok := s.sessionActiveRequest.Get(permission.SessionID); ok && activeReq != nil && activeReq.ID == permission.ID {
+			s.sessionActiveRequest.Del(permission.SessionID)
+		}
+	}
+
+	// If not found by ID, try to find by toolCallID via sessionActiveRequest
+	if !channelFound && permission.ToolCallID != "" {
+		if activeReq, ok := s.sessionActiveRequest.Get(permission.SessionID); ok && activeReq != nil && activeReq.ToolCallID == permission.ToolCallID {
+			slog.Info("[GOROUTINE] Permission found by toolCallID instead of ID (GrantPersistent)",
+				"tool_call_id", permission.ToolCallID,
+				"session_id", permission.SessionID,
+				"original_permission_id", activeReq.ID,
+				"received_permission_id", permission.ID,
+			)
+			if ch, chOk := s.pendingRequests.Get(activeReq.ID); chOk {
+				ch <- true
+				channelFound = true
+				s.sessionActiveRequest.Del(permission.SessionID)
+			}
+		}
+	}
+
+	if !channelFound {
+		slog.Warn("[GOROUTINE] Permission channel not found (GrantPersistent)",
+			"permission_id", permission.ID,
+			"tool_call_id", permission.ToolCallID,
+			"session_id", permission.SessionID,
+		)
 	}
 
 	s.sessionPermissionsMu.Lock()
 	s.sessionPermissions = append(s.sessionPermissions, permission)
 	s.sessionPermissionsMu.Unlock()
-
-	// Clear active request for this session
-	if activeReq, ok := s.sessionActiveRequest.Get(permission.SessionID); ok && activeReq != nil && activeReq.ID == permission.ID {
-		s.sessionActiveRequest.Del(permission.SessionID)
-	}
 }
 
 func (s *permissionService) Grant(permission PermissionRequest) {
@@ -135,15 +165,41 @@ func (s *permissionService) Grant(permission PermissionRequest) {
 		ToolCallID: permission.ToolCallID,
 		Granted:    true,
 	})
+
+	// Try to find the channel by permission.ID first
 	respCh, ok := s.pendingRequests.Get(permission.ID)
 	if ok {
 		respCh <- true
+		// Clear active request for this session
+		if activeReq, ok := s.sessionActiveRequest.Get(permission.SessionID); ok && activeReq != nil && activeReq.ID == permission.ID {
+			s.sessionActiveRequest.Del(permission.SessionID)
+		}
+		return
 	}
 
-	// Clear active request for this session
-	if activeReq, ok := s.sessionActiveRequest.Get(permission.SessionID); ok && activeReq != nil && activeReq.ID == permission.ID {
-		s.sessionActiveRequest.Del(permission.SessionID)
+	// If not found by ID, try to find by toolCallID via sessionActiveRequest
+	// This handles the case where WebSocket reconnects and the frontend sends a different permission.ID
+	if permission.ToolCallID != "" {
+		if activeReq, ok := s.sessionActiveRequest.Get(permission.SessionID); ok && activeReq != nil && activeReq.ToolCallID == permission.ToolCallID {
+			slog.Info("[GOROUTINE] Permission found by toolCallID instead of ID",
+				"tool_call_id", permission.ToolCallID,
+				"session_id", permission.SessionID,
+				"original_permission_id", activeReq.ID,
+				"received_permission_id", permission.ID,
+			)
+			if ch, chOk := s.pendingRequests.Get(activeReq.ID); chOk {
+				ch <- true
+				s.sessionActiveRequest.Del(permission.SessionID)
+				return
+			}
+		}
 	}
+
+	slog.Warn("[GOROUTINE] Permission channel not found",
+		"permission_id", permission.ID,
+		"tool_call_id", permission.ToolCallID,
+		"session_id", permission.SessionID,
+	)
 }
 
 // GrantForSession grants permission and adds the tool to the session's allowlist.
@@ -154,9 +210,45 @@ func (s *permissionService) GrantForSession(permission PermissionRequest) {
 		ToolCallID: permission.ToolCallID,
 		Granted:    true,
 	})
+
+	// Track whether we found the channel (to avoid duplicate allowlist additions)
+	channelFound := false
+
+	// Try to find the channel by permission.ID first
 	respCh, ok := s.pendingRequests.Get(permission.ID)
 	if ok {
 		respCh <- true
+		channelFound = true
+		// Clear active request for this session
+		if activeReq, ok := s.sessionActiveRequest.Get(permission.SessionID); ok && activeReq != nil && activeReq.ID == permission.ID {
+			s.sessionActiveRequest.Del(permission.SessionID)
+		}
+	}
+
+	// If not found by ID, try to find by toolCallID via sessionActiveRequest
+	// This handles the case where WebSocket reconnects and the frontend sends a different permission.ID
+	if !channelFound && permission.ToolCallID != "" {
+		if activeReq, ok := s.sessionActiveRequest.Get(permission.SessionID); ok && activeReq != nil && activeReq.ToolCallID == permission.ToolCallID {
+			slog.Info("[GOROUTINE] Permission found by toolCallID instead of ID (GrantForSession)",
+				"tool_call_id", permission.ToolCallID,
+				"session_id", permission.SessionID,
+				"original_permission_id", activeReq.ID,
+				"received_permission_id", permission.ID,
+			)
+			if ch, chOk := s.pendingRequests.Get(activeReq.ID); chOk {
+				ch <- true
+				channelFound = true
+				s.sessionActiveRequest.Del(permission.SessionID)
+			}
+		}
+	}
+
+	if !channelFound {
+		slog.Warn("[GOROUTINE] Permission channel not found (GrantForSession)",
+			"permission_id", permission.ID,
+			"tool_call_id", permission.ToolCallID,
+			"session_id", permission.SessionID,
+		)
 	}
 
 	// Add to in-memory session permissions (for backward compatibility)
@@ -192,11 +284,6 @@ func (s *permissionService) GrantForSession(permission PermissionRequest) {
 			)
 		}
 	}
-
-	// Clear active request for this session
-	if activeReq, ok := s.sessionActiveRequest.Get(permission.SessionID); ok && activeReq != nil && activeReq.ID == permission.ID {
-		s.sessionActiveRequest.Del(permission.SessionID)
-	}
 }
 
 func (s *permissionService) Deny(permission PermissionRequest) {
@@ -206,15 +293,41 @@ func (s *permissionService) Deny(permission PermissionRequest) {
 		Granted:    false,
 		Denied:     true,
 	})
+
+	// Try to find the channel by permission.ID first
 	respCh, ok := s.pendingRequests.Get(permission.ID)
 	if ok {
 		respCh <- false
+		// Clear active request for this session
+		if activeReq, ok := s.sessionActiveRequest.Get(permission.SessionID); ok && activeReq != nil && activeReq.ID == permission.ID {
+			s.sessionActiveRequest.Del(permission.SessionID)
+		}
+		return
 	}
 
-	// Clear active request for this session
-	if activeReq, ok := s.sessionActiveRequest.Get(permission.SessionID); ok && activeReq != nil && activeReq.ID == permission.ID {
-		s.sessionActiveRequest.Del(permission.SessionID)
+	// If not found by ID, try to find by toolCallID via sessionActiveRequest
+	// This handles the case where WebSocket reconnects and the frontend sends a different permission.ID
+	if permission.ToolCallID != "" {
+		if activeReq, ok := s.sessionActiveRequest.Get(permission.SessionID); ok && activeReq != nil && activeReq.ToolCallID == permission.ToolCallID {
+			slog.Info("[GOROUTINE] Permission found by toolCallID instead of ID (Deny)",
+				"tool_call_id", permission.ToolCallID,
+				"session_id", permission.SessionID,
+				"original_permission_id", activeReq.ID,
+				"received_permission_id", permission.ID,
+			)
+			if ch, chOk := s.pendingRequests.Get(activeReq.ID); chOk {
+				ch <- false
+				s.sessionActiveRequest.Del(permission.SessionID)
+				return
+			}
+		}
 	}
+
+	slog.Warn("[GOROUTINE] Permission channel not found (Deny)",
+		"permission_id", permission.ID,
+		"tool_call_id", permission.ToolCallID,
+		"session_id", permission.SessionID,
+	)
 }
 
 func (s *permissionService) Request(opts CreatePermissionRequest) bool {
