@@ -582,17 +582,31 @@ export default function WorkspacePage() {
     }
     
     // 处理 Todos 更新
-    if (data.Type === 'todos_update') {
+    if (data.Type === 'todos_update' || data.type === 'todos_update') {
       console.log('=== Todos update received ===');
       console.log('Session ID:', data.session_id);
       console.log('Total:', data.total);
       console.log('Completed:', data.completed);
       console.log('Current task:', data.current_task);
-      
-      // Only update if this is the current session
-      if (data.session_id === currentSessionIdRef.current) {
-        setTodos(data.todos || []);
-        setCurrentTask(data.current_task || '');
+      console.log('Current session (ref):', currentSessionIdRef.current);
+
+      const incomingSessionId = data.session_id as string | undefined;
+      const incomingTodos = (data.todos || []) as Todo[];
+
+      // Always cache into sessions[] so switching sessions / re-renders can pick it up
+      if (incomingSessionId) {
+        setSessions(prev =>
+          prev.map(s => (s.id === incomingSessionId ? { ...s, todos: incomingTodos } : s))
+        );
+      }
+
+      // Update visible todos only if this is the current session
+      if (incomingSessionId && incomingSessionId === currentSessionIdRef.current) {
+        // Force new references to avoid memo/shallow-compare issues
+        setTodos([...incomingTodos]);
+        setCurrentTask((data.current_task as string) || '');
+      } else {
+        console.log('[todos_update] ignored for non-current session');
       }
       return;
     }
