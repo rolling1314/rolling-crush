@@ -369,7 +369,10 @@ export default function WorkspacePage() {
         const inProgressTodo = currentSession.todos.find(t => t.status === 'in_progress');
         setCurrentTask(inProgressTodo?.active_form || inProgressTodo?.content || '');
       } else {
-        console.log('No todos found in current session');
+        // Clear todos when switching to a session without todos
+        console.log('No todos found in current session, clearing todos');
+        setTodos([]);
+        setCurrentTask('');
       }
     } else if (!currentSessionId) {
       // Clear todos when no session selected
