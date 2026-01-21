@@ -125,8 +125,29 @@ export interface Session {
   completion_tokens: number;
   cost: number;
   context_window: number;
+  todos?: Todo[];
   created_at: number;
   updated_at: number;
+}
+
+// Todo types for task tracking
+export type TodoStatus = 'pending' | 'in_progress' | 'completed';
+
+export interface Todo {
+  content: string;
+  status: TodoStatus;
+  active_form: string;
+}
+
+export interface TodosUpdate {
+  Type: 'todos_update';
+  session_id: string;
+  todos: Todo[];
+  completed: number;
+  in_progress: number;
+  pending: number;
+  total: number;
+  current_task: string;
 }
 
 // Stream delta for incremental message updates

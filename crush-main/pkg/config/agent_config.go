@@ -644,6 +644,7 @@ func allToolNames() []string {
 		"sourcegraph",
 		"view",
 		"write",
+		"todos",
 	}
 }
 

@@ -351,7 +351,7 @@ func (app *WSApp) handleSessionEvent(event pubsub.Event[session.Session]) {
 	}
 
 	sessionID := event.Payload.ID
-	slog.Info("Session updated event received", "session_id", sessionID, "prompt_tokens", event.Payload.PromptTokens, "completion_tokens", event.Payload.CompletionTokens, "cost", event.Payload.Cost)
+	slog.Info("Session updated event received", "session_id", sessionID, "prompt_tokens", event.Payload.PromptTokens, "completion_tokens", event.Payload.CompletionTokens, "cost", event.Payload.Cost, "todos_count", len(event.Payload.Todos))
 
 	// Get context window for this session
 	ctx := context.Background()
@@ -385,4 +385,61 @@ func (app *WSApp) handleSessionEvent(event pubsub.Event[session.Session]) {
 	if isConnected {
 		app.WSServer.SendToSession(sessionID, sessionMsg)
 	}
+
+	// Send todos update if there are todos
+	if len(event.Payload.Todos) > 0 {
+		slog.Info("Session has todos, sending update", "session_id", sessionID, "todos_count", len(event.Payload.Todos))
+		app.sendTodosUpdate(sessionID, event.Payload.Todos)
+	} else {
+		slog.Debug("Session has no todos", "session_id", sessionID)
+	}
+}
+
+// sendTodosUpdate sends todos update to frontend via WebSocket
+func (app *WSApp) sendTodosUpdate(sessionID string, todos []session.Todo) {
+	// Calculate stats
+	completed := 0
+	inProgress := 0
+	pending := 0
+	var currentTask string
+
+	for _, todo := range todos {
+		switch todo.Status {
+		case session.TodoStatusCompleted:
+			completed++
+		case session.TodoStatusInProgress:
+			inProgress++
+			if todo.ActiveForm != "" {
+				currentTask = todo.ActiveForm
+			} else {
+				currentTask = todo.Content
+			}
+		case session.TodoStatusPending:
+			pending++
+		}
+	}
+
+	todosMsg := map[string]interface{}{
+		"Type":         "todos_update",
+		"session_id":   sessionID,
+		"todos":        todos,
+		"completed":    completed,
+		"in_progress":  inProgress,
+		"pending":      pending,
+		"total":        len(todos),
+		"current_task": currentTask,
+	}
+
+	slog.Info("Sending todos update", "session_id", sessionID, "total", len(todos), "completed", completed)
+
+	// Publish to Redis
+	ctx := context.Background()
+	if app.RedisStream != nil {
+		if err := app.RedisStream.PublishMessage(ctx, sessionID, "todos_update", todosMsg); err != nil {
+			slog.Warn("Failed to publish todos update to Redis stream", "error", err)
+		}
+	}
+
+	// Send via WebSocket
+	app.WSServer.SendToSession(sessionID, todosMsg)
 }

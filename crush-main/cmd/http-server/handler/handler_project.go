@@ -302,6 +302,20 @@ func (s *Server) handleGetProjectSessions(c *gin.Context) {
 	response := make([]SessionResponse, len(sessions))
 	for i, sess := range sessions {
 		contextWindow := s.getSessionContextWindow(c.Request.Context(), sess.ID)
+		
+		// Debug: log session todos
+		slog.Info("Session todos", "session_id", sess.ID, "todos_count", len(sess.Todos))
+		
+		// Convert session todos to response format
+		var todos []TodoResponse
+		for _, todo := range sess.Todos {
+			todos = append(todos, TodoResponse{
+				Content:    todo.Content,
+				Status:     string(todo.Status),
+				ActiveForm: todo.ActiveForm,
+			})
+		}
+		
 		response[i] = SessionResponse{
 			ID:               sess.ID,
 			ProjectID:        sess.ProjectID,
@@ -311,6 +325,7 @@ func (s *Server) handleGetProjectSessions(c *gin.Context) {
 			CompletionTokens: sess.CompletionTokens,
 			Cost:             sess.Cost,
 			ContextWindow:    contextWindow,
+			Todos:            todos,
 			CreatedAt:        sess.CreatedAt,
 			UpdatedAt:        sess.UpdatedAt,
 		}

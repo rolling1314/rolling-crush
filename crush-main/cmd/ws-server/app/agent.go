@@ -44,6 +44,7 @@ func (app *WSApp) InitCoderAgent(ctx context.Context) error {
 				"write",
 				"diagnostics",
 				"references",
+				"todos",
 			},
 		}
 		app.config.Agents[config.AgentCoder] = coderAgentCfg

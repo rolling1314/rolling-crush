@@ -643,7 +643,27 @@ func (app *WSApp) handleReconnection(sessionID string, lastMsgID string) {
 	// Send current session info including context_window
 	app.sendSessionUpdate(ctx, sessionID)
 
+	// Send current todos if available
+	app.sendTodosOnReconnect(ctx, sessionID)
+
 	fmt.Printf("Reconnection complete for session %s\n", sessionID)
+}
+
+// sendTodosOnReconnect sends the current session's todos to the client on WebSocket reconnection
+func (app *WSApp) sendTodosOnReconnect(ctx context.Context, sessionID string) {
+	sess, err := app.Sessions.Get(ctx, sessionID)
+	if err != nil {
+		slog.Warn("Failed to get session for todos on reconnect", "sessionID", sessionID, "error", err)
+		return
+	}
+
+	if len(sess.Todos) == 0 {
+		slog.Debug("No todos to send on reconnect", "sessionID", sessionID)
+		return
+	}
+
+	slog.Info("Sending todos on reconnect", "sessionID", sessionID, "count", len(sess.Todos))
+	app.sendTodosUpdate(sessionID, sess.Todos)
 }
 
 // sendSessionUpdate sends the current session info to the client via WebSocket

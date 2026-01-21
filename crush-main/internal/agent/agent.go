@@ -550,7 +550,21 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 			currentAssistant.AddFinish(finishReason, "", "")
 			a.updateSessionUsage(a.largeModel, &currentSession, stepResult.Usage, a.openrouterCost(stepResult.ProviderMetadata))
 			sessionLock.Lock()
-			_, sessionErr := a.sessions.Save(genCtx, currentSession)
+			// Fetch fresh session from DB to preserve todos that may have been updated by tools
+			freshSession, fetchErr := a.sessions.Get(genCtx, currentSession.ID)
+			if fetchErr != nil {
+				sessionLock.Unlock()
+				return fetchErr
+			}
+			// Merge: keep fresh todos, update usage from local currentSession
+			freshSession.Title = currentSession.Title
+			freshSession.PromptTokens = currentSession.PromptTokens
+			freshSession.CompletionTokens = currentSession.CompletionTokens
+			freshSession.Cost = currentSession.Cost
+			freshSession.SummaryMessageID = currentSession.SummaryMessageID
+			_, sessionErr := a.sessions.Save(genCtx, freshSession)
+			// Update local currentSession with fresh todos for subsequent operations
+			currentSession.Todos = freshSession.Todos
 			sessionLock.Unlock()
 			if sessionErr != nil {
 				return sessionErr
@@ -843,10 +857,16 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 
 	// Just in case, get just the last usage info.
 	usage := resp.Response.Usage
-	currentSession.SummaryMessageID = summaryMessage.ID
-	currentSession.CompletionTokens = usage.OutputTokens
-	currentSession.PromptTokens = 0
-	_, err = a.sessions.Save(genCtx, currentSession)
+	// Fetch fresh session to preserve todos
+	freshSession, fetchErr := a.sessions.Get(genCtx, currentSession.ID)
+	if fetchErr != nil {
+		return fetchErr
+	}
+	freshSession.SummaryMessageID = summaryMessage.ID
+	freshSession.CompletionTokens = usage.OutputTokens
+	freshSession.PromptTokens = 0
+	freshSession.Cost = currentSession.Cost
+	_, err = a.sessions.Save(genCtx, freshSession)
 	return err
 }
 
@@ -1066,7 +1086,17 @@ func (a *sessionAgent) generateTitle(ctx context.Context, session *session.Sessi
 	}
 
 	a.updateSessionUsage(a.smallModel, session, resp.TotalUsage, openrouterCost)
-	_, saveErr := a.sessions.Save(ctx, *session)
+	// Fetch fresh session to preserve todos
+	freshSession, fetchErr := a.sessions.Get(ctx, session.ID)
+	if fetchErr != nil {
+		slog.Error("failed to get fresh session for title save", "error", fetchErr)
+		return
+	}
+	freshSession.Title = session.Title
+	freshSession.PromptTokens = session.PromptTokens
+	freshSession.CompletionTokens = session.CompletionTokens
+	freshSession.Cost = session.Cost
+	_, saveErr := a.sessions.Save(ctx, freshSession)
 	if saveErr != nil {
 		slog.Error("failed to save session title & usage", "error", saveErr)
 		return

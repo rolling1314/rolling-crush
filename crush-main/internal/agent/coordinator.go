@@ -504,6 +504,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, workin
 		tools.NewSourcegraphTool(nil),
 		tools.NewViewTool(c.lspClients, c.permissions, workingDir),
 		tools.NewWriteTool(c.lspClients, c.permissions, c.history, workingDir),
+		tools.NewTodosTool(c.sessions),
 	)
 
 	if len(c.cfg.LSP) > 0 {

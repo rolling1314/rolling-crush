@@ -44,8 +44,9 @@ SET
     prompt_tokens = $2,
     completion_tokens = $3,
     summary_message_id = $4,
-    cost = $5
-WHERE id = $6
+    cost = $5,
+    todos = $6
+WHERE id = $7
 RETURNING *;
 
 

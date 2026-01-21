@@ -68,6 +68,7 @@ type Session struct {
 	CreatedAt        int64          `json:"created_at"`
 	SummaryMessageID sql.NullString `json:"summary_message_id"`
 	ProjectID        sql.NullString `json:"project_id"`
+	Todos            sql.NullString `json:"todos"`
 }
 
 type ToolCall struct {

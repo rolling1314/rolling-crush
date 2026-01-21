@@ -3,8 +3,9 @@ import { Send, X, File as FileIcon, Folder as FolderIcon, ChevronDown, ChevronRi
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { type Message, type PermissionRequest, type FileNode, type ImageAttachment, type ImageUploadResponse, type Session } from '../types';
+import { type Message, type PermissionRequest, type FileNode, type ImageAttachment, type ImageUploadResponse, type Session, type Todo } from '../types';
 import { ToolCallDisplay } from './ToolCallDisplay';
+import { TodosDisplay } from './TodosDisplay';
 import { cn } from '../lib/utils';
 import 'highlight.js/styles/github-dark.css';
 
@@ -22,6 +23,8 @@ interface ChatPanelProps {
   isProcessing?: boolean;
   onCancelRequest?: () => void;
   onFileClick?: (filePath: string) => void;
+  todos?: Todo[];
+  currentTask?: string;
 }
 
 const ThinkingProcess = memo(({ reasoning, isStreaming, hasContent }: { reasoning: string, isStreaming: boolean, hasContent: boolean }) => {
@@ -475,7 +478,9 @@ export const ChatPanel = memo(({
   sessionConfigComponent,
   isProcessing = false,
   onCancelRequest,
-  onFileClick
+  onFileClick,
+  todos,
+  currentTask
 }: ChatPanelProps) => {
   const [input, setInput] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<FileNode[]>([]);
@@ -846,6 +851,16 @@ export const ChatPanel = memo(({
             onFileClick={onFileClick}
           />
         ))}
+        
+        {/* Todos display - shows current task progress */}
+        {todos && todos.length > 0 && (
+          <TodosDisplay 
+            todos={todos} 
+            currentTask={currentTask}
+            className="mx-auto max-w-2xl"
+          />
+        )}
+        
         <div ref={messagesEndRef} />
       </div>
 
@@ -977,6 +992,8 @@ export const ChatPanel = memo(({
     prevProps.pendingPermissions === nextProps.pendingPermissions &&
     prevProps.isProcessing === nextProps.isProcessing &&
     prevProps.onSendMessage === nextProps.onSendMessage &&
-    prevProps.sessionConfigComponent === nextProps.sessionConfigComponent
+    prevProps.sessionConfigComponent === nextProps.sessionConfigComponent &&
+    prevProps.todos === nextProps.todos &&
+    prevProps.currentTask === nextProps.currentTask
   );
 });

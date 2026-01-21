@@ -8,7 +8,7 @@ import { FileTree } from '../components/FileTree';
 import { CodeEditor } from '../components/CodeEditor';
 import { InlineChatModelSelector } from '../components/InlineChatModelSelector';
 import { Toast, type ToastMessage } from '../components/Toast';
-import { type FileNode, type Message, type PermissionRequest, type ToolCall, type ToolResult, type Session, type ToolCallStatus, type ImageAttachment } from '../types';
+import { type FileNode, type Message, type PermissionRequest, type ToolCall, type ToolResult, type Session, type ToolCallStatus, type ImageAttachment, type Todo } from '../types';
 
 const API_URL = '/api';
 const WS_URL = '/ws';
@@ -83,6 +83,10 @@ export default function WorkspacePage() {
   
   // View mode state
   const [viewMode, setViewMode] = useState<'code' | 'preview'>('code');
+  
+  // Todos state for task tracking
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [currentTask, setCurrentTask] = useState<string>('');
   
   // Resizable panel state
   const [chatPanelWidth, setChatPanelWidth] = useState(() => {
@@ -346,6 +350,34 @@ export default function WorkspacePage() {
     }
   }, [currentSessionId]);
 
+  // Load todos from session data when session changes or sessions list updates
+  // This ensures todos are loaded after page refresh when sessions list is fetched
+  useEffect(() => {
+    console.log('=== Todos useEffect triggered ===');
+    console.log('currentSessionId:', currentSessionId);
+    console.log('sessions.length:', sessions.length);
+    
+    if (currentSessionId && sessions.length > 0) {
+      const currentSession = sessions.find(s => s.id === currentSessionId);
+      console.log('Found currentSession:', currentSession?.id, 'todos:', currentSession?.todos?.length);
+      
+      if (currentSession?.todos && currentSession.todos.length > 0) {
+        console.log('Loading todos from session data:', currentSession.todos.length, 'items');
+        console.log('Todos content:', currentSession.todos);
+        setTodos(currentSession.todos);
+        // Find current task (in_progress todo)
+        const inProgressTodo = currentSession.todos.find(t => t.status === 'in_progress');
+        setCurrentTask(inProgressTodo?.active_form || inProgressTodo?.content || '');
+      } else {
+        console.log('No todos found in current session');
+      }
+    } else if (!currentSessionId) {
+      // Clear todos when no session selected
+      setTodos([]);
+      setCurrentTask('');
+    }
+  }, [currentSessionId, sessions]);
+
   // WebSocket 连接函数 - 需要在 useEffect 之前定义
   const connectWebSocket = useCallback((sessionId: string | null, isReconnect: boolean = false) => {
     const token = localStorage.getItem('jwt_token');
@@ -545,6 +577,22 @@ export default function WorkspacePage() {
       // Update cached status
       if (data.session_id) {
         setSessionRunningStatus(data.session_id, data.status, data.is_running);
+      }
+      return;
+    }
+    
+    // 处理 Todos 更新
+    if (data.Type === 'todos_update') {
+      console.log('=== Todos update received ===');
+      console.log('Session ID:', data.session_id);
+      console.log('Total:', data.total);
+      console.log('Completed:', data.completed);
+      console.log('Current task:', data.current_task);
+      
+      // Only update if this is the current session
+      if (data.session_id === currentSessionIdRef.current) {
+        setTodos(data.todos || []);
+        setCurrentTask(data.current_task || '');
       }
       return;
     }
@@ -1080,10 +1128,13 @@ export default function WorkspacePage() {
       });
       const sessionList = response.data || [];
       
-      // 调试：打印每个session的context_window
+      // 调试：打印每个session的信息，包括 todos
       console.log('=== Loaded sessions ===');
       sessionList.forEach((s: Session) => {
-        console.log(`Session: ${s.title}, context_window: ${s.context_window}, tokens: ${s.prompt_tokens + s.completion_tokens}`);
+        console.log(`Session: ${s.title}, context_window: ${s.context_window}, tokens: ${s.prompt_tokens + s.completion_tokens}, todos: ${s.todos?.length || 0}`);
+        if (s.todos && s.todos.length > 0) {
+          console.log('  Todos:', s.todos);
+        }
       });
       
       setSessions(sessionList);
@@ -1921,6 +1972,8 @@ export default function WorkspacePage() {
             isProcessing={isProcessing}
             onCancelRequest={handleCancelRequest}
             onFileClick={handleFileClickFromTool}
+            todos={todos}
+            currentTask={currentTask}
           />
         </div>
         

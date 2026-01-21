@@ -77,18 +77,26 @@ type ProjectResponse struct {
 	UpdatedAt        int64   `json:"updated_at"`
 }
 
+// TodoResponse represents a todo item in API responses
+type TodoResponse struct {
+	Content    string `json:"content"`
+	Status     string `json:"status"`
+	ActiveForm string `json:"active_form"`
+}
+
 // SessionResponse represents a session in API responses
 type SessionResponse struct {
-	ID               string  `json:"id"`
-	ProjectID        string  `json:"project_id"`
-	Title            string  `json:"title"`
-	MessageCount     int64   `json:"message_count"`
-	PromptTokens     int64   `json:"prompt_tokens"`
-	CompletionTokens int64   `json:"completion_tokens"`
-	Cost             float64 `json:"cost"`
-	ContextWindow    int64   `json:"context_window"`
-	CreatedAt        int64   `json:"created_at"`
-	UpdatedAt        int64   `json:"updated_at"`
+	ID               string         `json:"id"`
+	ProjectID        string         `json:"project_id"`
+	Title            string         `json:"title"`
+	MessageCount     int64          `json:"message_count"`
+	PromptTokens     int64          `json:"prompt_tokens"`
+	CompletionTokens int64          `json:"completion_tokens"`
+	Cost             float64        `json:"cost"`
+	ContextWindow    int64          `json:"context_window"`
+	Todos            []TodoResponse `json:"todos,omitempty"`
+	CreatedAt        int64          `json:"created_at"`
+	UpdatedAt        int64          `json:"updated_at"`
 }
 
 // SessionModelConfig represents model configuration for a session
