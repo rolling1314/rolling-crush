@@ -174,6 +174,7 @@ func (s *service) Save(ctx context.Context, session Session) (Session, error) {
 	slog.Info("UpdateSession returned", "session_id", dbSession.ID, "db_todos_valid", dbSession.Todos.Valid, "db_todos_string", dbSession.Todos.String)
 	
 	session = s.fromDBItem(dbSession)
+	slog.Info("Publishing session update event", "session_id", session.ID, "todos_count", len(session.Todos))
 	s.Publish(pubsub.UpdatedEvent, session)
 	return session, nil
 }
