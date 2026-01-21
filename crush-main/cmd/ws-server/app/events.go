@@ -14,6 +14,7 @@ import (
 	"github.com/rolling1314/rolling-crush/domain/toolcall"
 	storeredis "github.com/rolling1314/rolling-crush/infra/redis"
 	"github.com/rolling1314/rolling-crush/internal/agent/tools/mcp"
+	internalapp "github.com/rolling1314/rolling-crush/internal/app"
 	"github.com/rolling1314/rolling-crush/internal/pkg/log"
 	"github.com/rolling1314/rolling-crush/internal/pubsub"
 )
@@ -28,7 +29,7 @@ func (app *WSApp) setupEvents() {
 	wsSetupSubscriber(ctx, app.serviceEventsWG, "permissions-notifications", app.Permissions.SubscribeNotifications, app.events)
 	wsSetupSubscriber(ctx, app.serviceEventsWG, "history", app.History.Subscribe, app.events)
 	wsSetupSubscriber(ctx, app.serviceEventsWG, "mcp", mcp.SubscribeEvents, app.events)
-	wsSetupSubscriber(ctx, app.serviceEventsWG, "lsp", SubscribeLSPEvents, app.events)
+	wsSetupSubscriber(ctx, app.serviceEventsWG, "lsp", internalapp.SubscribeLSPEvents, app.events)
 	// Subscribe to stream delta events for incremental streaming
 	wsSetupSubscriber(ctx, app.serviceEventsWG, "deltas", app.Messages.SubscribeDeltas, app.events)
 	cleanupFunc := func() error {
@@ -200,11 +201,11 @@ func (app *WSApp) handleMessageEvent(event pubsub.Event[message.Message]) {
 	// Check if session is connected before sending via WebSocket
 	isConnected, _ := app.connectedSessions.Get(sessionID)
 	fmt.Printf("[SEND] Session %s connected status: %v\n", sessionID, isConnected)
-	
+
 	// Always try to send via WebSocket - SendToSession handles the case where no clients match
 	// This ensures messages aren't lost due to stale connection state
 	app.WSServer.SendToSession(sessionID, event.Payload)
-	
+
 	if !isConnected {
 		slog.Info("Session marked as disconnected but attempted WebSocket send anyway", "sessionID", sessionID)
 	}

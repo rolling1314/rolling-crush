@@ -57,8 +57,8 @@ func GetLSPState(name string) (LSPClientInfo, bool) {
 	return lspStates.Get(name)
 }
 
-// updateLSPState updates the state of an LSP client and publishes an event
-func updateLSPState(name string, state lsp.ServerState, err error, client *lsp.Client, diagnosticCount int) {
+// UpdateLSPState updates the state of an LSP client and publishes an event
+func UpdateLSPState(name string, state lsp.ServerState, err error, client *lsp.Client, diagnosticCount int) {
 	info := LSPClientInfo{
 		Name:            name,
 		State:           state,
@@ -81,8 +81,8 @@ func updateLSPState(name string, state lsp.ServerState, err error, client *lsp.C
 	})
 }
 
-// updateLSPDiagnostics updates the diagnostic count for an LSP client and publishes an event
-func updateLSPDiagnostics(name string, diagnosticCount int) {
+// UpdateLSPDiagnostics updates the diagnostic count for an LSP client and publishes an event
+func UpdateLSPDiagnostics(name string, diagnosticCount int) {
 	if info, exists := lspStates.Get(name); exists {
 		info.DiagnosticCount = diagnosticCount
 		lspStates.Set(name, info)

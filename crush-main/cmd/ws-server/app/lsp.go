@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	internalapp "github.com/rolling1314/rolling-crush/internal/app"
 	"github.com/rolling1314/rolling-crush/internal/lsp"
 	"github.com/rolling1314/rolling-crush/pkg/config"
 )
@@ -28,23 +29,23 @@ func (app *WSApp) createAndStartLSPClient(ctx context.Context, name string, lspC
 	// Check if any root markers exist in the working directory
 	if !lsp.HasRootMarkers(app.config.WorkingDir(), lspConfig.RootMarkers) {
 		slog.Info("Skipping LSP client - no root markers found", "name", name, "rootMarkers", lspConfig.RootMarkers)
-		updateLSPState(name, lsp.StateDisabled, nil, nil, 0)
+		internalapp.UpdateLSPState(name, lsp.StateDisabled, nil, nil, 0)
 		return
 	}
 
 	// Update state to starting
-	updateLSPState(name, lsp.StateStarting, nil, nil, 0)
+	internalapp.UpdateLSPState(name, lsp.StateStarting, nil, nil, 0)
 
 	// Create LSP client.
 	lspClient, err := lsp.New(ctx, name, lspConfig, app.config.Resolver())
 	if err != nil {
 		slog.Error("Failed to create LSP client for", name, err)
-		updateLSPState(name, lsp.StateError, err, nil, 0)
+		internalapp.UpdateLSPState(name, lsp.StateError, err, nil, 0)
 		return
 	}
 
 	// Set diagnostics callback
-	lspClient.SetDiagnosticsCallback(updateLSPDiagnostics)
+	lspClient.SetDiagnosticsCallback(internalapp.UpdateLSPDiagnostics)
 
 	// Increase initialization timeout as some servers take more time to start.
 	initCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -54,7 +55,7 @@ func (app *WSApp) createAndStartLSPClient(ctx context.Context, name string, lspC
 	_, err = lspClient.Initialize(initCtx, app.config.WorkingDir())
 	if err != nil {
 		slog.Error("Initialize failed", "name", name, "error", err)
-		updateLSPState(name, lsp.StateError, err, lspClient, 0)
+		internalapp.UpdateLSPState(name, lsp.StateError, err, lspClient, 0)
 		lspClient.Close(ctx)
 		return
 	}
@@ -63,11 +64,11 @@ func (app *WSApp) createAndStartLSPClient(ctx context.Context, name string, lspC
 	if err := lspClient.WaitForServerReady(initCtx); err != nil {
 		slog.Error("Server failed to become ready", "name", name, "error", err)
 		lspClient.SetServerState(lsp.StateError)
-		updateLSPState(name, lsp.StateError, err, lspClient, 0)
+		internalapp.UpdateLSPState(name, lsp.StateError, err, lspClient, 0)
 	} else {
 		slog.Info("LSP server is ready", "name", name)
 		lspClient.SetServerState(lsp.StateReady)
-		updateLSPState(name, lsp.StateReady, nil, lspClient, 0)
+		internalapp.UpdateLSPState(name, lsp.StateReady, nil, lspClient, 0)
 	}
 
 	slog.Info("LSP client initialized", "name", name)
