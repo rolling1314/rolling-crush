@@ -16,19 +16,19 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/catwalk/pkg/catwalk"
-	agentprompt "github.com/rolling1314/rolling-crush/internal/agent/prompt"
-	"github.com/rolling1314/rolling-crush/internal/agent/tools"
-	"github.com/rolling1314/rolling-crush/pkg/config"
-	"github.com/rolling1314/rolling-crush/internal/pkg/csync"
-	"github.com/rolling1314/rolling-crush/infra/postgres"
-	"github.com/rolling1314/rolling-crush/infra/redis"
 	"github.com/rolling1314/rolling-crush/domain/history"
-	"github.com/rolling1314/rolling-crush/domain/toolcall"
-	"github.com/rolling1314/rolling-crush/internal/pkg/log"
-	"github.com/rolling1314/rolling-crush/internal/lsp"
 	"github.com/rolling1314/rolling-crush/domain/message"
 	"github.com/rolling1314/rolling-crush/domain/permission"
 	"github.com/rolling1314/rolling-crush/domain/session"
+	"github.com/rolling1314/rolling-crush/domain/toolcall"
+	"github.com/rolling1314/rolling-crush/infra/postgres"
+	"github.com/rolling1314/rolling-crush/infra/redis"
+	agentprompt "github.com/rolling1314/rolling-crush/internal/agent/prompt"
+	"github.com/rolling1314/rolling-crush/internal/agent/tools"
+	"github.com/rolling1314/rolling-crush/internal/lsp"
+	"github.com/rolling1314/rolling-crush/internal/pkg/csync"
+	"github.com/rolling1314/rolling-crush/internal/pkg/log"
+	"github.com/rolling1314/rolling-crush/pkg/config"
 	"golang.org/x/sync/errgroup"
 
 	"charm.land/fantasy/providers/anthropic"
@@ -66,8 +66,8 @@ type coordinator struct {
 	permissions permission.Service
 	history     history.Service
 	lspClients  *csync.Map[string, *lsp.Client]
-	dbReader    config.DBReader // For loading session-specific config from DB
-	dbQuerier   postgres.Querier      // For querying session and project info
+	dbReader    config.DBReader  // For loading session-specific config from DB
+	dbQuerier   postgres.Querier // For querying session and project info
 
 	currentAgent SessionAgent
 	agents       map[string]SessionAgent
@@ -94,7 +94,7 @@ func NewCoordinator(
 			dbQuerier = q
 		}
 	}
-	
+
 	c := &coordinator{
 		cfg:         cfg,
 		sessions:    sessions,
@@ -136,7 +136,7 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 	fmt.Printf("Prompt: %s\n", prompt)
 	fmt.Printf("接收到的附件数量: %d\n", len(attachments))
 	for i, att := range attachments {
-		fmt.Printf("  [附件 %d] FileName: %s, MimeType: %s, Size: %d bytes\n", 
+		fmt.Printf("  [附件 %d] FileName: %s, MimeType: %s, Size: %d bytes\n",
 			i+1, att.FileName, att.MimeType, len(att.Content))
 	}
 	fmt.Println("=== Coordinator.Run 开始处理 ===\n")
@@ -238,7 +238,7 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 	fmt.Printf("模型: %s\n", model.Model.Model())
 	fmt.Printf("支持图片: %v\n", model.CatwalkCfg.SupportsImages)
 	fmt.Printf("接收到的附件数量: %d\n", len(attachments))
-	
+
 	if !model.CatwalkCfg.SupportsImages && attachments != nil {
 		fmt.Printf("⚠️  警告：模型不支持图片，移除 %d 个附件！\n", len(attachments))
 		attachments = nil
@@ -257,11 +257,11 @@ func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, 
 	fmt.Printf("\n=== Coordinator: 调用 currentAgent.Run ===\n")
 	fmt.Printf("最终传递给 Agent 的附件数量: %d\n", len(attachments))
 	for i, att := range attachments {
-		fmt.Printf("  [附件 %d] FileName: %s, MimeType: %s, Size: %d bytes\n", 
+		fmt.Printf("  [附件 %d] FileName: %s, MimeType: %s, Size: %d bytes\n",
 			i+1, att.FileName, att.MimeType, len(att.Content))
 	}
 	fmt.Println("=== Coordinator: 开始调用 Agent ===\n")
-	
+
 	return c.currentAgent.Run(ctx, SessionAgentCall{
 		SessionID:        sessionID,
 		Prompt:           prompt,

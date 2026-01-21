@@ -1,5 +1,5 @@
-import React, { memo } from 'react';
-import { CheckCircle2, Circle, Loader2, ListTodo } from 'lucide-react';
+import React, { memo, useState } from 'react';
+import { CheckCircle2, Circle, Loader2, ListTodo, ChevronDown, ChevronRight } from 'lucide-react';
 import { type Todo, type TodoStatus } from '../types';
 import { cn } from '../lib/utils';
 
@@ -49,6 +49,8 @@ const TodoItem = memo(({ todo }: { todo: Todo }) => {
 });
 
 export const TodosDisplay = memo(({ todos, currentTask, className }: TodosDisplayProps) => {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
   if (!todos || todos.length === 0) {
     return null;
   }
@@ -59,9 +61,17 @@ export const TodosDisplay = memo(({ todos, currentTask, className }: TodosDispla
 
   return (
     <div className={cn("rounded-lg border border-gray-700/50 bg-[#0d0d0d] overflow-hidden", className)}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 bg-[#111] border-b border-gray-700/50">
+      {/* Header - clickable to toggle collapse */}
+      <div 
+        className="flex items-center justify-between px-3 py-2 bg-[#111] border-b border-gray-700/50 cursor-pointer hover:bg-[#151515] transition-colors select-none"
+        onClick={() => setIsCollapsed(!isCollapsed)}
+      >
         <div className="flex items-center gap-2">
+          {isCollapsed ? (
+            <ChevronRight size={14} className="text-gray-500" />
+          ) : (
+            <ChevronDown size={14} className="text-gray-500" />
+          )}
           <ListTodo size={14} className="text-purple-400" />
           <span className="text-xs font-medium text-gray-300">Tasks</span>
         </div>
@@ -78,27 +88,32 @@ export const TodosDisplay = memo(({ todos, currentTask, className }: TodosDispla
         </div>
       </div>
 
-      {/* Current task indicator */}
-      {currentTask && (
-        <div className="px-3 py-1.5 bg-blue-500/5 border-b border-blue-500/20 flex items-center gap-2">
-          <Loader2 size={12} className="text-blue-400 animate-spin" />
-          <span className="text-[11px] text-blue-300 truncate">{currentTask}</span>
-        </div>
-      )}
+      {/* Collapsible content */}
+      {!isCollapsed && (
+        <>
+          {/* Current task indicator */}
+          {currentTask && (
+            <div className="px-3 py-1.5 bg-blue-500/5 border-b border-blue-500/20 flex items-center gap-2">
+              <Loader2 size={12} className="text-blue-400 animate-spin" />
+              <span className="text-[11px] text-blue-300 truncate">{currentTask}</span>
+            </div>
+          )}
 
-      {/* Todo list */}
-      <div className="p-2 space-y-0.5 max-h-[200px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
-        {todos.map((todo, index) => (
-          <TodoItem key={`${todo.content}-${index}`} todo={todo} />
-        ))}
-      </div>
+          {/* Todo list */}
+          <div className="p-2 space-y-0.5 max-h-[200px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+            {todos.map((todo, index) => (
+              <TodoItem key={`${todo.content}-${index}`} todo={todo} />
+            ))}
+          </div>
 
-      {/* Footer with progress */}
-      {progressPercent === 100 && (
-        <div className="px-3 py-1.5 bg-emerald-500/10 border-t border-emerald-500/20 flex items-center justify-center gap-1">
-          <CheckCircle2 size={12} className="text-emerald-400" />
-          <span className="text-[10px] text-emerald-300 font-medium">All tasks completed!</span>
-        </div>
+          {/* Footer with progress */}
+          {progressPercent === 100 && (
+            <div className="px-3 py-1.5 bg-emerald-500/10 border-t border-emerald-500/20 flex items-center justify-center gap-1">
+              <CheckCircle2 size={12} className="text-emerald-400" />
+              <span className="text-[10px] text-emerald-300 font-medium">All tasks completed!</span>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
