@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math/big"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rolling1314/rolling-crush/domain/project"
@@ -310,6 +311,56 @@ func (s *Server) handleGetProjectSessions(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// handleProjectStartup triggers a startup action in sandbox project container.
+func (s *Server) handleProjectStartup(c *gin.Context) {
+	projectID := c.Param("id")
+	if projectID == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "project id is required"})
+		return
+	}
+
+	if _, err := s.projectService.GetByID(c.Request.Context(), projectID); err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{Error: "Project not found"})
+		return
+	}
+
+	var req ProjectStartupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	if req.Command != "" {
+		req.Command = strings.TrimSpace(req.Command)
+	}
+	if req.Language != "" {
+		req.Language = strings.TrimSpace(req.Language)
+	}
+	if req.WorkingDir != "" {
+		req.WorkingDir = strings.TrimSpace(req.WorkingDir)
+	}
+
+	resp, err := s.sandboxClient.ProjectStartup(c.Request.Context(), sandbox.ProjectStartupRequest{
+		ProjectID:  projectID,
+		Command:    req.Command,
+		Language:   req.Language,
+		WorkingDir: req.WorkingDir,
+	})
+	if err != nil {
+		slog.Error("Failed to trigger project startup", "project_id", projectID, "error", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: fmt.Sprintf("Failed to trigger startup: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, ProjectStartupResponse{
+		Status:   resp.Status,
+		Stdout:   resp.Stdout,
+		Stderr:   resp.Stderr,
+		ExitCode: resp.ExitCode,
+		Command:  resp.Command,
+	})
 }
 
 // projectToResponse converts a project.Project to ProjectResponse

@@ -113,6 +113,7 @@ func (s *Server) Start() error {
 			projectGroup.PUT("/:id", s.handleUpdateProject)
 			projectGroup.DELETE("/:id", s.handleDeleteProject)
 			projectGroup.GET("/:id/sessions", s.handleGetProjectSessions)
+			projectGroup.POST("/:id/startup", s.handleProjectStartup)
 		}
 
 		// Session routes

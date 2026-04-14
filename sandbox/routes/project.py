@@ -8,7 +8,7 @@ import socket
 import docker
 import traceback
 import subprocess
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from sandbox import Sandbox
 
 project_bp = Blueprint('project', __name__)
@@ -34,7 +34,7 @@ def create_project():
         
         # 根据语言选择镜像
         if backend_language == 'go':
-            image_name = "go-vite"
+            image_name = "my-app"
         elif backend_language == 'java':
             image_name = "java-vite"
         elif backend_language == 'python':
@@ -319,5 +319,63 @@ export default defineConfig({{
         
     except Exception as e:
         print(f"❌ [POST /projects/configure-domain] 异常: {str(e)}", flush=True)
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@project_bp.route('/projects/startup', methods=['POST'])
+def startup_project():
+    """触发项目容器启动动作，在容器内执行可配置的 bash 命令"""
+    try:
+        data = request.json or {}
+        project_id = data.get('project_id')
+
+        if not project_id:
+            return jsonify({"error": "project_id is required"}), 400
+
+        config = current_app.config.get('config')
+        startup_cfg = config.get('sandbox.startup', {}) if config else {}
+
+        command = (data.get('command') or startup_cfg.get('command') or '').strip()
+        language = (data.get('language') or startup_cfg.get('language') or 'bash').strip()
+        working_dir = (data.get('working_dir') or startup_cfg.get('working_dir') or '/workspace').strip()
+
+        if not command:
+            return jsonify({"error": "startup command is empty, please configure sandbox.startup.command in config.yaml"}), 400
+
+        session_manager = current_app.config.get('session_manager')
+        if not session_manager:
+            return jsonify({"error": "session_manager not initialized"}), 500
+
+        print(f"\n📨 [POST /projects/startup] 收到项目启动请求", flush=True)
+        print(f"   项目ID: {project_id}", flush=True)
+        print(f"   命令: {command}", flush=True)
+        print(f"   工作目录: {working_dir}", flush=True)
+
+        sandbox = session_manager.get_or_create_by_project(project_id)
+
+        old_workdir = sandbox.workdir
+        sandbox.workdir = working_dir
+        try:
+            result = sandbox.run_code(command, language)
+        finally:
+            sandbox.workdir = old_workdir
+
+        return jsonify({
+            "status": "ok",
+            "stdout": result.get("stdout", ""),
+            "stderr": result.get("stderr", ""),
+            "exit_code": result.get("exit_code", 0),
+            "command": command
+        })
+
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except docker.errors.NotFound as e:
+        return jsonify({"error": f"容器不存在: {str(e)}"}), 404
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 503
+    except Exception as e:
+        print(f"❌ [POST /projects/startup] 异常: {str(e)}", flush=True)
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500

@@ -52,6 +52,23 @@ type ProjectRequest struct {
 	NeedDatabase     bool    `json:"need_database"`
 }
 
+// ProjectStartupRequest represents a project startup action request
+// If fields are empty, sandbox side will use sandbox/config.yaml defaults.
+type ProjectStartupRequest struct {
+	Command    string `json:"command,omitempty"`
+	Language   string `json:"language,omitempty"`
+	WorkingDir string `json:"working_dir,omitempty"`
+}
+
+// ProjectStartupResponse represents startup execution result
+type ProjectStartupResponse struct {
+	Status   string `json:"status"`
+	Stdout   string `json:"stdout"`
+	Stderr   string `json:"stderr"`
+	ExitCode int    `json:"exit_code"`
+	Command  string `json:"command,omitempty"`
+}
+
 // ProjectResponse represents a project in API responses
 type ProjectResponse struct {
 	ID               string  `json:"id"`

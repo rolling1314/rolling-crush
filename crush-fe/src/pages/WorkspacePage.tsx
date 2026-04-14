@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { X, GripVertical, Eye, Code2 } from 'lucide-react';
+import { X, GripVertical, Eye, Code2, Play } from 'lucide-react';
 import axios from 'axios';
 import { ChatPanel } from '../components/ChatPanel';
 import { ChatSidebar } from '../components/ChatSidebar';
@@ -83,6 +83,7 @@ export default function WorkspacePage() {
   
   // View mode state
   const [viewMode, setViewMode] = useState<'code' | 'preview'>('code');
+  const [startingProject, setStartingProject] = useState(false);
   
   // Todos state for task tracking
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -1812,6 +1813,47 @@ export default function WorkspacePage() {
     navigate('/login');
   };
 
+  const handleProjectStartup = async () => {
+    if (!projectId || startingProject) return;
+
+    setStartingProject(true);
+    try {
+      const token = localStorage.getItem('jwt_token');
+      const response = await axios.post(
+        `${API_URL}/projects/${projectId}/startup`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      const data = response.data || {};
+      const message = (data.exit_code ?? 0) === 0
+        ? '启动命令执行成功'
+        : `启动命令执行完成，退出码: ${data.exit_code}`;
+
+      setToasts(prev => [...prev, {
+        id: `startup-${Date.now()}`,
+        message,
+        type: (data.exit_code ?? 0) === 0 ? 'success' : 'error',
+      }]);
+
+      if (data.stdout) {
+        console.log('[project startup stdout]', data.stdout);
+      }
+      if (data.stderr) {
+        console.warn('[project startup stderr]', data.stderr);
+      }
+    } catch (error: any) {
+      const errMsg = error?.response?.data?.error || error?.message || '启动失败';
+      setToasts(prev => [...prev, {
+        id: `startup-error-${Date.now()}`,
+        message: errMsg,
+        type: 'error',
+      }]);
+    } finally {
+      setStartingProject(false);
+    }
+  };
+
   // Toast dismiss handler (must be before conditional returns to follow hooks rules)
   const handleDismissToast = useCallback((id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
@@ -1868,6 +1910,18 @@ export default function WorkspacePage() {
         {/* 1. Global Header for Left Section (Toggle) */}
         <div className="h-12 bg-black border-b border-[#222] flex items-center justify-center relative shrink-0">
           <div className="bg-[#111] p-1 rounded-lg border border-[#333] flex items-center gap-1">
+            <button
+              onClick={handleProjectStartup}
+              disabled={startingProject}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all border ${
+                startingProject
+                  ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200 cursor-not-allowed'
+                  : 'bg-emerald-600/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25'
+              }`}
+            >
+              <Play size={15} />
+              <span>{startingProject ? '启动中...' : '启动'}</span>
+            </button>
             <button
               onClick={() => setViewMode('preview')}
               className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${

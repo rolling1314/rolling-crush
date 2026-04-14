@@ -459,6 +459,38 @@ func (c *Client) ConfigureDomain(ctx context.Context, req ConfigureDomainRequest
 	return &resp, nil
 }
 
+// ProjectStartupRequest 项目启动动作请求
+// Command/Language/WorkingDir 为空时由 sandbox/config.yaml 配置决定。
+type ProjectStartupRequest struct {
+	ProjectID  string `json:"project_id"`
+	Command    string `json:"command,omitempty"`
+	Language   string `json:"language,omitempty"`
+	WorkingDir string `json:"working_dir,omitempty"`
+}
+
+// ProjectStartupResponse 项目启动动作响应
+type ProjectStartupResponse struct {
+	Status   string `json:"status"`
+	Stdout   string `json:"stdout"`
+	Stderr   string `json:"stderr"`
+	ExitCode int    `json:"exit_code"`
+	Command  string `json:"command,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
+
+// ProjectStartup 触发项目容器启动动作
+func (c *Client) ProjectStartup(ctx context.Context, req ProjectStartupRequest) (*ProjectStartupResponse, error) {
+	var resp ProjectStartupResponse
+	err := c.doRequest(ctx, "POST", "/projects/startup", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != "" {
+		return &resp, fmt.Errorf("sandbox error: %s", resp.Error)
+	}
+	return &resp, nil
+}
+
 // GetDefaultClient 获取默认的沙箱客户端（单例）
 var defaultClient *Client
 

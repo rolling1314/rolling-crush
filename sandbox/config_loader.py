@@ -70,7 +70,12 @@ class ConfigLoader:
             },
             'sandbox': {
                 'auto_cleanup': False,
-                'session_timeout': 3600
+                'session_timeout': 3600,
+                'startup': {
+                    'command': 'cd /workspace && bash start.sh',
+                    'language': 'bash',
+                    'working_dir': '/workspace'
+                }
             }
         }
     
