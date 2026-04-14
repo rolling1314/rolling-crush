@@ -204,12 +204,15 @@ def configure_domain():
         container_id = data.get('container_id')
         subdomain = data.get('subdomain')  # 三级域名前缀，如 "abc1234567"
         frontend_port = data.get('frontend_port')  # 主机端口
+        backend_port = data.get('backend_port')  # 后端主机端口（可选）
         domain = data.get('domain', 'rollingcoding.com')  # 基础域名
         
         print(f"\n📨 [POST /projects/configure-domain] 收到配置域名请求", flush=True)
         print(f"   容器ID: {container_id}", flush=True)
         print(f"   三级域名: {subdomain}.{domain}", flush=True)
         print(f"   前端端口: {frontend_port}", flush=True)
+        if backend_port:
+            print(f"   后端端口: {backend_port}", flush=True)
         
         if not container_id:
             return jsonify({"error": "container_id is required"}), 400
@@ -220,6 +223,19 @@ def configure_domain():
         
         full_subdomain = f"{subdomain}.{domain}"
         nginx_config_path = f"/etc/nginx/sites-available/{domain}.conf"
+
+        backend_location_block = ''
+        if backend_port:
+            backend_location_block = f'''
+    location /api/ {{
+        proxy_pass http://127.0.0.1:{backend_port}/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;
+    }}
+'''
         
         # 1. 生成并添加 nginx server block
         nginx_server_block = f'''
@@ -228,7 +244,7 @@ server {{
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
     server_name {full_subdomain};
-    location / {{
+{backend_location_block}    location / {{
         proxy_pass http://127.0.0.1:{frontend_port};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

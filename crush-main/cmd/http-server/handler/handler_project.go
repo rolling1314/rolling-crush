@@ -91,6 +91,7 @@ func (s *Server) handleCreateProject(c *gin.Context) {
 			ContainerID:  sandboxResp.ContainerID,
 			Subdomain:    subdomain,
 			FrontendPort: sandboxResp.FrontendPort,
+			BackendPort:  sandboxResp.BackendPort,
 			Domain:       domain,
 		})
 		if err != nil {
@@ -281,10 +282,10 @@ func (s *Server) handleGetProjectSessions(c *gin.Context) {
 	response := make([]SessionResponse, len(sessions))
 	for i, sess := range sessions {
 		contextWindow := s.getSessionContextWindow(c.Request.Context(), sess.ID)
-		
+
 		// Debug: log session todos
 		slog.Info("Session todos", "session_id", sess.ID, "todos_count", len(sess.Todos))
-		
+
 		// Convert session todos to response format
 		var todos []TodoResponse
 		for _, todo := range sess.Todos {
@@ -294,7 +295,7 @@ func (s *Server) handleGetProjectSessions(c *gin.Context) {
 				ActiveForm: todo.ActiveForm,
 			})
 		}
-		
+
 		response[i] = SessionResponse{
 			ID:               sess.ID,
 			ProjectID:        sess.ProjectID,

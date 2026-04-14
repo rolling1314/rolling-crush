@@ -433,9 +433,10 @@ func (c *Client) DeleteProject(ctx context.Context, req DeleteProjectRequest) (*
 // ConfigureDomainRequest 配置域名请求
 type ConfigureDomainRequest struct {
 	ContainerID  string `json:"container_id"`
-	Subdomain    string `json:"subdomain"`     // 三级域名前缀，如 "abc1234567"
-	FrontendPort int32  `json:"frontend_port"` // 主机端口
-	Domain       string `json:"domain"`        // 基础域名，如 "rollingcoding.com"
+	Subdomain    string `json:"subdomain"`              // 三级域名前缀，如 "abc1234567"
+	FrontendPort int32  `json:"frontend_port"`          // 主机端口
+	BackendPort  *int32 `json:"backend_port,omitempty"` // 后端主机端口（可选）
+	Domain       string `json:"domain"`                 // 基础域名，如 "rollingcoding.com"
 }
 
 // ConfigureDomainResponse 配置域名响应
