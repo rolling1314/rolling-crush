@@ -41,6 +41,12 @@ RUN echo '#!/bin/sh' > /workspace/start.sh \
  && echo 'set -e' >> /workspace/start.sh \
  && echo '' >> /workspace/start.sh \
  && echo '# =====================' >> /workspace/start.sh \
+ && echo '# 清理占用端口' >> /workspace/start.sh \
+ && echo '# =====================' >> /workspace/start.sh \
+ && echo 'kill $(lsof -t -i:8888) 2>/dev/null || true' >> /workspace/start.sh \
+ && echo 'kill $(lsof -t -i:5173) 2>/dev/null || true' >> /workspace/start.sh \
+ && echo '' >> /workspace/start.sh \
+ && echo '# =====================' >> /workspace/start.sh \
  && echo '# 配置 Go 代理环境' >> /workspace/start.sh \
  && echo '# =====================' >> /workspace/start.sh \
  && echo 'export GOPATH=/go' >> /workspace/start.sh \
@@ -69,7 +75,7 @@ RUN echo '#!/bin/sh' > /workspace/start.sh \
  && echo 'go build -o /workspace/backend/server .' >> /workspace/start.sh \
  && echo 'echo "==> Starting backend in foreground..."' >> /workspace/start.sh \
  && echo 'exec /workspace/backend/server' >> /workspace/start.sh \
- && chmod +x /workspace/start.sh 
- 
+ && chmod +x /workspace/start.sh
+
 # 容器启动时运行脚本
 CMD ["sh", "/workspace/start.sh"]
