@@ -11,7 +11,7 @@ development:
     debug: true
   
   database:
-    host: "120.26.101.52"
+    host: "127.0.0.1"
     port: 5432
     user: "crush"
     password: "123456"

@@ -100,28 +100,6 @@ func (s *Server) handleCreateProject(c *gin.Context) {
 		}
 	}
 
-	// Add DNS record to Cloudflare
-	fmt.Printf("🔍 Checking Cloudflare: client_nil=%v, api_token_empty=%v, domain=%s\n",
-		s.cloudflareClient == nil,
-		appCfg.Cloudflare.APIToken == "",
-		appCfg.Cloudflare.Domain)
-
-	if s.cloudflareClient != nil && appCfg.Cloudflare.APIToken != "" {
-		fmt.Printf("📤 Calling Cloudflare API: subdomain=%s, ip=%s\n", subdomain, externalIP)
-		err := s.cloudflareClient.AddOrUpdateDNSRecord(c.Request.Context(), subdomain, externalIP)
-		if err != nil {
-			fmt.Printf("❌ Cloudflare DNS failed: %v\n", err)
-			slog.Error("Failed to add DNS record to Cloudflare", "error", err, "subdomain", fullSubdomain, "ip", externalIP)
-		} else {
-			fmt.Printf("✅ Cloudflare DNS added: %s -> %s\n", fullSubdomain, externalIP)
-			slog.Info("DNS record added to Cloudflare successfully", "subdomain", fullSubdomain, "ip", externalIP)
-		}
-	} else {
-		fmt.Printf("⚠️ Skipping Cloudflare: client_nil=%v, api_token_empty=%v\n",
-			s.cloudflareClient == nil, appCfg.Cloudflare.APIToken == "")
-		slog.Warn("Skipping Cloudflare DNS configuration", "subdomain", fullSubdomain)
-	}
-
 	// Create project record
 	proj, err := s.projectService.Create(
 		c.Request.Context(),
