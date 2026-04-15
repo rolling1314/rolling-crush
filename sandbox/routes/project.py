@@ -34,7 +34,7 @@ def create_project():
         
         # 根据语言选择镜像
         if backend_language == 'go':
-            image_name = "my-app1"
+            image_name = "my-app6"
         elif backend_language == 'java':
             image_name = "java-vite"
         elif backend_language == 'python':
