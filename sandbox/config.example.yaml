@@ -1,15 +1,12 @@
-# 沙箱服务配置文件示例
-# 复制此文件为 config.yaml 并根据实际情况修改配置
-# 通过环境变量 SANDBOX_ENV 来指定使用哪个环境（development 或 production）
-# 例如: export SANDBOX_ENV=production
+# 沙箱服务配置
+# 通过环境变量 SANDBOX_ENV 选择环境，默认 development
 
-# 开发环境配置
 development:
   server:
     host: "0.0.0.0"
     port: 8888
     debug: true
-  
+
   database:
     host: "127.0.0.1"
     port: 5432
@@ -17,34 +14,33 @@ development:
     password: "123456"
     database: "crush"
     sslmode: "disable"
-  
-  sandbox:
-    auto_cleanup: false  # 服务停止时是否自动清理容器
-    session_timeout: 3600  # 会话超时时间（秒）
-    startup:
-      command: "cd /workspace && bash start.sh"
-      language: "bash"
-      working_dir: "/workspace"
 
-# 生产环境配置
+  sandbox:
+    auto_cleanup: false
+    session_timeout: 3600
+    startup:
+      command: "cd / && bash restart.sh"
+      language: "bash"
+      working_dir: "/"
+
 production:
   server:
     host: "0.0.0.0"
     port: 8888
     debug: false
-  
+
   database:
-    host: "43.163.92.30"  # 修改为你的生产数据库地址
+    host: "43.163.92.30"
     port: 5432
     user: "crush"
-    password: "123456"  # 修改为你的生产数据库密码
+    password: "123456"
     database: "crush"
     sslmode: "disable"
-  
+
   sandbox:
     auto_cleanup: false
     session_timeout: 7200
     startup:
-      command: "cd /workspace && bash start.sh"
+      command: "cd / && bash restart.sh"
       language: "bash"
-      working_dir: "/workspace"
+      working_dir: "/"
